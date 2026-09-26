@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HoMo CFD</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <aside class="sidebar">
+        <div class="brand">HoMo CFD</div>
+        <p class="hint">
+          Stage 3: open the results folder that holds all your cases,
+          assign up to four to the panels, then compare. Toggle Link on a
+          panel to sync its axis/position with the others.
+        </p>
+        <div class="error" id="error" hidden></div>
+        <div class="group">
+          <h2>Cases</h2>
+          <div id="case-slots"></div>
+        </div>
+      </aside>
+      <main class="viewer">
+        <div class="summary" id="summary" hidden></div>
+        <div class="panels" id="panels"></div>
+      </main>
+    </div>
+    <script src="./app.js"></script>
+  </body>
+</html>

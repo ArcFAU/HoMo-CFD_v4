@@ -1,0 +1,43 @@
+# --- Secrets / credentials — never commit these ---
+*.ppk
+*.pem
+*.key
+**/podkey*
+**/*sftp*credentials*
+.env
+.env.*
+
+# --- Real CFD result data — big, and it's Octanes' data, not code ---
+# Keep a small synthetic/sample tree in tests/fixtures/ instead if needed.
+/finished/
+/inProgress/
+/unsimulated/
+/archive/
+**/plots/
+**/PressureDistributions/
+*.csv
+!tests/**/*.csv
+*.png
+!web/**/*.png
+!docs/**/*.png
+
+# --- OS / editor junk ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+
+# --- Python (in case serve.py grows a venv / FastAPI later) ---
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# --- Node (in case this ever moves to a JS build step) ---
+node_modules/
+dist/
+.cache/
+
+# --- Logs ---
+*.log
