@@ -43,24 +43,17 @@ Known groups:
 - `plots/`
 - residual / inspection quantities (TKE per volume, Laplace(TP), continuity/momentum residuals, …)
 
-The UI must **not** make the user walk that tree. They pick:
-
-- cases (up to 4, later more)
-- field (Cp, CpT, Velocity, Lambda2, TKE, Mesh, …)
-- section axis (X / Y / Z)
-- position along the axis (slider)
-
-The app resolves that to the correct PNG (and later CSV).
+The current UI intentionally exposes this tree in a searchable filesystem panel. Selecting a result or subfolder filters the collective coefficient summary; selecting an image-section folder opens its images in a separate viewer window.
 
 ## Filename convention: intentionally NOT used for navigation
 
-Filenames were briefly parsed for an mm position (`001_Velocity_x-Section_2500mm`), but real usage showed this doesn't work: some fields (e.g. `Lambda2`) are only ever computed on one axis, so "sync by mm across cases/fields" produced confusing not-a-bug "Section unavailable" states that read as broken. **Correction, superseding the mm-based design below**: the app now reads nothing out of image filenames. Each `Field_axis-Section/` folder's images are just sorted by filename (natural sort) into a plain ordered sequence, stepped through by index (prev/next buttons, left/right arrow keys) — not by a physical position. "Link" between cases now syncs **axis + frame index**, not axis + mm. This is simpler and matches how Sem actually uses CFD-Tool (step through frames one at a time, not "jump to X mm").
+Filenames are not parsed for position. Each image-section folder's images are sorted naturally by filename and stepped through by index with left/right arrow keys. The filename remains visible beneath the image. Zoom is available, with optional synchronization across separate viewer windows.
 
-`PressureDistributions/` CSVs (e.g. `001_pd_FW_x-Section_2500mm.csv`) are confirmed to have headers (`... Direction [0,1,0] (mm)`, `... Pressure Coefficient`) but the one sample supplied had **no data rows**. Do not build CSV plotting yet — wait for one populated CSV.
+`PressureDistributions/` CSVs (e.g. `001_pd_FW_x-Section_2500mm.csv`) are confirmed to have headers (`... Direction [0,1,0] (mm)`) but the one sample supplied had **no data rows**. These files are not displayed in the current UI; defer pressure-distribution graphing until a populated sample is available.
 
 ## Coefficients summary (confirmed, implemented)
 
-Each case's `plots/` subfolder contains a `Coefficients*.csv` (e.g. `Coefficients_49.csv`): one row per solver iteration, columns are the CzA/CxA component monitors (Front%, FW, UT, RW, Mono, Remaining, etc.). The app reads the **last row** (most-converged iteration) as that case's summary and shows it in a table above the panels — one row per loaded case, columns matching CFD-Tool's home screen (`CzA Front(%)`, `CzA`, `CzA FW`, `CzA UT`, `CzA RW`, `CzA MO`, `CzA Rem`, `CxA`, `CxA FW`, `CxA UT`, `CxA RW`, `CxA Mono`, `CxA Rem`).
+Each case's `plots/` subfolder contains a `Coefficients*.csv` (e.g. `Coefficients_49.csv`): one row per solver iteration, with CzA/CxA component-monitor columns. The UI aggregates these files into the only displayed table: one row per simulation, using only each file's final iteration. Coefficient values display to three decimal places; the iteration number remains an integer. Do not display full coefficient histories or other CSV tables.
 
 ## Product stages (agreed)
 
@@ -69,24 +62,24 @@ Each case's `plots/` subfolder contains a `Coefficients*.csv` (e.g. `Coefficient
 | 0 | Reverse-engineer STAR-CCM+ → folders → CFD-Tool |
 | 1 | Design screens (cases, field, section, viewer, plots) |
 | 2 | Tiny app: open → select a case → see it |
-| 3 | Single-case-first, grows to 4-panel flexible comparison (see below) |
+| 3 | Filesystem-first CSV browser with separate image-folder windows |
 | 4 | CSV pressure plots (blocked on a populated sample CSV) |
 | 5 | FSAE-specific aerodynamic comparison |
 | 6 | Interactive CFD fields (VTK / 3D), not only PNGs |
 | 7 | Fritz: submit, monitor, download, delete |
 
-**V1 = modern CFD-Tool** (PNG + CSV + 4-way compare). Do not start with a generic ParaView clone.
+**V1 = modern CFD-Tool** (PNG image sequences + browsable CSV tables). Do not start with a generic ParaView clone.
 
-### Stage 3, revised again: single case by default, panels grow with cases loaded
+### Stage 3, revised: filesystem-first CSV browser and image windows
 
-Sem's actual workflow (per CFD-Tool) is usually **one case at a time**; multi-view is only for comparing. So instead of a fixed 2×2 grid of 4 panels:
-
-- Sidebar: "Open results folder" (the parent folder holding every case, e.g. `finished`) scans and lists every case subfolder. Case slots A–D each pick from that list (or "Browse…" a one-off folder).
-- Main area: **one panel per loaded case, in order** — 1 case = 1 full-size panel, 2 cases = side-by-side, up to 4 = 2×2. No empty/placeholder panels are ever shown. Loading fewer cases must never shrink or crop the image below what's needed to see it — panels resize, but `object-fit: contain` on the image means it shrinks to fit rather than getting cropped.
-- Each panel: field (dropdown — a case can have a dozen+ fields, chips didn't fit), axis (chips, only ever X/Y/Z), and frame stepping (prev/next buttons + "Frame N / M", no dropdown, no slider — see filename-convention note above for why there's no position label anymore).
-- **Link** (per panel/case, checkbox): synced panels share axis + frame index; field and case stay independent. A case whose field doesn't have the linked axis, or doesn't have enough frames, shows "Section unavailable" rather than a nearest-match guess.
-- Click a panel to focus it; left/right arrow keys step the focused panel's frame (ignored while a dropdown/input has focus).
-- Do not add 3D/VTK, ParaView-style panning/zooming, or CFD solving in this stage. Preserve the original PNG unmodified.
+- Choose the results root once. Store its File System Access API handle in IndexedDB and restore it on later visits when permission is still granted.
+- The left panel is a searchable filesystem tree. Selecting the root or a simulation filters the collective coefficient summary to the corresponding subtree.
+- The main area contains exactly one collective table: final coefficients iteration per simulation. Do not render other CSVs as tables.
+- **Customize columns** lets users rename, hide, and reorder coefficient columns; preferences persist per browser. Rendered values must be resolved from original CSV headers, never by the display label or current column position.
+- Clicking a folder matching `{Field}_{axis}-Section` opens a separate comparison window seeded with its parent simulation and that field/axis. The window can add up to three more simulations. Do not show comparison case slots in the main window or read image sequences until the user opens them.
+- Each simulation panel has independent field, axis, and frame state, so different result types can be compared. Zoom and normalized pan are always synchronized across panels, with no UI toggles. Left/right arrow keys step the focused panel by default; optional **Sync images** steps all panels by frame index and holds shorter sequences at their last image. Keep images contained at fit size and allow scrolling when zoomed.
+- Keep section image bytes unloaded during root indexing. Preserve the original PNGs and read only the final data row from each coefficients history.
+- Do not add 3D/VTK, ParaView-style panning, or CFD solving in this stage.
 
 ## Stack (agreed)
 

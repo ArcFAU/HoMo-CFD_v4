@@ -9,15 +9,17 @@
   <body>
     <div class="app">
       <aside class="sidebar">
-        <div class="brand">HoMo CFD</div>
-        <p class="hint">
-          Stage 3: open the results folder that holds all your cases,
-          assign up to four to the panels, then compare. Toggle Link on a
-          panel to sync its axis/position with the others.
-        </p>
+        <div class="brand">
+          <span><img src="./High-Voltage_white.png" alt="High Voltage Motorsports" /> </span>
+        </div class="brand">
+          <span>HoMo CFD</span>
         <div class="error" id="error" hidden></div>
         <div class="group">
-          <h2>Cases</h2>
+          <div class="filesystem-heading">
+            <h2>Results</h2>
+            <button class="primary small" id="open-results" type="button">Open folder</button>
+          </div>
+          <input id="folder-search" class="folder-search" type="search" placeholder="Filter folders" aria-label="Filter folders" />
           <div id="case-slots"></div>
         </div>
       </aside>
@@ -26,6 +28,22 @@
         <div class="panels" id="panels"></div>
       </main>
     </div>
+    <dialog id="column-dialog" class="column-dialog" aria-labelledby="column-dialog-title">
+      <form method="dialog" class="column-dialog-content">
+        <header class="column-dialog-header">
+          <div>
+            <h2 id="column-dialog-title">Customize columns</h2>
+            <p class="hint">Choose which values appear, set their display names, and arrange their order.</p>
+          </div>
+          <button id="column-cancel" class="small-control" type="button" aria-label="Close column settings">×</button>
+        </header>
+        <div id="column-editor" class="column-editor"></div>
+        <footer class="column-dialog-actions">
+          <button id="column-reset" class="small-control" type="button">Reset defaults</button>
+          <button id="column-save" class="primary small" type="button">Apply columns</button>
+        </footer>
+      </form>
+    </dialog>
     <script src="./app.js"></script>
   </body>
 </html>

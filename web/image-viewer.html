@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HoMo CFD Image Viewer</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body class="image-viewer-page">
+    <main class="image-viewer">
+      <header class="image-viewer-header">
+        <div>
+          <h1 id="viewer-title">Image folder</h1>
+          <p id="viewer-path" class="hint"></p>
+        </div>
+        <div class="image-viewer-actions">
+          <button id="add-case" class="small-control" type="button" hidden>Add case</button>
+          <button id="zoom-out" class="small-control" type="button" title="Zoom out">−</button>
+          <span id="zoom-level" class="zoom-label">100%</span>
+          <button id="zoom-in" class="small-control" type="button" title="Zoom in">+</button>
+          <button id="zoom-reset" class="small-control" type="button">Reset zoom</button>
+          <label class="viewer-sync-images" id="sync-images-control" hidden><input id="sync-images" type="checkbox" /> Sync images</label>
+          <button id="full-screen" class="small-control" type="button">Full screen</button>
+          <button id="close-viewer" class="small-control" type="button">Close window</button>
+        </div>
+      </header>
+      <div id="viewer-error" class="error" hidden></div>
+      <div id="image-stage" class="image-viewer-stage">
+        <div class="workspace-empty">Loading images…</div>
+      </div>
+      <div id="image-caption" class="image-viewer-caption"></div>
+      <button id="reconnect-folder" class="primary" type="button" hidden>Reconnect folder access</button>
+    </main>
+    <script src="./image-viewer.js"></script>
+  </body>
+</html>
