@@ -48,7 +48,7 @@ Last updated: 2026-10-02
 - 3D viewer triangle count fixed (it showed index count = 3 x triangles).
 - Tests in the repo: `tests/test_serve.py` (15 unit tests) and `tests/run_browser_tests.py` (67 headless checks over generated data in `tests/fixture.py`). See `tests/README.md`; `AGENTS.md` asks every contributor to run them.
 - Planning files from the ChatGPT pipeline: `DECISIONS.md`, `TASK.md`, `CHANGELOG.md`.
-- Scale check: 120 simulations (junctions to the 7 real ones in `D:\CFD_toolinished`, about 200,000 files) load in about 4 s (server scan about 1.2 s, 15.8 MB listing, browser indexing about 0.6 s, coefficient files about 0.3 s). Was 5.7 s before indexing read each folder once and used one shared `Intl.Collator`. A multi-threaded server scan was slower (2.4 s) and was not adopted.
+- Scale check: 120 simulations (junctions to the 7 real ones in `D:\CFD_tool\finished`, about 200,000 files) load in about 4 s (server scan about 1.2 s, 15.8 MB listing, browser indexing about 0.6 s, coefficient files about 0.3 s). Was 5.7 s before indexing read each folder once and used one shared `Intl.Collator`. A multi-threaded server scan was slower (2.4 s) and was not adopted.
 
 ## Open items
 
