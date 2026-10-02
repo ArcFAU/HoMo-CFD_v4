@@ -990,50 +990,26 @@ async function renderCsvPage() {
   renderCsvTables(coefficientRows.filter(Boolean));
 }
 
-// Confirmed by the team (2026-10-02): CzA and CxA are the downforce and drag
-// coefficients times the reference area (not forces); negative means
-// downforce / drag. The sign-flipped values are shown next to the unchanged
-// exported monitors; CzA Front stays a fraction as exported.
-const DERIVED_AERO_COLUMNS = [
-  { header: "−CzA (downforce)", source: "CzA", note: "−CzA: downforce coefficient × reference area, sign flipped so downforce is positive (negative CzA is downforce). Not a force. Higher means more downforce." },
-  { header: "−CxA (drag)", source: "CxA", note: "−CxA: drag coefficient × reference area, sign flipped so drag is positive (negative CxA is drag). Not a force. Higher means more drag." },
-];
-
-function derivedAeroColumn(header) {
-  const force = FORCE_COLUMNS.find((column) => column.header === header);
-  if (force) return { ...force, note: forceColumnNote(force) };
-  return DERIVED_AERO_COLUMNS.find((column) => column.header === header);
-}
-
-// Inserts −CzA / −CxA right after Iteration, computed from the total CzA
-// and CxA monitors of the final row.
-function withDerivedAeroColumns(headers, row) {
-  const outHeaders = [...headers];
-  const outRow = [...row];
-  let insertAt = headers.findIndex((header) => /^iteration$/i.test(header)) + 1;
-  DERIVED_AERO_COLUMNS.forEach(({ header, source }) => {
-    const sourceIndex = headers.findIndex((candidate) => classifyHeader(candidate) === source);
-    if (sourceIndex < 0) return;
-    const value = numericCell(row[sourceIndex]);
-    outHeaders.splice(insertAt, 0, header);
-    outRow.splice(insertAt, 0, Number.isFinite(value) ? String(-value) : "");
-    insertAt++;
-  });
-  return { headers: outHeaders, row: outRow };
-}
-
 function numericCell(raw) {
   const text = String(raw ?? "").trim();
   return text ? Number(text) : NaN;
 }
 
-// Forces from the area-weighted coefficients: F = ½ · ρ · v² · (−CzA or −CxA),
-// at the speed and density set above the table. Assumes CzA and CxA do not
+// Confirmed by the team (2026-10-02): CzA and CxA are the downforce and drag
+// coefficients times the reference area; negative means downforce / drag.
+// The exported monitors stay unchanged; HoMo CFD adds the forces
+// F = ½ · ρ · v² · (−CzA or −CxA) at the speed and density set above the
+// table, so downforce and drag are positive. Assumes CzA and CxA do not
 // change with speed.
 const FORCE_COLUMNS = [
-  { header: "Downforce [N]", source: "−CzA (downforce)", name: "Downforce", coefficient: "CzA" },
-  { header: "Drag [N]", source: "−CxA (drag)", name: "Drag", coefficient: "CxA" },
+  { header: "Downforce [N]", name: "Downforce", coefficient: "CzA", meaning: "downforce" },
+  { header: "Drag [N]", name: "Drag", coefficient: "CxA", meaning: "drag" },
 ];
+
+function derivedAeroColumn(header) {
+  const force = FORCE_COLUMNS.find((column) => column.header === header);
+  return force ? { ...force, note: forceColumnNote(force) } : undefined;
+}
 
 function validForceSetting(value) {
   return typeof value === "number" && Number.isFinite(value) && value > 0;
@@ -1058,7 +1034,8 @@ function dynamicPressure({ speedKmh, density }) {
 
 function forceColumnNote(column) {
   const settings = browserState.forceSettings;
-  return `${column.name} = ½ · ρ · v² · (−${column.coefficient}) with v = ${settings.speedKmh} km/h ` +
+  return `${column.name} = ½ · ρ · v² · (−${column.coefficient}), where ${column.coefficient} is the ${column.meaning} coefficient × reference area ` +
+    `(negative ${column.coefficient} is ${column.meaning}, so higher means more ${column.meaning}). v = ${settings.speedKmh} km/h ` +
     `(${(settings.speedKmh / 3.6).toFixed(2)} m/s) and ρ = ${settings.density} kg/m³, so ½ · ρ · v² = ${dynamicPressure(settings).toFixed(1)} Pa. ` +
     `Change the speed and density above the table. Assumes ${column.coefficient} does not change with speed.`;
 }
@@ -1092,21 +1069,22 @@ function forceSettingInput(labelText, unit, key) {
   return label;
 }
 
-// Adds Downforce [N] / Drag [N] after the −CzA / −CxA columns. Done at render
-// time (not in the cached CSV rows) so speed and density can change.
+// Adds Downforce [N] / Drag [N] right after Iteration, from the total CzA and
+// CxA monitors. Done at render time (not in the cached CSV rows) so speed and
+// density can change.
 function withForceColumns(data) {
   const row = data.rows[data.rows.length - 1];
   if (!row) return data;
-  const present = FORCE_COLUMNS.filter(({ source }) => data.headers.includes(source));
-  if (!present.length) return data;
   const pressure = dynamicPressure(browserState.forceSettings);
   const headers = [...data.headers];
   const values = [...row];
-  let insertAt = Math.max(...present.map(({ source }) => headers.indexOf(source))) + 1;
-  present.forEach(({ header, source }) => {
-    const value = numericCell(row[data.headers.indexOf(source)]);
+  let insertAt = data.headers.findIndex((header) => /^iteration$/i.test(header)) + 1;
+  FORCE_COLUMNS.forEach(({ header, coefficient }) => {
+    const sourceIndex = data.headers.findIndex((candidate) => classifyHeader(candidate) === coefficient);
+    if (sourceIndex < 0) return;
+    const value = numericCell(row[sourceIndex]);
     headers.splice(insertAt, 0, header);
-    values.splice(insertAt, 0, Number.isFinite(value) ? String(value * pressure) : "");
+    values.splice(insertAt, 0, Number.isFinite(value) ? String(-value * pressure) : "");
     insertAt++;
   });
   return { ...data, headers, rows: [...data.rows.slice(0, -1), values] };
@@ -1126,8 +1104,7 @@ async function loadCsvTable(file) {
     const headers = rows.shift().map((value, index) => value || `Column ${index + 1}`);
     if (/^coefficients.*\.csv$/i.test(file.name)) {
       if (!rows.length) return { name: file.name, path: file.path, headers, rows: [] };
-      const derived = withDerivedAeroColumns(headers, rows[rows.length - 1]);
-      return { name: file.name, path: file.path, headers: derived.headers, rows: [derived.row] };
+      return { name: file.name, path: file.path, headers, rows: [rows[rows.length - 1]] };
     }
     return { name: file.name, path: file.path, headers, rows };
   })();
@@ -1211,9 +1188,9 @@ function renderCsvTables(coefficientRows) {
   if (browserState.coefficientView === "delta") {
     const note = document.createElement("p");
     note.className = "comparison-note";
-    note.textContent = "Δ = this simulation minus the reference. −CzA and −CxA are the downforce and drag coefficients × reference area " +
-      "with the sign flipped, so a positive Δ there means more downforce or more drag. Downforce [N] and Drag [N] are those values × ½ · ρ · v² " +
-      "at the speed and density set above. Other columns are the exported monitors, unchanged.";
+    note.textContent = "Δ = this simulation minus the reference. Downforce [N] and Drag [N] are positive for downforce and drag, so a positive Δ " +
+      "there means more downforce or more drag. Other columns are the exported monitors, unchanged: for CzA and CxA a negative Δ means " +
+      "more downforce or more drag.";
     collective.appendChild(note);
   }
 
@@ -1282,7 +1259,7 @@ function renderMonitorChart(coefficientRows, referenceRow) {
   select.setAttribute("aria-label", "Monitor to chart");
   orderedColumnDefinitions(columns).forEach((column) => select.add(new Option(column.label, column.key)));
   if (!columns.includes(browserState.monitorChartHeader)) {
-    browserState.monitorChartHeader = columns.find((header) => derivedAeroColumn(header)?.source === "CzA") ??
+    browserState.monitorChartHeader = columns.find((header) => derivedAeroColumn(header)?.coefficient === "CzA") ??
       columns.find((header) => classifyHeader(header) === "CzA") ?? columns[0] ?? "";
   }
   select.value = browserState.monitorChartHeader;

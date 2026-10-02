@@ -18,28 +18,26 @@ runTests(async () => {
   check("tree root is the finished folder", doc.querySelector(".tree-root")?.textContent.startsWith("finished"), doc.querySelector(".tree-root")?.textContent);
   check("no error or reconnect shown", doc.getElementById("error").hidden && doc.getElementById("reconnect-results").hidden, doc.getElementById("error").textContent);
 
-  // Stage 5: -CzA (downforce) and -CxA (drag), right after Iteration.
+  // Stage 5: Downforce [N] and Drag [N] right after Iteration; raw monitors unchanged.
   const headers = headerCells(doc);
-  check("-CzA and -CxA follow Iteration", headers.slice(1, 4).join("|") === "Iteration|−CzA (downforce)|−CxA (drag)", headers.slice(0, 5).join("|"));
-  check("-CzA column = -CzA", cellFor(doc, "caseA", "−CzA (downforce)") === "3.200" && cellFor(doc, "caseA", "CzA") === "-3.200",
-    `${cellFor(doc, "caseA", "−CzA (downforce)")} / CzA ${cellFor(doc, "caseA", "CzA")}`);
-  check("-CxA column = -CxA", cellFor(doc, "caseB", "−CxA (drag)") === "1.400" && cellFor(doc, "caseB", "CxA") === "-1.400",
-    `${cellFor(doc, "caseB", "−CxA (drag)")} / CxA ${cellFor(doc, "caseB", "CxA")}`);
+  check("force columns follow Iteration, no sign-flipped columns", headers.slice(1, 4).join("|") === "Iteration|Downforce [N]|Drag [N]" &&
+    !headers.some((header) => header.startsWith("−")), headers.slice(0, 5).join("|"));
+  check("raw CzA / CxA unchanged", cellFor(doc, "caseA", "CzA") === "-3.200" && cellFor(doc, "caseB", "CxA") === "-1.400",
+    `CzA ${cellFor(doc, "caseA", "CzA")}, CxA ${cellFor(doc, "caseB", "CxA")}`);
   check("CzA Front stays a fraction", cellFor(doc, "caseA", "CzA Front(%)") === "0.450", cellFor(doc, "caseA", "CzA Front(%)"));
-  check("computed columns explained on hover", /downforce coefficient × reference area.*Not a force/.test(doc.querySelector(".data-table th.derived-column")?.title ?? ""), doc.querySelector(".data-table th.derived-column")?.title);
-  check("monitor chart defaults to -CzA", doc.querySelector(".monitor-chart-controls select")?.value === "−CzA (downforce)", doc.querySelector(".monitor-chart-controls select")?.value);
+  check("computed columns explained on hover", /CzA is the downforce coefficient × reference area/.test(doc.querySelector(".data-table th.derived-column")?.title ?? ""), doc.querySelector(".data-table th.derived-column")?.title);
+  check("monitor chart defaults to Downforce [N]", doc.querySelector(".monitor-chart-controls select")?.value === "Downforce [N]", doc.querySelector(".monitor-chart-controls select")?.value);
   [...doc.querySelectorAll(".table-mode-switch button")].find((button) => button.textContent === "Δ vs reference").click();
-  await waitFor(() => headerCells(doc).includes("Δ −CzA (downforce)"));
-  check("Δ -CzA positive = more downforce", cellFor(doc, "caseB", "Δ −CzA (downforce)") === "0.300" && cellFor(doc, "caseA", "Δ −CzA (downforce)") === "0.000",
-    `caseB ${cellFor(doc, "caseB", "Δ −CzA (downforce)")}, caseA ${cellFor(doc, "caseA", "Δ −CzA (downforce)")}`);
-  check("Δ -CxA positive = more drag", cellFor(doc, "caseB", "Δ −CxA (drag)") === "0.150", cellFor(doc, "caseB", "Δ −CxA (drag)"));
-  check("Δ note explains the signs", /coefficients × reference area.*positive Δ there means more downforce/.test(doc.querySelector(".comparison-note")?.textContent ?? ""), doc.querySelector(".comparison-note")?.textContent);
-  check("Δ Downforce [N] = Δ(-CzA) × q", cellFor(doc, "caseB", "Δ Downforce [N]") === (0.3 * dynamicPressure(60)).toFixed(1), cellFor(doc, "caseB", "Δ Downforce [N]"));
+  await waitFor(() => headerCells(doc).includes("Δ Downforce [N]"));
+  check("Δ Downforce [N] positive = more downforce", cellFor(doc, "caseB", "Δ Downforce [N]") === (0.3 * dynamicPressure(60)).toFixed(1) && cellFor(doc, "caseA", "Δ Downforce [N]") === "0.0",
+    `caseB ${cellFor(doc, "caseB", "Δ Downforce [N]")}, caseA ${cellFor(doc, "caseA", "Δ Downforce [N]")}`);
+  check("Δ Drag [N] positive = more drag", cellFor(doc, "caseB", "Δ Drag [N]") === (0.15 * dynamicPressure(60)).toFixed(1), cellFor(doc, "caseB", "Δ Drag [N]"));
+  check("Δ CzA keeps the exported sign", cellFor(doc, "caseB", "Δ CzA") === "-0.300", cellFor(doc, "caseB", "Δ CzA"));
+  check("Δ note explains the signs", /positive Δ there means more downforce/.test(doc.querySelector(".comparison-note")?.textContent ?? ""), doc.querySelector(".comparison-note")?.textContent);
   [...doc.querySelectorAll(".table-mode-switch button")].find((button) => button.textContent === "Values").click();
   await waitFor(() => headerCells(doc).includes("Downforce [N]"));
 
   // Forces: F = ½ · ρ · v² · (−CzA), default 60 km/h and ρ = 1.18415 kg/m³.
-  check("force columns follow -CzA / -CxA", headerCells(doc).slice(2, 6).join("|") === "−CzA (downforce)|−CxA (drag)|Downforce [N]|Drag [N]", headerCells(doc).slice(0, 7).join("|"));
   check("Downforce [N] at 60 km/h", cellFor(doc, "caseA", "Downforce [N]") === (3.2 * dynamicPressure(60)).toFixed(1), cellFor(doc, "caseA", "Downforce [N]"));
   check("Drag [N] at 60 km/h", cellFor(doc, "caseB", "Drag [N]") === (1.4 * dynamicPressure(60)).toFixed(1), cellFor(doc, "caseB", "Drag [N]"));
   check("force note shows speed, density and q", /v = 60 km\/h.*ρ = 1\.18415 kg\/m³.*164\.5 Pa/.test([...doc.querySelectorAll(".data-table th.derived-column")].find((th) => th.textContent === "Downforce [N]")?.title ?? ""),
@@ -48,7 +46,7 @@ runTests(async () => {
   speed.value = "100";
   speed.dispatchEvent(new app.contentWindow.Event("change"));
   await waitFor(() => cellFor(doc, "caseA", "Downforce [N]") === (3.2 * dynamicPressure(100)).toFixed(1), 5000);
-  check("changing the speed recomputes the forces", cellFor(doc, "caseA", "Downforce [N]") === (3.2 * dynamicPressure(100)).toFixed(1) && cellFor(doc, "caseA", "−CzA (downforce)") === "3.200",
+  check("changing the speed recomputes the forces", cellFor(doc, "caseA", "Downforce [N]") === (3.2 * dynamicPressure(100)).toFixed(1) && cellFor(doc, "caseA", "CzA") === "-3.200",
     cellFor(doc, "caseA", "Downforce [N]"));
   check("speed is remembered", JSON.parse(app.contentWindow.localStorage.getItem("homo-cfd-force-settings-v1") || "{}").speedKmh === 100);
   speed.value = "-5";

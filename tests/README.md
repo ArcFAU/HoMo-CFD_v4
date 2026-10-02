@@ -19,7 +19,7 @@ exits with code 0 when everything passes.
 | --- | --- |
 | `test_serve.py` | working-directory precedence (command line, HoMo setting, CFD-Tool setting), `/api` listing and files, rejected paths and hosts, saving the working directory |
 | `browser/first-start.html` | no working directory yet: chooser, wrong path rejected, results load |
-| `browser/server-mode.html` | normal use with `serve.py`: results tree, −CzA/−CxA and force columns and deltas, comparison window (1–4 cases, minimum panel size, zoom keys), pressure plot, scene gallery, 3D viewer |
+| `browser/server-mode.html` | normal use with `serve.py`: results tree, Downforce/Drag [N] columns and deltas, comparison window (1–4 cases, minimum panel size, zoom keys), pressure plot, scene gallery, 3D viewer |
 | `browser/picker-mode.html` | page opened without `serve.py` (mocked browser folder picker): single/multiple/nested simulations, unreadable CSV, hidden folders, frame stepping and memory, pressure off-station labels, gallery zoom, reconnect, 3D viewer range/NaN/field switching |
 
 When you add a feature, add a check to the matching page (or a new page listed

@@ -38,7 +38,7 @@ folder every time"); works in any browser, including VS Code's Simple Browser.
 **Why:** the user chose to keep the current plan and do later improvements
 after the main phases.
 
-## 2026-10-02 — Sign-flipped −CzA and −CxA columns
+## 2026-10-02 — Sign-flipped −CzA and −CxA columns (removed the same day)
 
 The team confirmed negative CzA is downforce and negative CxA is drag.
 CzA and CxA are the downforce and drag **coefficients × reference area**, not
@@ -47,6 +47,9 @@ forces (correction from the user, same day; the columns were first labelled
 `−CxA (drag)` next to the exported monitors, which stay unchanged. `CzA Front (percentage)` is a fraction and is
 displayed as exported.
 **Why:** the user asked to keep the raw values and also show downforce and drag.
+**Superseded:** once the force columns existed, the user asked to remove
+`−CzA (downforce)` / `−CxA (drag)`. Downforce [N] and Drag [N] are now computed
+directly from the CzA / CxA monitors and sit right after Iteration.
 
 ## 2026-10-02 — Downforce [N] and Drag [N] at a chosen speed
 

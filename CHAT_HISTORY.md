@@ -2693,3 +2693,41 @@ MEMORY.md:77-79|note=[grounded the next improvements in the existing CFD image a
 > Also fixed along the way: an empty CzA or CxA cell no longer shows up as 0 in the computed columns.
 >
 > All tests pass (15 unit tests, 75 browser checks, 8 of them new). Committed and pushed to GitHub `master`. Reload http://127.0.0.1:5173 to see it.
+
+## 2026-10-02 — Remove the −CzA / −CxA columns
+
+### User message (verbatim)
+
+> i think you can remove this columns. −CzA (downforce)	−CxA (drag)
+
+### Contributor messages (verbatim)
+
+> I'll remove the two columns and compute Downforce [N] and Drag [N] straight from CzA and CxA, placed right after Iteration. The chart will then start on Downforce [N].
+
+> Both columns removed. Running the tests:
+
+> All pass. Checking with your real results:
+
+> Same values as before; only the two columns are gone. Updating the project notes:
+
+### Work record
+
+- `web/app.js`: removed `DERIVED_AERO_COLUMNS` / `withDerivedAeroColumns` (coefficient files now cache just their final row as exported). `withForceColumns()` computes `Downforce [N]` / `Drag [N]` = ½ · ρ · v² · (−CzA / −CxA) directly from the total monitors and inserts them right after Iteration. Hover note now explains CzA/CxA (coefficient × reference area, negative = downforce/drag). Δ note rewritten (positive Δ in the force columns = more; for raw CzA/CxA a negative Δ = more). Monitor chart defaults to Downforce [N].
+- `web/styles.css`: comment only.
+- Tests: `tests/browser/server-mode.html` updated (force columns right after Iteration and no `−` columns; raw CzA/CxA unchanged; Δ Downforce [N] / Δ Drag [N]; Δ CzA keeps the exported sign; chart default).
+- Docs: `CHANGELOG.md`, `DECISIONS.md` (old entry marked superseded), `SHARED_CONTEXT.md`, `STATUS.md`, `HANDOFF_FOR_CHATGPT.md`, `tests/README.md`.
+- Real results via the user's server: headers `Simulation | Iteration | Downforce [N] | Drag [N] | CzA Front(%) | CzA …`; values unchanged (e.g. 0823_upsi 862.5 N / 260.1 N); chart starts on Downforce [N].
+- Checks: `py -m unittest discover -s tests` 15/15 OK; `py tests/run_browser_tests.py` 73/73 passed.
+
+### Final response (verbatim)
+
+> Done. The **−CzA (downforce)** and **−CxA (drag)** columns are gone. The table now reads:
+>
+> `Simulation | Iteration | Downforce [N] | Drag [N] | CzA Front(%) | CzA | …`
+>
+> - Downforce [N] and Drag [N] are now calculated directly from CzA and CxA. The values are unchanged, for example 862.5 N and 260.1 N for 0823_upsi at 60 km/h.
+> - The monitor chart now starts on **Downforce [N]**.
+> - In **Δ vs reference**, a positive Δ in the force columns still means more downforce or drag. The raw CzA and CxA keep their exported sign, so there a negative Δ means more, and the note above the table says so.
+> - Hovering over a force heading explains that CzA is the downforce coefficient × reference area.
+>
+> All tests pass (15 unit tests, 73 browser checks). Committed and pushed to GitHub `master`. Reload http://127.0.0.1:5173 to see it.

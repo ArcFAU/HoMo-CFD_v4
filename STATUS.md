@@ -4,7 +4,7 @@ Last updated: 2026-10-02
 
 - The landing view is a searchable filesystem tree. The chosen results-root handle is stored in IndexedDB and restored when browser permission remains granted; otherwise the sidebar shows a one-click **Reconnect** button. Hidden folders (for example `.git`) are skipped during indexing. The root may be a single simulation folder, a folder of simulations, or a tree with simulations nested deeper; every simulation at any depth is offered in comparison windows and pressure overlays.
 - The workspace displays only one collective table: the final data row from each `Coefficients*.csv`, one row per simulation. Coefficient values display to three decimal places and the iteration number as an integer. No other CSV tables or full coefficient histories are rendered.
-- Stage 5 has **Values / Δ vs reference** modes in the coefficient table plus a collapsible raw-monitor comparison chart. Deltas are signed case-minus-reference by original monitor header; the reference row is zero. Since 2026-10-02 the table also shows computed **−CzA (downforce)** and **−CxA (drag)** right after Iteration (CzA/CxA are the downforce/drag coefficients × reference area, not forces; negative means downforce/drag), so a positive Δ means more downforce/drag than the reference; the monitor chart starts on −CzA. **Downforce [N]** and **Drag [N]** follow, = ½ · ρ · v² · (−CzA / −CxA) at the speed and air density set in the table toolbar (defaults 60 km/h, 1.18415 kg/m³; remembered per browser). Exported monitors and the CzA Front fraction are unchanged.
+- Stage 5 has **Values / Δ vs reference** modes in the coefficient table plus a collapsible raw-monitor comparison chart. Deltas are signed case-minus-reference by original monitor header; the reference row is zero. Since 2026-10-02 the table also shows computed **Downforce [N]** and **Drag [N]** right after Iteration, = ½ · ρ · v² · (−CzA / −CxA) at the speed and air density set in the table toolbar (defaults 60 km/h, 1.18415 kg/m³; remembered per browser). CzA/CxA are the downforce/drag coefficients × reference area; negative means downforce/drag, so the forces are positive and a positive Δ means more downforce/drag than the reference. The monitor chart starts on Downforce [N]. Exported monitors and the CzA Front fraction are unchanged.
 - **Customize columns** allows renaming, hiding, and reordering coefficient columns. Preferences persist in browser local storage; values remain bound to original CSV headers.
 - CSV discovery covers section-like folders even when they also contain images. Actual image files are not read during root indexing.
 - Clicking an image section opens a comparison window seeded with that simulation and selected field/axis; **Add case** inside the window adds more simulations. The main window has no comparison case slots.
@@ -44,7 +44,7 @@ Last updated: 2026-10-02
 
 - Comparison window layout is CSS-driven per case count: 1 = full, 2 = side by side, 3-4 = 2 x 2 with each panel at least 420 px tall; the window scrolls rather than shrinking images. Below 1000 px width, panels stack in one column.
 - `+` / `-` / `0` zoom in, out and reset in the comparison window and the scene gallery.
-- Stage 5 −CzA/−CxA columns (see above), with hover explanations and sign-aware notes in the Δ view and monitor chart.
+- Stage 5 Downforce [N] / Drag [N] columns (see above), with hover explanations and sign-aware notes in the Δ view and monitor chart.
 - 3D viewer triangle count fixed (it showed index count = 3 x triangles).
 - Tests in the repo: `tests/test_serve.py` (15 unit tests) and `tests/run_browser_tests.py` (67 headless checks over generated data in `tests/fixture.py`). See `tests/README.md`; `AGENTS.md` asks every contributor to run them.
 - Planning files from the ChatGPT pipeline: `DECISIONS.md`, `TASK.md`, `CHANGELOG.md`.
@@ -60,7 +60,7 @@ Last updated: 2026-10-02
 - Later 3D viewer improvement: part-level show/hide controls. Deferred because the user considers the full-car rendering sufficient for now.
 - User check pending: double-click `Start HoMo CFD.bat` and try **Working directory → Browse…** (both open desktop windows, so they were not automated).
 - Later improvement (distribution, decided 2026-10-02): for now teammates install Python 3 themselves. Later, bundle a portable Python with HoMo CFD so it is unzip-and-run like CFD-Tool, which shipped its own Java runtime.
-- Stage 5: sign convention confirmed by the team (negative CzA = downforce, negative CxA = drag, CzA Front is a fraction); −CzA (downforce) / −CxA (drag) columns added. Further derived metrics (efficiency, component downforce, balance) only on request.
+- Stage 5: sign convention confirmed by the team (negative CzA = downforce, negative CxA = drag, CzA Front is a fraction); Downforce [N] / Drag [N] columns added (the interim −CzA / −CxA columns were removed at the user's request). Further derived metrics (efficiency, component downforce, balance) only on request.
 - `.gitignore` now excludes the 1.75 GiB local result tree and both ZIP archives. `CFD-Tool.zip` contains a possible `p.ppk`; it was not extracted or inspected and remains ignored.
 
 ## How to run
