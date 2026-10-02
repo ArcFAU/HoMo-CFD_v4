@@ -2839,3 +2839,48 @@ MEMORY.md:77-79|note=[grounded the next improvements in the existing CFD image a
 > CzA Front(%) still shows the balance as a fraction, exactly as exported.
 >
 > All tests pass (15 unit tests, 77 browser checks). Committed and pushed to GitHub `master`. Reload http://127.0.0.1:5173 to see it.
+
+## 2026-10-02 — Stage 7 decisions (WinSCP, no delete, HoMo writes job scripts)
+
+### User message (verbatim)
+
+> WinSCP, No delete, can, don't know. i wasn't able to find launcV3 anywhere.
+
+(Answers, in order, to: connection method; delete on Fritz after download; should HoMo write the job scripts; licence key location.)
+
+### Contributor messages (verbatim)
+
+> Recording your answers. First, a look at how CFD-Tool's WinSCP setup is stored on your PC (file names only; the key file isn't opened), since HoMo should reuse it:
+
+> The licence key isn't stored in CFD-Tool or in your `Settings` files. It appears only in job scripts that were already generated (and in the job log `resTAURANtS.o…`). So it came from whoever prepared those cases. Checking what a prepared case looks like on your PC:
+
+> Looking at the download script CFD-Tool left in `inProgress`, with user names and hosts hidden:
+
+> Everything needed for the design is in place. Writing your decisions and the final build plan into the design document:
+
+### Work record
+
+- Read-only checks on this PC (no secrets printed or copied): `%APPDATA%\CFD-Tool\resources` file names and sizes (WinSCP line `o`, `u` and `p.ppk` are empty; `p.ppk` not opened); CFD-Tool `config` keys only (values hidden); `WinSCP.com` in `C:\Program Files (x86)\WinSCP`; 3 WinSCP saved sessions exist (names not read); `CFD-Tool.jar` strings for `ConfigFrame` / `InProgress` / `Unsimulated` (WinSCP `open sftp://…` and `open %SESSION_NAME%` templates); licence key location checked by in-memory comparison only (booleans and file paths printed): not in the jar, CFD-Tool config or `Settings`, only in `0830_mk3` job scripts and job log; `D:\CFD_tool\unsimulated` empty, `inProgress` has only CFD-Tool's `downloadPlots.bat` (shown with host/user hidden); `Run Settings/…` keys of the `Settings` preset.
+- `docs/STAGE7_FRITZ.md`: status line; section 4 replaced by an answers table plus findings; new section 5 "Final design (to build)": WinSCP saved session + remote `Pipeline` folder per user, licence key in local settings by default, lifecycle (prepare with `post.sh` writing `plots/POST_DONE`, submit with `sbatch mesh.sh`, monitor via `plots`, download after `POST_DONE`, never delete remotely), build order.
+- `TASK.md`, `STATUS.md`, `SHARED_CONTEXT.md` (stage table), `DECISIONS.md` (new Stage 7 entry), `HANDOFF_FOR_CHATGPT.md` updated.
+- No code changed, so the test suites were not rerun. The cluster was not contacted.
+
+### Final response (verbatim)
+
+> Thanks, that settles the Stage 7 design. I've put the final plan in `docs/STAGE7_FRITZ.md` (sections 4–5):
+>
+> - **Connection:** HoMo uses **WinSCP**, through a WinSCP *saved session*. The session keeps the host, user name and key inside WinSCP, so HoMo only stores the session name. You already have 3 saved sessions on this PC; you'll pick the Fritz one.
+> - **No `launchV3.sh`:** HoMo starts the jobs itself with `sbatch mesh.sh`.
+> - **Job scripts:** HoMo writes `mesh.sh`, `rans.sh` and `post.sh` from the case `Settings`, like CFD-Tool. One addition: `post.sh` writes a `plots/POST_DONE` file at the very end. That's how HoMo will know post-processing is finished and it's time to download.
+> - **Never deletes anything on Fritz.**
+> - **Licence key:** it isn't stored in CFD-Tool or your `Settings` files, only in job scripts that were already generated, so it came from whoever prepared those cases. Plan: each person enters it once, and it stays only on their own PC, never on GitHub. Same as CFD-Tool, just visible. Heads-up: the key also ends up in the job log files (`resTAURANtS.o…`) inside result folders, so be careful when sharing raw result folders.
+>
+> **Build order:**
+> 1. Connection settings and a **Test connection** button.
+> 2. Monitor and download for running cases.
+> 3. Job-script generation.
+> 4. Submit.
+>
+> Steps 1–2 only read from Fritz.
+>
+> Nothing touches the cluster yet. Shall I start building step 1? Testing it will need you to click **Test connection** once with your Fritz session.

@@ -24,8 +24,10 @@ the cluster, no credentials in the repo.
 **Acceptance:** the user reviews the design and confirms the workflow and the
 authentication approach before any implementation starts.
 
-**Status (2026-10-02):** draft written — `docs/STAGE7_FRITZ.md`. Answered so
-far (section 4): own Fritz account per user; download after post-processing
-(`plots/DONE` comes too early). Still open: connection method, `launchV3.sh`
-(user did not know it; check the team's Fritz `Pipeline` folder), remote
-clean-up, job-script generation, licence key. Nothing contacts the cluster yet.
+**Status (2026-10-02):** all six questions answered — WinSCP, own accounts,
+no `launchV3.sh` (submit with `sbatch mesh.sh`), download after
+post-processing, no remote delete, HoMo CFD writes the job scripts, licence
+key per user in local settings by default. Final design and build order in
+`docs/STAGE7_FRITZ.md` section 5. Next task: build step 1 (connection
+settings + Test connection) once the user says go. Nothing contacts the
+cluster yet.

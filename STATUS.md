@@ -52,7 +52,7 @@ Last updated: 2026-10-02
 
 ## Open items
 
-- Stage 7 (Fritz): design draft in `docs/STAGE7_FRITZ.md`, based on how CFD-Tool uploads with WinSCP + PuTTY key, runs `Pipeline/launchV3.sh`, polls `plots/DONE`, and moves cases inProgress → finished. Answered 2026-10-02: own Fritz account per user; download after post-processing (needs a signal other than `plots/DONE`, see the doc's section 4). Still needs: connection method, `launchV3.sh` (user did not know it; it comes from CFD-Tool's `InProgress` class), remote clean-up, job-script generation, licence key location.
+- Stage 7 (Fritz): design draft in `docs/STAGE7_FRITZ.md`, based on how CFD-Tool uploads with WinSCP + PuTTY key, runs `Pipeline/launchV3.sh`, polls `plots/DONE`, and moves cases inProgress → finished. Decided 2026-10-02 (doc sections 4–5): WinSCP saved sessions, own Fritz account per user, submit with `sbatch mesh.sh` (no `launchV3.sh` found), HoMo CFD writes the job scripts and `post.sh` ends with `plots/POST_DONE`, download after post-processing, never delete on Fritz, licence key per user in local settings. Build order: connection + test, monitor/download, job scripts, submit.
 
 - The actual `High-Voltage_white.png` logo is present at the project root and is used in the main-window header.
 - Pop-ups must be allowed for http://127.0.0.1:5173. With `serve.py` any modern browser works; only the fallback without `serve.py` (Open folder) needs Chrome or Edge.

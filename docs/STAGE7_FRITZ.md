@@ -1,6 +1,6 @@
 # Stage 7 — Fritz cluster integration (design draft)
 
-Status: **draft for review, nothing implemented.** Written 2026-10-02 from a
+Status: **design decided 2026-10-02 (section 4–5), nothing implemented yet.** Written 2026-10-02 from a
 read-only study of CFD-Tool (class constants and `javap` disassembly; the
 `p.ppk` key was never opened) and the `mesh.sh` / `rans.sh` / `post.sh` job
 scripts in a downloaded result folder (licence key masked, not copied).
@@ -101,33 +101,72 @@ things on Fritz and come last.
    that for now?
 6. OK to move the licence key out of the job scripts into a file on Fritz?
 
-## 4. Answers so far (user, 2026-10-02)
+## 4. Answers (user, 2026-10-02)
 
-- **Accounts (Q1, part):** usually everyone uses their **own Fritz account**.
-  So connection settings are per user and per PC (host alias / user name in
-  `%APPDATA%\HoMo-CFD\settings.json`, keys in the user's own SSH/PuTTY
-  setup). The OpenSSH (B) vs WinSCP/PuTTY (A) choice is still open.
-- **Download timing (Q3):** download **after post-processing** has finished
-  (images ready), not at `plots/DONE`.
-  - Finding: `rans.sh` writes `plots/DONE` right after the solver, *before*
-    `post.sh` runs, and `post.sh` writes no completion marker. So `plots/DONE`
-    alone cannot be the trigger.
-  - Options: (a) ask SLURM whether the case's `post` job has finished
-    (`squeue` / `sacct` over SSH; needs option B or PuTTY's `plink`);
-    (b) have `post.sh` write a marker such as `plots/POST_DONE` as its last
-    step (needs the job scripts to change, see Q5); (c) look for post-processing
-    output (section folders, `RANS.html`) — fragile, as a run can stop half-way.
-  - Proposal: (a) as the main signal, plus (b) once HoMo CFD writes the job
-    scripts.
-- **`launchV3.sh` (Q2):** the user did not know this script. Where it comes
-  from: CFD-Tool's `InProgress` class (in `CFD-Tool.jar`) builds `upload.bat`
-  with `set LAUNCH_SCRIPT=/home/…/Pipeline/launchV3.sh` and
-  `call %LAUNCH_SCRIPT%`, so CFD-Tool runs it on Fritz after every upload. It
-  is a cluster-side file, probably set up by whoever wrote CFD-Tool; it is
-  not in the project or the result folders. Next step: look for
-  `Pipeline/launchV3.sh` in the team's Fritz folder or ask CFD-Tool's author.
-  If it cannot be found, HoMo CFD can start the chain itself with
-  `sbatch mesh.sh` in the uploaded case folder.
+| # | Question | Answer |
+| --- | --- | --- |
+| 1 | Connection, accounts | **WinSCP** (option A). Usually everyone uses their **own Fritz account**. |
+| 2 | `launchV3.sh` | Not found anywhere by the user → HoMo CFD starts the chain itself with `sbatch mesh.sh`. |
+| 3 | When to download | **After post-processing** has finished (images ready). |
+| 4 | Remote clean-up | **No delete.** HoMo CFD never deletes anything on Fritz. |
+| 5 | Generate job scripts | **Yes**, HoMo CFD can write `mesh.sh` / `rans.sh` / `post.sh` from `Settings`. |
+| 6 | Licence key | Unknown → see "Licence key" below. |
 
-Still open: Q1 connection method, Q2 (what `launchV3.sh` does, if it
-exists), Q4 remote clean-up, Q5 job-script generation, Q6 licence key.
+Findings behind these answers (read-only checks on this PC):
+
+- **`launchV3.sh`:** CFD-Tool's `InProgress` class (in `CFD-Tool.jar`) builds
+  `upload.bat` with `set LAUNCH_SCRIPT=/home/…/Pipeline/launchV3.sh` and
+  `call %LAUNCH_SCRIPT%`. The script is cluster-side and probably belonged to
+  CFD-Tool's author; it is not in the project or the result folders.
+- **Post-processing signal:** `rans.sh` writes `plots/DONE` right after the
+  solver, *before* `post.sh` runs, and `post.sh` writes no completion marker.
+  So `plots/DONE` cannot be the download trigger.
+- **WinSCP:** `WinSCP.com` is installed in `C:\Program Files (x86)\WinSCP`, and
+  there are saved WinSCP sessions on this PC. CFD-Tool's batch templates
+  support both `open sftp://…` and `open <saved session name>`. CFD-Tool's own
+  WinSCP line and key file on this PC are empty, so it was not used for the
+  cluster here.
+- **Licence key:** not stored in CFD-Tool (jar or config) or in any `Settings`
+  file; it appears only in already generated job scripts and in the job log
+  (`resTAURANtS.o…`). It came from the CFD-Tool setup of whoever prepared those
+  cases.
+- **Run settings** in `Settings` (`Run Settings/…`): mesh/RANS nodes and hours,
+  post hours, accelerated post-processing, download options (`Download
+  Folders`, `Download Sim`) and CFD-Tool's delete options (`Delete Remote Sim`,
+  `Remote Delete Time`, `Local Delete Time`). HoMo CFD ignores the delete
+  options (answer 4).
+
+## 5. Final design (to build)
+
+**Connection.** Per user and per PC, stored in `%APPDATA%\HoMo-CFD\settings.json`:
+the WinSCP saved-session name (HoMo CFD lists the names; the session holds
+host, user and key inside WinSCP, so HoMo CFD stores no secrets) and the remote
+`Pipeline` folder. `serve.py` runs `WinSCP.com /command …` with a generated
+script; only when the user clicks a button.
+
+**Licence key.** Default: entered once per user and kept only in
+`%APPDATA%\HoMo-CFD\settings.json` (never in the repo), then written into the
+generated job scripts — the same as CFD-Tool does today. Later option: a file
+on Fritz that the job scripts read, so the key stops appearing in result
+folders and job logs.
+
+**Lifecycle** (same folders as CFD-Tool):
+
+1. **Prepare** (`unsimulated/<case>`): HoMo CFD writes `mesh.sh`, `rans.sh`,
+   `post.sh` from the case `Settings` (CFD-Tool's templates). `post.sh` ends
+   with `> plots/POST_DONE` after STAR-CCM+ exits.
+2. **Submit:** `put` the case folder to `<Pipeline>/<case>`, then
+   `call cd <Pipeline>/<case> && sbatch mesh.sh`; move the local folder to
+   `inProgress/`.
+3. **Monitor** (on demand, or every few minutes while HoMo CFD is open): `get`
+   each in-progress case's `plots` folder (residuals, `Coefficients*.csv`) and
+   show progress: meshing / solving / post-processing / done.
+4. **Download:** when `plots/POST_DONE` exists, `get` the case into
+   `finished/<case>` (respecting `Download Folders` / `Download Sim`), verify
+   it, then remove the local `inProgress/<case>` copy. Older cases without the
+   marker: offer a manual "Download now".
+5. **No remote delete**, ever.
+
+**Build order:** (1) connection settings + **Test connection** (WinSCP `open` +
+`pwd` + `exit`); (2) monitor + download for cases already in `inProgress`;
+(3) job-script generation; (4) submit. Steps 1–2 only read from Fritz.

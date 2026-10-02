@@ -75,7 +75,7 @@ The legacy `CFD-Tool.zip` `resources/tables` presets confirm display aliases for
 | 4 | CSV pressure plots (FW/UT/RW × x/y section and station) |
 | 5 | FSAE-specific aerodynamic comparison |
 | 6 | Interactive CFD fields (VTK / 3D), not only PNGs |
-| 7 | Fritz: submit, monitor, download, delete — design draft in `docs/STAGE7_FRITZ.md` (awaiting team answers) |
+| 7 | Fritz: prepare, submit, monitor, download (no remote delete) — design decided in `docs/STAGE7_FRITZ.md` |
 
 **V1 = modern CFD-Tool** (PNG image sequences + browsable CSV tables). Do not start with a generic ParaView clone.
 
