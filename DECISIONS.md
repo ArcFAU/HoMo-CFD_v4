@@ -66,6 +66,21 @@ change with speed; the hover note says so.
 The force columns are computed when the table is drawn, not stored with the
 cached CSV rows, so changing the speed or density only redraws the table.
 
+## 2026-10-02 — Step 2 reads state from files; downloads via inProgress
+
+The WinSCP session reaches csnhr, a jump host without SLURM, so HoMo CFD
+cannot ask the queue. Instead one read-only shell loop (WinSCP `call`)
+reports each case's marker files and logs. "Ready to download" = the newest
+`post.o*` log contains "Job finished at" (or `plots/POST_DONE`). A run that
+dies leaves no marker, so unfinished cases without a log update for 12 h are
+shown as "probably stopped" and can still be downloaded on request.
+Downloads use `synchronize local` (only writes locally, resumes, never
+deletes remotely) into `inProgress\<case>` and move to `finished\<case>` when
+complete, like CFD-Tool. Skipped: `*.sim~`, `*.sh`, `*.java` (the job scripts
+contain the licence key), `ABORT*`; `*.sim` (10–20 GB) only when ticked.
+**Why POST for the status check:** it starts WinSCP; a GET could be triggered
+by any web page (e.g. an image tag) on this computer.
+
 ## 2026-10-02 — Passphrase-protected keys go through Pageant
 
 The user's Fritz key has a passphrase. HoMo CFD does not ask for it or pass

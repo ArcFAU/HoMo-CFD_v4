@@ -1771,6 +1771,217 @@ function showWorkingDirectoryChooser(config, message = "") {
   el.panels.replaceChildren(card);
 }
 
+// Stage 7, step 2: the cases in the saved remote folder, their state from
+// the job files on Fritz, and downloads into finished (via inProgress, like
+// CFD-Tool). Nothing on Fritz is changed or deleted.
+const CLUSTER_STATES = {
+  prepared: "Not started",
+  meshing: "Meshing",
+  solving: "Solving",
+  "waiting-post": "Solver done, post-processing queued",
+  post: "Post-processing",
+  ready: "Ready to download",
+};
+const CLUSTER_REFRESH_MS = 5 * 60 * 1000;
+
+function timeAgo(epochSeconds) {
+  const hours = (Date.now() / 1000 - epochSeconds) / 3600;
+  if (hours < 1) return `${Math.max(1, Math.round(hours * 60))} min ago`;
+  if (hours < 48) return `${Math.round(hours)} h ago`;
+  return `${Math.round(hours / 24)} days ago`;
+}
+
+function clusterCasesSection({ saved, onNeedsPassphrase }) {
+  const section = document.createElement("section");
+  section.className = "cluster-cases";
+  const header = document.createElement("div");
+  header.className = "cluster-cases-header";
+  const title = document.createElement("h2");
+  title.textContent = "Simulations on Fritz";
+  const refreshButton = document.createElement("button");
+  refreshButton.type = "button";
+  refreshButton.className = "small-control";
+  refreshButton.id = "cluster-refresh";
+  refreshButton.textContent = "Refresh";
+  const checked = document.createElement("span");
+  checked.className = "hint";
+  const includeSim = document.createElement("label");
+  includeSim.className = "hint cluster-include-sim";
+  const includeSimBox = document.createElement("input");
+  includeSimBox.type = "checkbox";
+  includeSimBox.id = "cluster-include-sim";
+  includeSim.append(includeSimBox, " Also download .sim files (10–20 GB each)");
+  header.append(title, refreshButton, checked, includeSim);
+  const note = document.createElement("p");
+  note.className = "hint";
+  note.textContent = "The state comes from each case's job files on Fritz: plots/DONE when the solver has finished, and the post-processing " +
+    "log for \"Ready to download\". Downloads go to inProgress first and move to finished when complete; an interrupted download resumes. " +
+    "Job scripts, macros and .sim~ backups are skipped. Nothing on Fritz is changed or deleted.";
+  const status = document.createElement("p");
+  status.className = "cluster-status";
+  status.hidden = true;
+  const tableWrap = document.createElement("div");
+  tableWrap.className = "csv-table-wrap";
+  const table = document.createElement("table");
+  table.className = "data-table cluster-table";
+  tableWrap.appendChild(table);
+  section.append(header, note, status, tableWrap);
+
+  let lastResult = null;
+  let pollTimer = null;
+  const showStatus = (text, kind) => {
+    status.textContent = text;
+    status.className = `cluster-status ${kind}`;
+    status.hidden = !text;
+  };
+
+  const actionCell = (item, canDownload) => {
+    const td = document.createElement("td");
+    td.className = "cluster-action";
+    const download = item.download;
+    if (download?.state === "running") {
+      const total = download.filesTotal ?? "…";
+      td.append(`Downloading ${download.filesDone} / ${total} files `);
+      const cancel = document.createElement("button");
+      cancel.type = "button";
+      cancel.className = "small-control";
+      cancel.textContent = "Cancel";
+      cancel.addEventListener("click", async () => {
+        cancel.disabled = true;
+        try {
+          await postServerJson("cluster/download/cancel", { case: item.name });
+        } catch (err) {
+          showStatus(err?.message || "Could not cancel.", "error");
+        }
+      });
+      td.appendChild(cancel);
+      return td;
+    }
+    if (download?.state === "done" || item.local === "finished") {
+      td.append(download?.state === "done" ? "Downloaded " : "In finished");
+      if (download?.state === "done") {
+        const reload = document.createElement("button");
+        reload.type = "button";
+        reload.className = "small-control";
+        reload.textContent = "Reload results";
+        reload.addEventListener("click", () => location.reload());
+        td.appendChild(reload);
+      }
+      return td;
+    }
+    if (download?.message) td.append(`${download.message} `);
+    if (!canDownload || !item.downloadable) return td;
+    const allowed = item.state === "ready" || item.stale || item.local === "partial";
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = item.state === "ready" ? "primary small" : "small-control";
+    button.textContent = item.local === "partial" ? "Resume download" : item.state !== "ready" && item.stale ? "Download anyway" : "Download";
+    button.disabled = !allowed;
+    button.title = allowed ? "" : "Available once post-processing has finished";
+    button.addEventListener("click", async () => {
+      button.disabled = true;
+      try {
+        await postServerJson("cluster/download", { case: item.name, includeSim: includeSimBox.checked });
+        showStatus("", "");
+        pollDownloads();
+      } catch (err) {
+        showStatus(err?.message || "Could not start the download.", "error");
+        button.disabled = false;
+      }
+    });
+    td.appendChild(button);
+    return td;
+  };
+
+  const render = () => {
+    const result = lastResult;
+    table.replaceChildren();
+    if (!result) return;
+    const head = document.createElement("thead");
+    const headRow = document.createElement("tr");
+    ["Case", "State", "Last job log", "On this computer", ""].forEach((label) => headRow.appendChild(cell("th", label)));
+    head.appendChild(headRow);
+    const body = document.createElement("tbody");
+    result.cases.forEach((item) => {
+      const row = document.createElement("tr");
+      row.dataset.case = item.name;
+      row.appendChild(cell("td", item.name));
+      const state = cell("td", CLUSTER_STATES[item.state] ?? item.state);
+      state.className = `cluster-state cluster-state-${item.state}${item.stale ? " cluster-stale" : ""}`;
+      if (item.stale) state.append(" · probably stopped (no job log update for over 12 h)");
+      row.appendChild(state);
+      row.appendChild(cell("td", item.lastLog ? timeAgo(item.lastLog) : "—"));
+      row.appendChild(cell("td", item.local === "finished" ? "In finished" : item.local === "partial" ? "Partly downloaded" : "—"));
+      row.appendChild(actionCell(item, result.canDownload));
+      body.appendChild(row);
+    });
+    table.append(head, body);
+    if (!result.canDownload) {
+      showStatus("To download, set the working directory to the CFD-Tool folder that contains finished and inProgress.", "hint");
+    }
+  };
+
+  const pollDownloads = async () => {
+    clearTimeout(pollTimer);
+    if (!section.isConnected || !lastResult) return;
+    try {
+      const downloads = await (await fetch("/api/cluster/downloads")).json();
+      let running = false;
+      let changed = false;
+      lastResult.cases.forEach((item) => {
+        const download = downloads[item.name];
+        if (!download) return;
+        if (item.download?.state === "running" && download.state !== "running") changed = true;
+        item.download = download;
+        running ||= download.state === "running";
+      });
+      render();
+      if (running) pollTimer = setTimeout(pollDownloads, 2000);
+      else if (changed) refresh();
+    } catch {
+      pollTimer = setTimeout(pollDownloads, 5000);
+    }
+  };
+
+  const refresh = async () => {
+    if (!section.isConnected && lastResult) return;
+    refreshButton.disabled = true;
+    showStatus("Checking Fritz… (a few seconds)", "hint");
+    try {
+      const result = await postServerJson("cluster/cases", {});
+      if (!result.ok) {
+        showStatus([result.error, result.hint].filter(Boolean).join(" "), "error");
+        if (result.needsPassphrase) onNeedsPassphrase();
+        return;
+      }
+      lastResult = result;
+      checked.textContent = `checked ${new Date(result.checkedAt * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+      showStatus("", "");
+      render();
+      if (result.cases.some((item) => item.download?.state === "running")) pollDownloads();
+    } catch (err) {
+      showStatus(err?.message || "Could not check Fritz.", "error");
+    } finally {
+      refreshButton.disabled = false;
+    }
+  };
+
+  refreshButton.addEventListener("click", refresh);
+  section.refresh = refresh;
+  section.start = () => {
+    if (!saved) {
+      showStatus("Save your WinSCP session and remote folder above, then click Refresh.", "hint");
+      return;
+    }
+    refresh();
+    const timer = setInterval(() => {
+      if (!section.isConnected) clearInterval(timer);
+      else refresh();
+    }, CLUSTER_REFRESH_MS);
+  };
+  return section;
+}
+
 // Stage 7, step 1: the WinSCP saved session used for Fritz and the remote
 // folder. HoMo CFD stores only these two names; the login (host, user, key)
 // stays in WinSCP. Testing only logs in and prints the folder.
@@ -1887,6 +2098,13 @@ async function showClusterSettings() {
   const output = document.createElement("pre");
   details.append(summary, output);
   card.append(sessionField, folderField, actions, status, details);
+  const settingsControls = [session, folder, test, unlock, save];
+  const cases = clusterCasesSection({
+    saved: Boolean(config.session && config.remoteFolder),
+    onNeedsPassphrase: () => unlock.classList.add("primary"),
+  });
+  card.appendChild(cases);
+  cases.start();
 
   const show = (text, kind, log = "") => {
     status.textContent = text;
@@ -1895,7 +2113,7 @@ async function showClusterSettings() {
     output.textContent = log;
     details.hidden = !log;
   };
-  const busy = (on) => card.querySelectorAll("button, input, select").forEach((control) => {
+  const busy = (on) => settingsControls.forEach((control) => {
     control.disabled = on || (control === test && !config.winscp);
   });
   const values = () => ({ session: session.value, remoteFolder: folder.value });
@@ -1935,6 +2153,9 @@ async function showClusterSettings() {
     try {
       await postServerJson("cluster", values());
       show("Saved.", "cluster-ok");
+      config.session = session.value;
+      config.remoteFolder = folder.value;
+      cases.refresh();
     } catch (err) {
       show(err?.message || "Could not save the cluster settings.", "error");
     } finally {

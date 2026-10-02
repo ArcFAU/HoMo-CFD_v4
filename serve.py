@@ -28,8 +28,10 @@ import email.utils
 import json
 import mimetypes
 import os
+import atexit
 import shutil
 import threading
+import time
 import webbrowser
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -100,6 +102,14 @@ class WorkingDirectory:
     def results_root(self):
         with self.lock:
             return results_folder(self.path) if self.path else None
+
+    def cfd_folders(self):
+        """(finished, inProgress) when the working directory has CFD-Tool's layout."""
+        with self.lock:
+            path = self.path
+        if path and (path / "finished").is_dir():
+            return path / "finished", path / "inProgress"
+        return None
 
     def describe(self):
         with self.lock:
@@ -212,6 +222,10 @@ class Handler(SimpleHTTPRequestHandler):
     browse_lock = threading.Lock()
     winscp = cluster.WinScp()
     cluster_lock = threading.Lock()
+    status_lock = threading.Lock()
+    download_lock = threading.Lock()
+    downloads = {}          # case name → cluster.Download, for this server run
+    remote_cases = set()    # case names from the last status check
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(WEB), **kwargs)
@@ -241,6 +255,7 @@ class Handler(SimpleHTTPRequestHandler):
             "/api/list": self.api_list,
             "/api/file": self.api_file,
             "/api/cluster": self.api_cluster,
+            "/api/cluster/downloads": self.api_cluster_downloads,
         }
         route = routes.get(url.path)
         if route is None:
@@ -262,6 +277,9 @@ class Handler(SimpleHTTPRequestHandler):
             "/api/cluster": self.api_save_cluster,
             "/api/cluster/test": self.api_test_cluster,
             "/api/cluster/pageant": self.api_start_pageant,
+            "/api/cluster/cases": self.api_cluster_cases,
+            "/api/cluster/download": self.api_cluster_download,
+            "/api/cluster/download/cancel": self.api_cluster_cancel,
         }
         route = routes.get(urlsplit(self.path).path)
         if route is None:
@@ -373,6 +391,78 @@ class Handler(SimpleHTTPRequestHandler):
         self.winscp.start_pageant(key_file)
         self.send_json({"started": True})
 
+    # Step 2: what is on Fritz, and downloads into the working directory.
+
+    def api_cluster_cases(self, _body):
+        """Status of every case folder in the saved remote folder (read-only)."""
+        saved = self.cluster_settings()
+        if not saved["session"] or not saved["remoteFolder"]:
+            return self.send_json({"error": "Save your WinSCP session and remote folder first."}, HTTPStatus.BAD_REQUEST)
+        if self.winscp.executable() is None:
+            return self.send_json({"error": "WinSCP is not installed (WinSCP.com not found)."}, HTTPStatus.BAD_REQUEST)
+        if not self.status_lock.acquire(blocking=False):
+            return self.send_json({"error": "A status check is already running."}, HTTPStatus.CONFLICT)
+        try:
+            code, output = self.winscp.run(cluster.status_script(saved["session"], saved["remoteFolder"]))
+        finally:
+            self.status_lock.release()
+        if code != 0:
+            return self.send_json({"ok": False, "error": "Could not check Fritz.", "hint": cluster.hint_for(output),
+                                   "needsPassphrase": "passphrase" in output.lower(), "output": output.strip()[-cluster.MAX_OUTPUT:]})
+        cases = cluster.parse_cases(output)
+        Handler.remote_cases = {case["name"] for case in cases}
+        folders = self.working_dir.cfd_folders()
+        for case in cases:
+            case["local"] = None
+            try:
+                cluster.check_case_name(case["name"])
+            except ValueError:
+                case["downloadable"] = False
+                continue
+            case["downloadable"] = True
+            if folders and (folders[0] / case["name"]).exists():
+                case["local"] = "finished"
+            elif folders and (folders[1] / case["name"]).exists():
+                case["local"] = "partial"
+            download = self.downloads.get(case["name"])
+            case["download"] = download.describe() if download else None
+        self.send_json({"ok": True, "cases": cases, "checkedAt": time.time(), "canDownload": folders is not None})
+
+    def api_cluster_downloads(self, _path):
+        self.send_json({case: download.describe() for case, download in self.downloads.items()})
+
+    def api_cluster_download(self, body):
+        """Start downloading one case (skipping .sim unless includeSim)."""
+        try:
+            case = cluster.check_case_name(body.get("case"))
+        except ValueError as err:
+            return self.send_json({"error": str(err)}, HTTPStatus.BAD_REQUEST)
+        if case not in Handler.remote_cases:
+            return self.send_json({"error": "That case is not in the last list from Fritz; refresh first."}, HTTPStatus.BAD_REQUEST)
+        folders = self.working_dir.cfd_folders()
+        if folders is None:
+            return self.send_json({"error": "Set the working directory to the CFD-Tool folder that contains finished "
+                                            "(and inProgress) to download."}, HTTPStatus.BAD_REQUEST)
+        finished, partial = folders[0] / case, folders[1] / case
+        if finished.exists():
+            return self.send_json({"error": f"{case} is already in finished."}, HTTPStatus.CONFLICT)
+        saved = self.cluster_settings()
+        with self.download_lock:
+            if any(download.state == "running" for download in self.downloads.values()):
+                return self.send_json({"error": "Another download is running; wait for it or cancel it."}, HTTPStatus.CONFLICT)
+            download = cluster.Download(case, body.get("includeSim") is True)
+            self.downloads[case] = download
+        lines = cluster.download_script(saved["session"], saved["remoteFolder"], case, str(partial), download.include_sim)
+        threading.Thread(target=cluster.run_download, args=(self.winscp, download, lines, partial, finished), daemon=True).start()
+        self.send_json(download.describe())
+
+    def api_cluster_cancel(self, body):
+        download = self.downloads.get(body.get("case")) if isinstance(body.get("case"), str) else None
+        if download is None or download.state != "running":
+            return self.send_json({"error": "No download of that case is running."}, HTTPStatus.BAD_REQUEST)
+        download.cancel()
+        self.send_json(download.describe())
+
     # --- results API ---------------------------------------------------
 
     def results_path(self, relative):
@@ -461,6 +551,8 @@ def main() -> None:
     args = parser.parse_args()
 
     path, source = find_working_dir(args.working_dir)
+    # Stop WinSCP downloads when HoMo CFD stops; they resume next time.
+    atexit.register(lambda: [download.cancel() for download in Handler.downloads.values()])
     Handler.working_dir.set(path, source)
     url = f"http://127.0.0.1:{args.port}"
     try:

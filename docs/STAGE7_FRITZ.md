@@ -1,6 +1,6 @@
 # Stage 7 — Fritz cluster integration (design draft)
 
-Status: **design decided 2026-10-02 (sections 4–5); step 1 (connection settings + Test connection) built, see `cluster.py`.** Written 2026-10-02 from a
+Status: **design decided 2026-10-02 (sections 4–5); steps 1 (connection + Test connection) and 2 (monitor + download) built, see `cluster.py` and section 6.** Written 2026-10-02 from a
 read-only study of CFD-Tool (class constants and `javap` disassembly; the
 `p.ppk` key was never opened) and the `mesh.sh` / `rans.sh` / `post.sh` job
 scripts in a downloaded result folder (licence key masked, not copied).
@@ -170,3 +170,17 @@ folders and job logs.
 **Build order:** (1) connection settings + **Test connection** (WinSCP `open` +
 `pwd` + `exit`); (2) monitor + download for cases already in `inProgress`;
 (3) job-script generation; (4) submit. Steps 1–2 only read from Fritz.
+
+## 6. What step 2 found on Fritz (2026-10-02)
+
+- The saved remote folder holds the case folders directly; there is no
+  `Pipeline` folder.
+- The session logs in to **csnhr**, NHR's jump host, which has no SLURM
+  commands. Monitoring therefore uses files: `plots/DONE` (solver finished) and
+  the newest `post.o*` log ("Job finished at" = post-processing finished). The
+  generated `post.sh` of step 3 will also write `plots/POST_DONE`.
+- **Submitting (step 4) needs a SLURM login node.** From csnhr that means a hop
+  to a Fritz frontend (e.g. `fritz.nhr.fau.de`); a WinSCP session straight to
+  the Fritz frontend is another option. To be decided before step 4.
+- Downloads skip `*.sim~`, `*.sh`, `*.java`, `ABORT*`, and `*.sim` unless
+  requested; 0830_mk3 was 2,219 files / 1.8 GB without `.sim`.

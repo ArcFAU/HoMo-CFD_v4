@@ -18,6 +18,6 @@ HoMo CFD is a local, offline web replacement for the team's Java CFD-Tool. `SHAR
 
 ## Next
 
-1. Stage 7 (Fritz cluster: submit, monitor, download, delete) — design first, see `TASK.md`; needs the team's choice of authentication before any implementation. Decided: WinSCP saved sessions, own Fritz account per user, submit with `sbatch mesh.sh`, HoMo writes job scripts (`post.sh` writes `plots/POST_DONE`), download after post-processing, never delete on Fritz; see `docs/STAGE7_FRITZ.md` section 5. Step 1 (WinSCP session + Test connection, `cluster.py`) is built; next is step 2 (monitor and download).
+1. Stage 7 (Fritz cluster: submit, monitor, download, delete) — design first, see `TASK.md`; needs the team's choice of authentication before any implementation. Decided: WinSCP saved sessions, own Fritz account per user, submit with `sbatch mesh.sh`, HoMo writes job scripts (`post.sh` writes `plots/POST_DONE`), download after post-processing, never delete on Fritz; see `docs/STAGE7_FRITZ.md` section 5. Steps 1 (WinSCP session + Test connection) and 2 (Simulations on Fritz: state from job files, downloads via inProgress → finished) are built in `cluster.py`; next are step 3 (job scripts) and step 4 (submit; needs a SLURM login node, as the session reaches the csnhr jump host).
 2. The user will add more result folders; check loading speed with 100+ simulations.
 3. Later improvements (after the main phases): bundled Python, 3D orientation widget, angled presets, part show/hide.

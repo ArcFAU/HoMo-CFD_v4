@@ -3067,3 +3067,119 @@ The user pasted the WinSCP output of their first **Test connection**. Per the no
 > 2. **May I look at your remote folder once?** I'd run a read-only listing (WinSCP `ls`) of the folder you saved, through your session, to see how running and finished cases are laid out on Fritz. Nothing is changed, downloaded or started. That way step 2 matches what's really there instead of my guess.
 >
 > If you also have a case running on Fritz right now, or can start one through CFD-Tool, I can test the downloading for real. Otherwise I'll build it against a fake cluster first.
+
+## 2026-10-02 — Stage 7 step 2: Simulations on Fritz (monitor and download)
+
+### User message (verbatim)
+
+> go on
+
+(Go-ahead for step 2, including the proposed read-only listing of the remote folder. The user had already set the working directory back to `D:\CFD_tool`.)
+
+### Contributor messages (verbatim)
+
+Messages that quoted the user's cluster user name or host are shown with those masked as `<…>`; no message contained secrets.
+
+> Starting with your working directory, then the read-only listing:
+
+> Working directory is now `D:\CFD_tool`, thanks. `inProgress` is empty apart from CFD-Tool's old batch file. Now the read-only listing of your remote folder. In what I print, owner and group names are dropped and home paths are masked:
+
+> Connected. Your saved remote folder holds the case folders directly (`0830_mk3`, `0923_corner`, …) and has no `Pipeline` folder, which matches `launchV3.sh` not existing. There's also a `test_homo` folder from today. Looking inside a finished case, the newest one, and `test_homo`:
+
+> Found the signal I was missing. Each case folder on Fritz has `STARTED`, then `plots/DONE` (solver finished), and post-processing logs `post.o<job>`. `post.sh` ends by printing "Job finished at …", so the **newest `post.o` file ending with "Job finished"** means post-processing is done. That works for cases started by CFD-Tool too, no script changes needed. The `.sim` files are 10–20 GB each, so downloads should skip them by default.
+>
+> To get all of that in one quick check (and the queue state from SLURM), I'll use WinSCP's `call` to run read-only shell commands. Probing that it works:
+
+> Two findings:
+>
+> - `call` works, so HoMo can run quick read-only checks on Fritz.
+> - Your session logs in to **csnhr**, NHR's jump host. It deliberately has no SLURM commands, so HoMo can't ask the job queue from there. That's fine for step 2, because the files tell us enough. Starting jobs (step 4) will need a hop from csnhr to a Fritz login node, which I'll note for later.
+>
+> The `post.o` files end with an NHR statistics footer, so "Job finished at" must come just before it. Checking:
+
+> The newest `post.o` file ending with NHR's job statistics plus "Job finished at" means post-processing finished. That works for every case, including ones CFD-Tool started. A side note for you: the same footer shows your Fritz `/home/vault` storage at about 1024 GB of a 1049 GB soft quota, so it's nearly full.
+>
+> Before writing the download code, I'll check what WinSCP prints while downloading, with a tiny real download: the 2 files in `0830_mk3/plots` (about 270 KB), into a scratch folder.
+
+> The test download worked, and WinSCP prints one line per file (`name | size | speed | binary | 100%`), which HoMo can count for a progress display. Now writing step 2. First the cluster part: the status check, a parser, and downloads that run in the background with progress and Cancel.
+
+> Next, the cluster part of step 2: the status check, its parser, and a background download with progress and Cancel.
+
+> This shell keeps collapsing double backslashes inside heredocs. Fixing the two affected spots directly:
+
+> Escapes are correct now. Testing the real status check against Fritz (read-only), plus the file count for one case:
+
+> The status check takes 3.5 s for all 17 folders. The states match the folders I looked at earlier, and 0830_mk3 would be 2,219 files / 1.8 GB without the `.sim` (12.4 GB with it). One thing to handle: old cases that stopped months ago still look "meshing" or "solving", because nothing marks a run that died. So HoMo will flag any unfinished case with no job-log update for over 12 hours as **probably stopped**. Now the server side:
+
+> Now the server endpoints: a status check (POST, so other web pages can't trigger it), starting, cancelling and following downloads, and local state for each case (already in `finished`, or partly downloaded in `inProgress`).
+
+> Now the app side: a **Simulations on Fritz** list below the connection settings, with state, last job-log time, local state and a Download/Cancel button per case. It refreshes every 5 minutes while the card is open.
+
+> Now the tests. The fake WinSCP learns to answer the status check and to "download" into the local folder, so the whole flow can be tested without Fritz:
+
+> Three problems: my fake WinSCP's pattern didn't allow the spaces inside `-filemask`, and the read-only test counted the harmless `2>&1` redirections as writes. The third is real: when the fake crashed, the download stayed "running" forever. So `run_download` now turns any unexpected error into "failed".
+
+> All 50 unit tests pass. Now the browser checks for the case list and a download from start to finish:
+
+> The fake "solving" case had a fixed time stamp that is now 11 days old, so HoMo correctly called it stopped. Making the fake times relative to now:
+
+> The heredoc ate the backslashes again. Doing these edits with the editor instead:
+
+> All pass: 50 unit tests and 91 browser checks. Checking the layout on the fake-WinSCP test server first:
+
+> The layout works. One wording fix: a case that's still running shows a greyed-out "Download anyway". That label should only appear for cases that have probably stopped; a running case gets a plain greyed-out "Download".
+
+> The real list from Fritz came back with only 11 of the 17 case folders I saw earlier. `0830_mk3`, `0923_corner` and others are missing. Investigating before going further:
+
+> The check consistently returns 11 now, so the parser isn't dropping lines. Listing the remote folder again to see whether the folders themselves changed:
+
+> The remote listing shows that six case folders are **gone from Fritz**: `0830_mk2`, `0830_mk3`, `0822_upsi`, `0823_upsi`, `0923_corner` and `asdf`. The folder was last changed today at 13:58:48. I have to rule out HoMo first, so I'm auditing every command HoMo can send to Fritz, and checking whether CFD-Tool is running. CFD-Tool has an automatic "Delete Remote Sim" setting (on, 2 days) in your `Settings`.
+
+> Your WinSCP desktop app has been open since 13:38, connected to `fritz.nhr.fau.de` (a different session from the one HoMo uses). Before I report this, the step 2 code is finished and fully tested, so I'll record it in the docs and commit it. Nothing else is being sent to Fritz.
+
+> The docs are written. A "no matches" exit code from my form-feed check stopped the chain before the tests, so running them now:
+
+> Both suites pass: 50 unit tests and 91 browser checks. Writing the log entry and committing:
+
+### Work record
+
+- Read-only remote checks through the saved session (user's go-ahead): listings of the remote folder and of `0830_mk3`, `0830_mk3/plots`, `0923_corner`, `test_homo`; `call` probes (`echo`, `ls -d`, `squeue` → csnhr has no SLURM, `tail`/`grep` of `post.o*` logs); one tiny real download (`0830_mk3/plots`, 2 files) into the scratchpad with `synchronize local`; status checks; file counts for `0830_mk3`. Printed output masked owner/group and home paths.
+- `cluster.py`: `WinScp.stream()` (long-running WinSCP with live output, cancellable); `case_status_command()` / `status_script()` (one read-only shell loop via `call`); `case_state()`, `parse_cases()` (states, newest first, `stale` after 12 h without a log update); `check_case_name()`; `download_script()` (count via `find | awk`, then `synchronize local` with exclusions); `Download` (progress from per-file lines, cancel); `run_download()` (into `inProgress`, move to `finished`, never overwrite; any error → failed).
+- `serve.py`: `WorkingDirectory.cfd_folders()`; `POST /api/cluster/cases`, `GET /api/cluster/downloads`, `POST /api/cluster/download`, `POST /api/cluster/download/cancel`; one status check and one download at a time; downloads cancelled at exit.
+- `web/app.js` + `web/styles.css`: Simulations on Fritz section (Refresh, last checked time, `.sim` checkbox, table with state, last job log, local state and Download / Download anyway / Resume download / progress + Cancel / Reload results), refresh every 5 minutes, progress polling every 2 s; settings controls no longer disable the case list.
+- Tests: `tests/test_cluster.py` +11 (states, parsing and stale, read-only status command, case names, download script exclusions and no remote deletes, download success/failure/cancel/no overwrite); `tests/test_serve.py` +5 API tests; `tests/browser/server-mode.html` +6 checks (states, in-finished, stale, running not downloadable, download completes, case appears in finished). Fake WinSCP answers status checks and writes a file for downloads; fake times relative to now.
+- Real check after restarting the user's server: `POST /api/cluster/cases` returned 11 cases; six folders seen 15 minutes earlier were gone from Fritz. Audit: HoMo CFD's scripts only use `open`, `cd`, `pwd`, `ls`, read-only `call` commands and `synchronize local`; no `rm`/`mv`/`put`/delete anywhere in `cluster.py` or `serve.py`. The WinSCP desktop app was open (since 13:38) with a session to `fritz.nhr.fau.de`; CFD-Tool was not running. Reported to the user and asked.
+- Docs: `CHANGELOG.md`, `STATUS.md` (step 2 section, incident, quota), `DECISIONS.md`, `docs/STAGE7_FRITZ.md` (section 6), `TASK.md`, `README.md`, `tests/README.md`, `HANDOFF_FOR_CHATGPT.md`.
+- Checks: `py -m unittest discover -s tests` 50/50 OK; `py tests/run_browser_tests.py` 91/91 passed.
+
+### Final response (verbatim)
+
+> Step 2 is built, but first something important.
+>
+> **Six case folders disappeared from your remote folder on Fritz today at 13:58:** `0830_mk2`, `0830_mk3`, `0822_upsi`, `0823_upsi`, `0923_corner` and `asdf`. I saw them at 13:30 and they were gone at about 14:00.
+>
+> I checked whether HoMo could have done it, and as far as I can tell it couldn't:
+>
+> - Every command HoMo sends is read-only: log in, change folder, list, and read-only shell commands (`ls`, `tail`, `grep`, `stat`, `find`). Downloads use WinSCP's `synchronize local`, which only writes on your PC.
+> - There's no delete, move or upload command anywhere in HoMo's code.
+>
+> Two other candidates:
+>
+> - Your **WinSCP desktop app** has been open since 13:38, connected to `fritz.nhr.fau.de`.
+> - **CFD-Tool** deletes remote cases automatically ("Delete Remote Sim: true", after 2 days, in your `Settings`), although it isn't running right now.
+>
+> **Did you delete those folders, maybe to free space?** Your storage was nearly full: about 1024 GB of 1049 GB. Four of them (`0830_mk2`, `0830_mk3`, `0823_upsi`, `asdf`) are already in your `finished` folder. `0822_upsi` and `0923_corner` are not on this PC, as far as I can see.
+>
+> **What step 2 does:** the **Fritz cluster** card now has a **Simulations on Fritz** list below the connection settings:
+>
+> - Each case shows its state: Not started, Meshing, Solving, Post-processing or **Ready to download**. Fritz's job queue isn't reachable through your session (it goes to a jump host without SLURM), so HoMo reads each case's job files instead: `plots/DONE` means the solver is done, and the post-processing log ending with "Job finished" means it's ready.
+> - Cases without a log update for 12 hours are marked "probably stopped".
+> - **Download** fetches a case into `inProgress`, with progress and Cancel, and moves it to `finished` when complete. An interrupted download resumes.
+> - Job scripts, macros and the `.sim~` backups are skipped. The big `.sim` files (10–20 GB) are only downloaded if you tick the box.
+> - The list refreshes every 5 minutes while open. HoMo never changes or deletes anything on Fritz.
+>
+> Reload http://127.0.0.1:5173 and open **Fritz cluster** to see it. Ready-to-download cases you don't have locally yet (e.g. `0830_mk2.2`, which you have as `0830_mk2.2_10AoA`) show a **Download** button. Try one if you like; without `.sim` it's about 1–2 GB.
+>
+> One note for step 4 (submitting jobs): your HoMo session goes to the jump host, but your other WinSCP session goes straight to `fritz.nhr.fau.de`, which can submit jobs. We can decide which one to use when we get there.
+>
+> All tests pass (50 unit tests, 91 browser checks). Committed and pushed to GitHub `master`.

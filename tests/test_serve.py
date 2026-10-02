@@ -183,6 +183,10 @@ class ClusterApiTests(ApiTests):
         serve.Handler.winscp = self.fake
 
     def tearDown(self):
+        for download in serve.Handler.downloads.values():
+            download.cancel()
+        serve.Handler.downloads.clear()
+        serve.Handler.remote_cases = set()
         serve.Handler.winscp = self.saved_winscp
         super().tearDown()
 
@@ -241,6 +245,69 @@ class ClusterApiTests(ApiTests):
     def test_foreign_host_is_rejected(self):
         status, _ = self.request("GET", "/api/cluster", headers={"Host": "evil.example"})
         self.assertEqual(status, 403)
+
+    def save_cluster(self):
+        serve.write_settings({"cluster": {"session": "Fritz", "remoteFolder": "/home/vault/g/u"}})
+
+    def wait_for_download(self, case):
+        for _ in range(200):
+            status, data = self.request("GET", "/api/cluster/downloads")
+            state = json.loads(data).get(case, {}).get("state")
+            if state != "running":
+                return state
+            threading.Event().wait(0.05)
+        return "running"
+
+    def test_cases_need_saved_settings(self):
+        self.assertEqual(self.post("/api/cluster/cases", {})[0], 400)
+        self.assertEqual(self.fake.scripts, [])
+
+    def test_cases_with_local_state(self):
+        self.save_cluster()
+        (self.working_dir / "inProgress" / "caseD").mkdir(parents=True)
+        status, data = self.post("/api/cluster/cases", {})
+        self.assertEqual((status, data["ok"], data["canDownload"]), (200, True, True))
+        by_name = {case["name"]: case for case in data["cases"]}
+        self.assertEqual((by_name["caseA"]["state"], by_name["caseA"]["local"]), ("ready", "finished"))
+        self.assertEqual((by_name["caseC"]["state"], by_name["caseC"]["local"]), ("ready", None))
+        self.assertEqual(by_name["caseD"]["local"], "partial")
+        self.assertTrue(by_name["caseE"]["stale"])
+        self.assertFalse(by_name["bad/name"]["downloadable"])
+
+    def test_download_moves_case_to_finished(self):
+        self.save_cluster()
+        self.post("/api/cluster/cases", {})
+        status, data = self.post("/api/cluster/download", {"case": "caseC"})
+        self.assertEqual((status, data["state"], data["includeSim"]), (200, "running", False))
+        self.assertEqual(self.wait_for_download("caseC"), "done")
+        self.assertTrue((self.working_dir / "finished" / "caseC" / "plots" / "Coefficients_49.csv").is_file())
+        self.assertFalse((self.working_dir / "inProgress" / "caseC").exists())
+        sync = next(line for line in self.fake.scripts[-1] if line.startswith("synchronize"))
+        self.assertIn(str(self.working_dir / "inProgress" / "caseC"), sync)
+        self.assertIn('"/home/vault/g/u/caseC"', sync)
+
+    def test_download_checks(self):
+        self.save_cluster()
+        self.assertEqual(self.post("/api/cluster/download", {"case": "caseC"})[0], 400, "list first")
+        self.post("/api/cluster/cases", {})
+        for body, expected in (({"case": "../caseC"}, 400), ({"case": "notOnFritz"}, 400), ({"case": "caseA"}, 409)):
+            with self.subTest(body=body):
+                self.assertEqual(self.post("/api/cluster/download", body)[0], expected)
+        self.fake.hold = True
+        self.assertEqual(self.post("/api/cluster/download", {"case": "caseC"})[0], 200)
+        self.assertEqual(self.post("/api/cluster/download", {"case": "caseD"})[0], 409, "one at a time")
+        status, data = self.post("/api/cluster/download/cancel", {"case": "caseC"})
+        self.assertEqual(status, 200)
+        self.assertEqual(self.wait_for_download("caseC"), "cancelled")
+        self.assertTrue((self.working_dir / "inProgress" / "caseC").exists())
+        self.assertEqual(self.post("/api/cluster/download/cancel", {"case": "caseC"})[0], 400)
+
+    def test_working_dir_without_finished_cannot_download(self):
+        self.save_cluster()
+        serve.Handler.working_dir.set(self.working_dir / "finished", "test")
+        status, data = self.post("/api/cluster/cases", {})
+        self.assertFalse(data["canDownload"])
+        self.assertEqual(self.post("/api/cluster/download", {"case": "caseC"})[0], 400)
 
 
 if __name__ == "__main__":

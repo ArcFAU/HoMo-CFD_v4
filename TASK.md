@@ -34,5 +34,10 @@ key per user in local settings by default. Final design and build order in
 WinSCP session names, POST save, POST `cluster/test`) and the **Fritz cluster**
 card. First real test reached Fritz but the key has a passphrase → added
 **Unlock key with Pageant**. **Confirmed working by the user** after unlocking.
-Next: step 2 (monitor and download), when the user says go.
+
+**Step 2 built (2026-10-02):** Simulations on Fritz list (state from job files,
+stale detection) and downloads via inProgress → finished. Waiting for the user's
+first real download and an answer about six remote folders that disappeared
+at 13:58 (see `STATUS.md`). Next: step 3 (job scripts), then step 4 (submit,
+needs a SLURM login node).
 Next: step 2, monitor and download for cases in `inProgress`.

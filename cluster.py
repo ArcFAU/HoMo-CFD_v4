@@ -15,6 +15,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 from urllib.parse import unquote
 
@@ -187,6 +188,33 @@ class WinScp:
         finally:
             os.unlink(script)
 
+    def stream(self, lines, on_line, on_start=lambda process: None):
+        """Run a long WinSCP script (no timeout), passing each output line to
+        on_line; on_start receives the process so it can be cancelled.
+        Returns the exit code."""
+        executable = self.executable()
+        if executable is None:
+            on_line("WinSCP.com not found.")
+            return None
+        handle, script = tempfile.mkstemp(prefix="homo-cfd-winscp-", suffix=".txt")
+        try:
+            with os.fdopen(handle, "w", encoding="utf-8") as file:
+                file.write("\n".join(lines) + "\n")
+            process = subprocess.Popen(
+                [str(executable), "/nointeractiveinput", f"/script={script}"],
+                stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+            on_start(process)
+            for raw in process.stdout:
+                on_line(raw.decode("utf-8", errors="replace").rstrip("\r\n"))
+            return process.wait()
+        finally:
+            try:
+                os.unlink(script)
+            except OSError:
+                pass
+
 
 def test_connection(winscp, session, remote_folder=""):
     """Log in with the saved session and print the remote folder."""
@@ -197,3 +225,163 @@ def test_connection(winscp, session, remote_folder=""):
         return {"ok": True, "remoteFolder": lines[-1] if lines else remote_folder, "output": output}
     return {"ok": False, "error": "Could not connect with this session.", "hint": hint_for(output),
             "needsPassphrase": "passphrase" in output.lower(), "output": output}
+
+
+# --- Step 2: status of the cases on Fritz and downloads -------------------
+
+CASE_PREFIX = "HOMO|"
+TOTAL_PREFIX = "HOMO-TOTAL|"
+STALE_HOURS = 12
+# One line per transferred file: "name | 261 KB | 4875.3 KB/s | binary | 100%".
+FILE_LINE = re.compile(r"\|\s*(?:binary|ascii)\s*\|\s*\d+%\s*$")
+# Never downloaded: STAR-CCM+ backups, job scripts and macros (the scripts
+# contain the licence key), CFD-Tool's abort markers. *.sim (10-20 GB) only
+# on request.
+EXCLUDED = ["*.sim~", "*.sh", "*.java", "ABORT*"]
+
+
+def case_status_command():
+    """Read-only shell command reporting each case folder in the remote folder.
+
+    Prints "HOMO|<name>|<flags>|<newest job log, epoch s>" per folder that has
+    Settings, STARTED or plots. Flags: S STARTED, D plots/DONE (solver
+    finished), X plots/POST_DONE, M meshing log, T solver log, R post log,
+    P newest post log finished ("Job finished at", written last by post.sh).
+    """
+    return (
+        'for d in */; do d="${d%/}"; '
+        '[ -e "$d/Settings" ] || [ -e "$d/STARTED" ] || [ -d "$d/plots" ] || continue; f=; '
+        '[ -e "$d/STARTED" ] && f="${f}S"; [ -e "$d/plots/DONE" ] && f="${f}D"; '
+        '[ -e "$d/plots/POST_DONE" ] && f="${f}X"; '
+        'ls "$d"/mesh.o* >/dev/null 2>&1 && f="${f}M"; ls "$d"/resTAURANtS.o* >/dev/null 2>&1 && f="${f}T"; '
+        'p=$(ls -t "$d"/post.o* 2>/dev/null | head -n 1); '
+        'if [ -n "$p" ]; then f="${f}R"; tail -c 4000 "$p" | grep -q "Job finished at" && f="${f}P"; fi; '
+        'l=$(ls -t "$d"/*.o* 2>/dev/null | head -n 1); t=0; [ -n "$l" ] && t=$(stat -c %Y "$l"); '
+        f'echo "{CASE_PREFIX}$d|$f|$t"; done'
+    )
+
+
+def status_script(session, remote_folder):
+    return ["option batch abort", "option confirm off", f'open "{session}"', f'cd "{remote_folder}"',
+            f"call {case_status_command()}", "exit"]
+
+
+def case_state(flags):
+    """prepared → meshing → solving → waiting-post → post → ready."""
+    if "X" in flags or "P" in flags:
+        return "ready"
+    if "D" in flags:
+        return "post" if "R" in flags else "waiting-post"
+    if "S" in flags:
+        return "solving" if "T" in flags else "meshing"
+    return "prepared"
+
+
+def parse_cases(output, now=None):
+    """Cases from the status command's output, newest activity first.
+
+    "stale": not finished, and no job log changed for STALE_HOURS (a run that
+    died leaves no marker, so this is the only hint that it stopped).
+    """
+    now = time.time() if now is None else now
+    cases = []
+    for line in output.splitlines():
+        if not line.startswith(CASE_PREFIX):
+            continue
+        parts = line[len(CASE_PREFIX):].rsplit("|", 2)
+        if len(parts) != 3 or not parts[0] or not parts[2].isdigit():
+            continue
+        name, flags, stamp = parts
+        state, last_log = case_state(flags), int(stamp) or None
+        stale = state not in ("ready", "prepared") and last_log is not None and now - last_log > STALE_HOURS * 3600
+        cases.append({"name": name, "flags": flags, "state": state, "lastLog": last_log, "stale": stale})
+    return sorted(cases, key=lambda case: (-(case["lastLog"] or 0), case["name"].lower()))
+
+
+def check_case_name(name):
+    """A remote case folder name that is safe to use in paths and scripts."""
+    if (not isinstance(name, str) or not name or name in (".", "..") or name.startswith(".")
+            or len(name) > 200 or UNSAFE.search(name) or any(c in name for c in '/\\:*?<>|')):
+        raise ValueError("Invalid case name.")
+    return name
+
+
+def download_script(session, remote_folder, case, local_dir, include_sim=False):
+    """Count the files to fetch, then synchronize the case folder into local_dir.
+
+    "synchronize local" only writes on this computer: it skips files that are
+    already complete (so an interrupted download resumes) and never deletes
+    anything on Fritz.
+    """
+    excluded = EXCLUDED + ([] if include_sim else ["*.sim"])
+    find_filters = " ".join(f'! -name "{pattern}"' for pattern in excluded)
+    remote_case = f"{remote_folder}/{case}"
+    return [
+        "option batch abort", "option confirm off", f'open "{session}"',
+        f'call cd "{remote_case}" && find . -type f {find_filters} -printf "%s\\n" | '
+        f"awk '{{n++; b+=$1}} END {{print \"{TOTAL_PREFIX}\" n+0 \"|\" b+0}}'",
+        f'synchronize local -filemask="|{"; ".join(excluded)}" "{local_dir}" "{remote_case}"',
+        "exit",
+    ]
+
+
+class Download:
+    """Progress of one background download (read by the app every few seconds)."""
+
+    def __init__(self, case, include_sim=False):
+        self.case, self.include_sim = case, include_sim
+        self.state = "running"
+        self.files_done = 0
+        self.files_total = None
+        self.bytes_total = None
+        self.message = ""
+        self.process = None
+        self.cancelled = False
+        self.log = []
+
+    def on_line(self, line):
+        self.log = (self.log + [line])[-60:]
+        if line.startswith(TOTAL_PREFIX):
+            count, size = (line[len(TOTAL_PREFIX):].split("|") + ["", ""])[:2]
+            self.files_total = int(count) if count.isdigit() else None
+            self.bytes_total = int(size) if size.isdigit() else None
+        elif FILE_LINE.search(line):
+            self.files_done += 1
+
+    def cancel(self):
+        self.cancelled = True
+        if self.process is not None and self.process.poll() is None:
+            self.process.terminate()
+
+    def describe(self):
+        return {"case": self.case, "state": self.state, "filesDone": self.files_done,
+                "filesTotal": self.files_total, "bytesTotal": self.bytes_total,
+                "message": self.message, "includeSim": self.include_sim}
+
+
+def run_download(winscp, download, lines, partial_dir, finished_dir):
+    """Download into inProgress/<case>, then move it to finished/<case>.
+
+    Like CFD-Tool, a case only appears in finished/ once it is complete; an
+    interrupted download stays in inProgress/ and resumes from there.
+    """
+    try:
+        partial_dir.mkdir(parents=True, exist_ok=True)
+        code = winscp.stream(lines, download.on_line, lambda process: setattr(download, "process", process))
+        if download.cancelled:
+            download.state = "cancelled"
+            download.message = "Cancelled. The files so far stay in inProgress; Download resumes from there."
+        elif code != 0:
+            download.state = "failed"
+            output = "\n".join(download.log)
+            download.message = " ".join(filter(None, ["The download stopped.", hint_for(output)]))
+        elif finished_dir.exists():
+            download.state = "failed"
+            download.message = f"{finished_dir} already exists; the download is kept in {partial_dir}."
+        else:
+            os.replace(partial_dir, finished_dir)
+            download.state = "done"
+            download.message = "Downloaded to finished."
+    except Exception as err:  # never leave a download shown as running
+        download.state = "failed"
+        download.message = f"Could not save the download: {err}"

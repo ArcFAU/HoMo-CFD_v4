@@ -1525,3 +1525,45 @@ select {
   font-size: 12px;
   white-space: pre-wrap;
 }
+
+/* Simulations on Fritz (Stage 7, step 2). */
+.cluster-card:has(.cluster-cases) {
+  max-width: 1100px;
+}
+
+.cluster-cases {
+  margin-top: 28px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+
+.cluster-cases-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+}
+
+.cluster-cases-header h2 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.cluster-include-sim {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cluster-table td.cluster-action {
+  white-space: nowrap;
+}
+
+.cluster-state-ready {
+  color: #65b891;
+}
+
+.cluster-stale {
+  color: var(--muted);
+}
