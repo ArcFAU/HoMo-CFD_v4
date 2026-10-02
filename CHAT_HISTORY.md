@@ -5049,3 +5049,15 @@ The background watcher of the post job (job 4285206 in `exp`) finished; no new u
 > All tests pass (82 unit tests, 139 browser checks). I rebuilt `dist\HoMo-CFD-portable.zip` without the button. Reload HoMo CFD in your browser to see the change.
 >
 > The changes aren't committed yet. Should I commit and push them?
+
+### Follow-up: commit and push
+
+> yes
+
+> Both branches point to the same commit on GitHub, as with earlier changes. I'll commit on `night-2026-10-02`, push it, and fast-forward `master` to match:
+
+> The commit is on GitHub. Per the project rules, I'll also log this turn in `CHAT_HISTORY.md`:
+
+- Commit `9cc3946` "Remove the About button and dialog" on `night-2026-10-02`, pushed to `origin/night-2026-10-02` and `origin/master` (fast-forward); local `master` updated to match. This log addendum is committed separately.
+
+> Committed and pushed: "Remove the About button and dialog" is on GitHub on both `master` and `night-2026-10-02`. The working tree is clean.
