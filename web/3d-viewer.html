@@ -12,26 +12,35 @@
       <div class="cfd3d-title"><strong>3D CFD Field</strong><span id="case-name">Select a 3D-data folder to begin</span></div>
       <button class="primary small" id="open-folder" type="button">Open 3D-data folder</button>
       <label class="range-control" id="field-control" hidden>Field <select id="field-select"></select></label>
-      <label class="range-control" id="view-control" hidden>View <select id="view-preset">
-        <option value="iso">Isometric</option>
-        <option value="front">Front (+X)</option>
-        <option value="rear">Rear (−X)</option>
-        <option value="side-plus">Side (+Y)</option>
-        <option value="side-minus">Side (−Y)</option>
-        <option value="top">Top (+Z)</option>
-        <option value="bottom">Bottom (−Z)</option>
+      <label class="range-control" id="view-control" hidden>View <select id="view-preset" title="The nose points to +X, +Y is the car's left side, +Z is up (as in STAR-CCM+)">
+        <optgroup label="3D views">
+          <option value="front-left">Front-left</option>
+          <option value="front-right">Front-right</option>
+          <option value="rear-left">Rear-left</option>
+          <option value="rear-right">Rear-right</option>
+        </optgroup>
+        <optgroup label="Along an axis">
+          <option value="front">Front (from +X)</option>
+          <option value="rear">Rear (from −X)</option>
+          <option value="left">Left side (from +Y)</option>
+          <option value="right">Right side (from −Y)</option>
+          <option value="top">Top (from +Z)</option>
+          <option value="bottom">Bottom (from −Z)</option>
+        </optgroup>
       </select></label>
+      <label class="range-control shading-control" title="Light the surface from the viewer so its shape is easier to read; colors are slightly darker on surfaces seen at an angle"><input id="shading" type="checkbox" checked /> Shading</label>
       <label class="range-control">Range min <input id="cp-min" type="number" value="-5" step="0.5" /></label>
       <label class="range-control">Range max <input id="cp-max" type="number" value="1" step="0.5" /></label>
       <button class="small-control" id="auto-range" type="button" disabled title="Set the color range to the current field's surface minimum and maximum">Auto range</button>
       <button class="small-control" id="reset-view" type="button" disabled>Reset view</button>
     </header>
     <main class="cfd3d-stage">
-      <canvas id="scene" aria-label="Interactive three dimensional pressure coefficient surface"></canvas>
+      <canvas id="scene" tabindex="0" aria-label="Interactive three dimensional pressure coefficient surface"></canvas>
+      <canvas id="axes" hidden aria-label="Axes: click an axis to look along it" title="Click an axis to look along it"></canvas>
       <div class="cfd3d-empty" id="message">Open the case’s <code>3D-data</code> folder to view an EnSight surface field.</div>
       <div class="cfd3d-error" id="error" hidden></div>
       <div class="cfd3d-legend" id="legend" hidden><span id="legend-min">−5</span><div></div><span id="legend-max">+1</span><b id="legend-title">Field value</b></div>
-      <div class="cfd3d-help">Drag to rotate · wheel to zoom · right drag to move · View menu for axis presets</div>
+      <div class="cfd3d-help">Drag to turn (the car stays upright) · right drag or Shift+drag to move · wheel zooms at the pointer · arrow keys turn 15° · Home resets · click the axes to look along them</div>
     </main>
     <script src="./server-fs.js"></script>
     <script src="./3d-viewer.js"></script>

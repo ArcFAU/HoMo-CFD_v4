@@ -24,12 +24,14 @@ see cluster.py. It runs only when the user clicks a button in the app.
 """
 
 import argparse
+import base64
 import email.utils
 import json
 import mimetypes
 import os
 import atexit
 import shutil
+import subprocess
 import tempfile
 import threading
 import time
@@ -121,7 +123,7 @@ class WorkingDirectory:
             "source": source,
             "resultsRoot": root.name if root else None,
             "resultsPath": str(root) if root else None,
-            "canBrowse": tkinter_available(),
+            "canBrowse": dialogs_available(),
         }
 
 
@@ -148,8 +150,63 @@ def tkinter_available():
         return False
 
 
+def powershell():
+    """Windows PowerShell, which opens the dialogs when Python has no tkinter
+    (the portable build uses Python's embeddable package, without tkinter)."""
+    if os.name != "nt":
+        return None
+    found = shutil.which("powershell.exe")
+    if found:
+        return found
+    fallback = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
+    return str(fallback) if fallback.is_file() else None
+
+
+def dialogs_available():
+    return tkinter_available() or powershell() is not None
+
+
+# The same Windows dialogs through PowerShell. Title and starting folder come in
+# environment variables, so no path is ever pasted into the command.
+DIALOG_SETUP = """
+Add-Type -AssemblyName System.Windows.Forms
+[Console]::OutputEncoding = [Text.Encoding]::UTF8
+$owner = New-Object System.Windows.Forms.Form -Property @{ TopMost = $true; ShowInTaskbar = $false }
+$start = $env:HOMO_DIALOG_START
+"""
+FOLDER_DIALOG = DIALOG_SETUP + """
+$dialog = New-Object System.Windows.Forms.FolderBrowserDialog
+$dialog.Description = $env:HOMO_DIALOG_TITLE
+$dialog.ShowNewFolderButton = $false
+if ($start -and (Test-Path -LiteralPath $start -PathType Container)) { $dialog.SelectedPath = $start }
+if ($dialog.ShowDialog($owner) -eq [System.Windows.Forms.DialogResult]::OK) { [Console]::Out.Write($dialog.SelectedPath) }
+"""
+SIM_DIALOG = DIALOG_SETUP + """
+$dialog = New-Object System.Windows.Forms.OpenFileDialog
+$dialog.Title = $env:HOMO_DIALOG_TITLE
+$dialog.Filter = 'STAR-CCM+ simulation (*.sim)|*.sim|All files (*.*)|*.*'
+if ($start -and (Test-Path -LiteralPath $start -PathType Container)) { $dialog.InitialDirectory = $start }
+if ($dialog.ShowDialog($owner) -eq [System.Windows.Forms.DialogResult]::OK) { [Console]::Out.Write($dialog.FileName) }
+"""
+
+
+def powershell_dialog(script, title, start):
+    """Run a dialog script; returns the chosen path, or None when cancelled."""
+    encoded = base64.b64encode(script.encode("utf-16-le")).decode("ascii")
+    env = {**os.environ, "HOMO_DIALOG_TITLE": title, "HOMO_DIALOG_START": start or ""}
+    completed = subprocess.run(
+        [powershell(), "-NoProfile", "-NonInteractive", "-STA", "-EncodedCommand", encoded],
+        capture_output=True, env=env, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
+    if completed.returncode != 0:
+        raise RuntimeError(completed.stderr.decode("utf-8", errors="replace").strip()[-300:] or "PowerShell failed.")
+    return completed.stdout.decode("utf-8", errors="replace").strip() or None
+
+
 def browse_for_folder(initial):
     """Native folder dialog on this computer (the server runs locally)."""
+    if not tkinter_available():
+        return powershell_dialog(FOLDER_DIALOG, "Choose Working Directory", initial)
     import tkinter
     from tkinter import filedialog
 
@@ -170,6 +227,8 @@ def browse_for_folder(initial):
 
 def browse_for_sim(initial):
     """Native file dialog for the base .sim of a new simulation."""
+    if not tkinter_available():
+        return powershell_dialog(SIM_DIALOG, "Choose the base .sim file", initial)
     import tkinter
     from tkinter import filedialog
 
@@ -345,13 +404,15 @@ class Handler(SimpleHTTPRequestHandler):
         self.save_working_dir(body.get("path") if isinstance(body.get("path"), str) else None)
 
     def api_browse_working_dir(self, _body):
-        if not tkinter_available():
+        if not dialogs_available():
             return self.send_json({"error": "Folder dialog unavailable; type the folder path instead."}, HTTPStatus.NOT_IMPLEMENTED)
         if not self.browse_lock.acquire(blocking=False):
             return self.send_json({"error": "A folder dialog is already open."}, HTTPStatus.CONFLICT)
         try:
             current = self.working_dir.describe()["workingDir"]
             chosen = browse_for_folder(current)
+        except (OSError, RuntimeError):
+            return self.send_json({"error": "The folder dialog could not open; type the folder path instead."}, HTTPStatus.NOT_IMPLEMENTED)
         finally:
             self.browse_lock.release()
         if not chosen:
@@ -550,12 +611,14 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_json({"source": source, "settings": pairs})
 
     def api_browse_sim(self, body):
-        if not tkinter_available():
+        if not dialogs_available():
             return self.send_json({"error": "File dialog unavailable; type the path instead."}, HTTPStatus.NOT_IMPLEMENTED)
         if not self.browse_lock.acquire(blocking=False):
             return self.send_json({"error": "A file dialog is already open."}, HTTPStatus.CONFLICT)
         try:
             chosen = browse_for_sim(body.get("initial") if isinstance(body.get("initial"), str) else None)
+        except (OSError, RuntimeError):
+            return self.send_json({"error": "The file dialog could not open; type the path instead."}, HTTPStatus.NOT_IMPLEMENTED)
         finally:
             self.browse_lock.release()
         if not chosen:

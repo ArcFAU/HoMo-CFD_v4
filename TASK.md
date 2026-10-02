@@ -4,6 +4,12 @@ One task at a time (see the pipeline in `SHARED_CONTEXT.md` → Cooperation
 rules). Replace this file's content when a new task starts; record the finished
 one in `CHANGELOG.md` and `CHAT_HISTORY.md`.
 
+## Latest (2026-10-02): portable build and 3D viewer orientation
+
+Done: `tools/make_portable.py` (HoMo CFD + Python 3.14.8 embeddable, zip for
+teammates) and the 3D viewer's turntable camera, angled presets and axes
+widget. Waiting for the user to try both and to share the zip with a teammate.
+
 ## Task: Stage 7 design — Fritz cluster integration (research only)
 
 **Goal:** decide how HoMo CFD should submit, monitor, download and delete

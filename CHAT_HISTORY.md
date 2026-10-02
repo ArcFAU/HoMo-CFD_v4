@@ -3531,3 +3531,147 @@ Messages that quoted the user's cluster user name or host are shown with those m
 > - **The `.sim` upload time:** whether the "Uploading…" message is enough while it runs, or whether you'd like a progress bar.
 >
 > The items on the list for later are a portable Python bundle for teammates, the 3D orientation widget with angled views, and showing/hiding parts in the 3D viewer. Tell me when you want to start one of them, or when a teammate is ready to try HoMo.
+
+## 2026-10-02 — Portable build with bundled Python; 3D viewer turntable camera and orientation widget
+
+### User message (verbatim)
+
+> do a bundled python part. i'm not keen on doing 3d widget but if it's not troblesome go ahead and do it. Showing and hiding parts in 3d viewer is not neccessary but i would do something with rotating the geometry. right now it's confusing sometimes to rotate it.
+
+### Contributor messages (verbatim)
+
+> Starting with a look at how HoMo is launched today and how the 3D viewer handles rotation:
+
+> The 3D viewer code is compact, so I'll read it in full to see how rotation works now:
+
+> I've read the 3D viewer. Two things probably explain why rotating feels confusing:
+> 1. **Horizontal dragging turns the car around its side-to-side axis** (the y axis), so the car tumbles end over end instead of turning on a turntable. Vertical dragging then tilts around the screen axis, so "up" doesn't stay up.
+> 2. **The view may be mirrored.** The depth sign seems to produce a mirror image, not a real rotation. I'll verify this before changing anything.
+>
+> Checking what the project notes say about the 3D viewer's axes and presets:
+
+> The project has no local `0830_mk3` copy any more. I'm looking for real 3D data and reference scene images in your working directory to check orientation against:
+
+> `0823_upsi` has 3D data. I'll read its geometry with a small script (part names and extents) to find which way the car points and whether it's a half model:
+
+> Only the front wing is exported, as a half model (y from 0 to 0.76, symmetry plane at y = 0), at x 1.6–2.4. Looking at a STAR-CCM+ reference scene to see its axis triad and which way the car faces:
+
+> This settles the orientation. The STAR-CCM+ scene views the car from behind with y pointing left and z up, so **the nose points to +x, z is up, and +y is the car's left side**. Your export is the left half of the car. Reading the full draw code before rewriting the camera:
+
+> I have what I need. The plan for the 3D viewer:
+> - **Turntable rotation:** horizontal drag turns the car around its vertical axis, vertical drag tilts the view up or down. The car always stays upright.
+> - **No mirror image:** fix the depth sign so the view is a true rotation.
+> - **Light shading** so the shape reads as 3D (can be switched off).
+> - **Zoom toward the mouse pointer.**
+> - **Car-based view presets**, including four angled 3D views.
+> - **A clickable axis widget** in the corner.
+>
+> Starting with the camera state:
+
+> The lines start with a single space, so the match failed. With lines this long, a small patch script that swaps whole lines by their start is safer. Writing it:
+
+> Now the page itself: the new view list, a **Shading** checkbox, the axis widget and updated help text.
+
+> Next, a real check with your `0823_upsi` front wing. I'm looking at how the viewer gets folder access in server mode, so a headless browser can open real data:
+
+> The server can list your real `0823_upsi/3D-data`, so I can drive the viewer directly. Taking screenshots of the front wing in a few views:
+
+> The views look correct. Front-left shows the endplate on the outside; from the front, the car's left side (+Y) is on screen right; top view has the nose pointing up. The axis widget follows the camera.
+>
+> One flaw: the top view is cut off at the top edge, because every view uses the same zoom. I'll make each preset fit the part to the window instead:
+
+> The fitted views look right. The rear-right view of a half model shows the inner (symmetry-plane) side, as expected.
+>
+> Next, browser checks for the new camera. Synthetic test clicks can't take pointer capture, so I'm first making that call tolerant:
+
+> Adding the camera checks to the browser tests: no mirroring, presets, dragging, the axis widget, arrow keys, shading and zoom at the pointer.
+
+> Two of those checks assume exact values that the code doesn't guarantee: the azimuth isn't wrapped back into one turn, and the pan isn't zero after a fitted view. Rewriting them to test what should actually hold:
+
+> One mismatch, and it's in the test: Chrome rounds a wheel event's coordinates to whole pixels, so my expected point was off by a fraction of a pixel. In both directions the zoom-to-pointer math holds (0.3804 → 0.3804). Fixing the test to use whole-pixel coordinates:
+
+> All 121 browser checks pass, including 13 new ones for the camera.
+>
+> That work also confirmed the earlier suspicion: **the old 3D view was a mirror image**, with left and right swapped. It used a depth sign that no rotation can produce. A new check now makes sure no view is ever mirrored.
+>
+> Now the bundled Python. Checking which modules the server needs and how it finds its files:
+
+> Python 3.14.8 is the newest release on python.org. Checking that its Windows "embeddable" package (a small Python that runs from a folder, with no installer) is there, and its size:
+
+> The embeddable package is there (12.6 MB). One catch: it has no `tkinter`, which HoMo uses for its **Browse…** dialogs. So I'll add a fallback that opens the standard Windows dialogs through PowerShell. Reading the dialog code:
+
+> I'll add the fallback so **Browse…** works with or without `tkinter`. The starting folder is passed in an environment variable, so a path is never pasted into a command:
+
+> Now the two **Browse…** handlers: they should accept either dialog and report a PowerShell failure instead of crashing.
+
+> Checking the PowerShell dialog scripts for real, without opening a window: the dialog call is swapped for "OK", so each script just reports its starting folder. The test folder name contains umlauts and spaces, to check that unusual paths survive:
+
+> Both dialog scripts work, and the unusual folder name came back unchanged. Next is the build tool. First I'm downloading the embeddable package once, to pin its checksum (SHA-256) in the tool:
+
+> Cross-checking that checksum against the file description (SBOM) python.org publishes for this package:
+
+> The checksum matches python.org's published file description (release dated 2026-09-30). Writing the build tool:
+
+> `WEB` exists, so the build's self-check will work. Now the start script: it should use the bundled Python when there is one:
+
+> Git stores `.bat` files with Windows line endings, but my edit saved this one with Unix line endings. Windows batch files can misbehave without them, so I'm converting the file now, and the build will always write it with Windows line endings:
+
+> `dist/` is already in `.gitignore`. Running the build:
+
+> The shell mangled the escape sequences again, the same problem as before. Fixing those lines with the editor:
+
+> The build works: bundled Python 3.14.8 loads HoMo, and the zip is 12.5 MB. One cleanup: the self-check left a `__pycache__` folder that ended up in the zip. I'll stop the check from writing it, rebuild, then test the result the way a teammate would get it.
+
+> The zip contains just the app and Python (52 files). Now testing it as a teammate would: unzip into a fresh folder, run its start script (with the browser-opening option swapped for a test port), and check that HoMo answers. A temporary settings folder is used, so your own settings stay untouched.
+
+> Unzipped. Next I'm starting it through its start script (with your settings folder swapped for a temporary one) and checking that the pages and API answer:
+
+> Teammate test passed. The start script picked the bundled `python\python.exe`, HoMo answered, and **Browse…** is available through the PowerShell dialogs. With an empty settings folder it starts like on a teammate's first run: no working directory yet.
+>
+> Next I'm running the whole unit test suite with the bundled Python 3.14, because you develop on 3.13:
+
+> All 62 unit tests also pass on Python 3.14.8. Now tests for the new parts, starting with a small tweak so the build can be tested without running the real `python.exe`:
+
+> All 7 new tests pass. Running both full suites, then restarting your HoMo server so it uses the updated code:
+
+> Both suites pass (69 unit tests, 121 browser checks), and your server runs the new code. Now the docs, starting with the README's setup section:
+
+> Writing all doc updates in one script:
+
+> Docs updated. Writing the log entry:
+
+### Work record
+
+- 3D orientation research: `D:\CFD_tool\finished\0823_upsi\3D-data` holds one part, Frontwing (half model: x 1.615…2.425, y 0…0.760, z 0.040…0.470; 593,500 triangles); the STAR-CCM+ scene `3D/Cp_x-Section.png` shows Y left and Z up seen from behind → nose at +X, +Y = car's left, +Z up. The old viewer's depth (`+q.z`) made every view a mirror image.
+- `web/3d-viewer.js`: `viewBasis(az, el)` turntable camera; vertex shader uses the basis and negative depth (true rotation); per-point normals in `toMesh` and headlight `Shading`; presets `front-left/front-right/rear-left/rear-right/front/rear/left/right/top/bottom` with `fitView` (bounding box fitted, room for the legend) and animated `moveCamera` (shortest turn, reduced-motion respected); axes widget (`#axes`, `axisHandles`, click to look along an axis); drag = turntable (elevation clamped ±90°), right/middle/Shift+drag = move, wheel zoom at the pointer (max 40×), arrow keys 15°, Home = reset; pointer capture tolerant.
+- `web/3d-viewer.html` / `web/3d-viewer.css`: grouped View menu with car names and axes, Shading checkbox, axes canvas, focusable scene, wrapped help text.
+- Portable build: `tools/make_portable.py` (Python 3.14.8 embed amd64, SHA-256 `a93abe456ab01bd96d7a085b3cdb6566b3063f4241360d114142fbdb07f0a310`, matches python.org's SBOM; cache `dist/cache/`; copies serve.py, cluster.py, start script (CRLF), README, CHANGELOG, web/; adds `..` to `python314._pth`; self-check with `python.exe -B`; writes `dist/HoMo-CFD-portable.zip`, 12.5 MB, 52 files). `dist/` stays out of git.
+- `Start HoMo CFD.bat`: prefers `python\python.exe`, else `py -3`, else `python` (runtime `errorlevel` check).
+- `serve.py`: `powershell()`, `dialogs_available()`, `FOLDER_DIALOG` / `SIM_DIALOG` via `-EncodedCommand` with title/start folder in environment variables; Browse… handlers use them when tkinter is missing and report failures (501) instead of crashing.
+- Real checks: screenshots of the real front wing (front-left, front, top, rear-right) on the user's server; both PowerShell dialog scripts run with the dialog call stubbed (path with umlauts/spaces round-trips); portable zip unzipped into a fresh folder with an empty `%APPDATA%`, started through its start script (`python\python.exe serve.py`), `/api/config` (`canBrowse: true`), `/` and `/3d-viewer.js` answered; full unit suite under the bundled Python 3.14.8: 62/62 OK. User's server on 5173 restarted.
+- Tests: new `tests/test_portable.py` (7 tests); `tests/browser/picker-mode.html` +13 3D camera checks.
+- Docs: `README.md`, `CHANGELOG.md`, `STATUS.md`, `DECISIONS.md`, `TASK.md`, `tests/README.md`.
+- Checks: `py -m unittest discover -s tests` 69/69 OK; `py tests/run_browser_tests.py` 121/121 passed.
+
+### Final response (verbatim)
+
+> Both are done. I also built in the 3D orientation widget, since it fit naturally into the rotation rework.
+>
+> **Portable HoMo for teammates**
+> - The zip is ready: `dist\HoMo-CFD-portable.zip` in the project folder (12.5 MB). It contains HoMo and its own Python 3.14.8, the official package from python.org, checked against python.org's published checksum.
+> - Teammates unzip it anywhere and double-click `Start HoMo CFD.bat`. Nothing to install, no internet needed. Windows may ask once whether to run it; they choose **Run** (or **More info → Run anyway**).
+> - **Browse…** works there too: that Python has no dialog library of its own, so HoMo opens the normal Windows dialogs instead.
+> - I tested it as a teammate would: unzipped into a fresh folder with no saved settings, started it through the start script, and it came up asking for a working directory. All unit tests also pass with the bundled Python.
+> - After updating HoMo, run `py tools/make_portable.py` in the project folder to make a fresh zip. The zip isn't stored on GitHub.
+> - For Fritz features, teammates still need WinSCP, as with CFD-Tool.
+>
+> **3D viewer rotation**
+> - **Turntable:** dragging sideways turns the car around its vertical axis, and dragging up or down tilts the view, stopping at straight above or below. The car can no longer tumble or end up upside down.
+> - **The old view was a mirror image,** with left and right swapped, because of a sign error. Views are now true rotations, and a test guards that.
+> - **View menu** with car names: four angled 3D views (front-left, front-right, rear-left, rear-right), then Front, Rear, Left side, Right side, Top and Bottom, each with its axis. Every view fits the part to the window.
+> - **Axes widget** at the bottom left (X red, Y green, Z blue): it shows which way you're looking, and clicking an axis end looks along it. The orientation matches STAR-CCM+: nose at +X, +Y is the car's left, Z up. I checked this against your `0823_upsi` scenes and front wing.
+> - **Smaller things:** the wheel zooms towards the mouse pointer, right drag or Shift+drag moves the view, arrow keys turn 15°, Home resets, and **Shading** gives the surface depth (switch it off for flat colors).
+>
+> As you said, part show/hide is left out. All tests pass (69 unit tests, 121 browser checks). Committed and pushed to GitHub `master`, and I restarted your HoMo server: reload the page and reopen the 3D viewer to try it.
+>
+> Should I also put the zip on GitHub as a release download, so teammates can get it from there?

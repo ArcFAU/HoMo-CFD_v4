@@ -66,6 +66,23 @@ change with speed; the hover note says so.
 The force columns are computed when the table is drawn, not stored with the
 cached CSV rows, so changing the speed or density only redraws the table.
 
+## 2026-10-02 — Portable build with Python's embeddable package
+
+Teammates should unzip and run, like CFD-Tool with its bundled Java. Python's
+official Windows embeddable package (about 13 MB) is enough because HoMo CFD
+uses only the standard library; it lacks tkinter, so the Browse… dialogs fall
+back to the Windows dialogs through PowerShell. The package is downloaded by
+`tools/make_portable.py` (pinned version and SHA-256), not committed to git;
+the zip is built and shared by whoever distributes HoMo CFD.
+
+## 2026-10-02 — 3D viewer: turntable camera in STAR-CCM+ coordinates
+
+Free yaw/pitch/roll rotation made the car tumble and the image was mirrored.
+A turntable (turn around +Z, tilt up to ±90°) keeps the car upright, which is
+how vehicles are usually inspected. Views are named after the car (nose at
++X, +Y = left, +Z up, as in the team's STAR-CCM+ scenes) and keep the axis in
+the label. Part show/hide was not needed.
+
 ## 2026-10-02 — New simulations copy the team template; jobs start via a login-node session
 
 The team prepares cases on Fritz by copying `SCRIPT_FABSI`, so HoMo CFD does
