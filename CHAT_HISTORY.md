@@ -2731,3 +2731,35 @@ MEMORY.md:77-79|note=[grounded the next improvements in the existing CFD image a
 > - Hovering over a force heading explains that CzA is the downforce coefficient × reference area.
 >
 > All tests pass (15 unit tests, 73 browser checks). Committed and pushed to GitHub `master`. Reload http://127.0.0.1:5173 to see it.
+
+## 2026-10-02 — Question: what next?
+
+### User message (verbatim)
+
+> okay, now what?
+
+### Work record
+
+- Question only: read the stage table in `SHARED_CONTEXT.md` and the open items in `STATUS.md`; no code or project files changed apart from this log entry.
+
+### Final response (verbatim)
+
+> Stages 0–6 are done. **Stage 7 (Fritz)** is the only phase left, and it's waiting on you. In order, I'd suggest:
+>
+> **1. Quick checks (about 5 minutes):**
+> - Double-click `Start HoMo CFD.bat`. HoMo should open in your browser.
+> - Click **Working directory → Browse…**, pick a folder, then switch back.
+> - Find out the **reference density** in your STAR-CCM+ coefficient reports. If it isn't 1.18415, type it into the ρ box.
+>
+> **2. A trial with a teammate.** Sharing is the goal, so have one person try it on their own PC: install Python 3, download the project from GitHub, double-click `Start HoMo CFD.bat`. If CFD-Tool is already set up on their PC, HoMo picks up their results folder by itself. Whatever confuses them is what I should fix next.
+>
+> **3. Stage 7 answers.** The design is in `docs/STAGE7_FRITZ.md`. The three answers I need most:
+> - **Connection:** Windows' built-in SSH (shows live job status and can cancel jobs) or WinSCP/PuTTY like CFD-Tool? And does everyone use their own Fritz account?
+> - **`launchV3.sh`:** what does it do on Fritz? A copy of the file or a short description is enough.
+> - **Download timing:** as soon as `plots/DONE` appears (solver finished), or after post-processing (images ready)?
+>
+> If you like, we can go through the six questions one at a time right here.
+>
+> **Optional extras**, only if you want them: lift-to-drag ratio (Downforce/Drag), forces per component (FW/UT/RW in N), aero balance. Also the later improvements we parked: bundled Python, the 3D orientation widget, part show/hide.
+>
+> My suggestion: do step 1 now, then start the Stage 7 questions while a teammate tries it.
