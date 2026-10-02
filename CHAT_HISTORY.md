@@ -4140,3 +4140,101 @@ The background watcher of the post job (job 4285206 in `exp`) finished; no new u
 > **Not run yet:** the new macro compiles against STAR-CCM+ 2506 but hasn't run in STAR-CCM+. To test it, replace `export3D.java` in your `exp` folder on Fritz with `starccm\export3D.java` and submit `post.sh` again (about an hour). I can copy the file for you; you'd only start the job. Then I'll check the result as last time.
 >
 > All tests pass (70 unit tests, 128 browser checks), the portable zip is rebuilt, and the changes are on GitHub `master`.
+
+## 2026-10-02 — Image viewer: speed over memory
+
+### User message (verbatim)
+
+> Okay, regarding image cases. When I load them, they still seem slow. I believe this is because we wanted to save memory at the same time. I would not care much about memory right now. I need functionality and reliability.
+
+### Contributor messages (verbatim)
+
+> I'll look at how the image viewer loads and keeps images, to find where it trades speed for memory:
+
+> The comparison window keeps only 2 decoded frames on each side of the current one and releases the rest. Every step beyond that has to read the file again and decode the full 3000×1600 PNG. Reading how frames are loaded and stepped:
+
+> I can see the slow spots:
+>
+> 1. **A single image folder** (and the 3D scene gallery) reads every file in the folder before showing the first image. With 150 section images, that's 150 full file reads first.
+> 2. **The comparison window** keeps only 2 frames on each side and throws the rest away. Stepping further, or back, reads and decodes each 3000×1600 image again, and a held arrow key waits for every load.
+> 3. **Opening a case** lists every section folder one after the other before anything appears.
+>
+> Before changing anything, I'm measuring where the time actually goes on your real data, through your running HoMo:
+
+> Measured on your `0924_corner2` case:
+> - **Opening a case: about 1.4 s** just to list its 39 section folders one after another (36 ms each). With 4 cases that adds up.
+> - **Images are small and quick to fetch:** 0.3 MB and 12 ms each, so a whole 150-image sequence is only about 45 MB.
+>
+> So the time goes into listing folders one by one, reading whole folders before showing anything, and re-reading and re-decoding frames that were thrown away. All of these can go. `server-fs.js` already has a `prefetchServerTree` function; checking what it does:
+
+> That helper loads a whole folder tree in one request, but only the main window uses it. The comparison window lists every folder separately.
+>
+> The plan:
+> 1. **One request per case:** the comparison window fetches the whole case tree at once (in "Open folder" mode, the section folders are checked in parallel).
+> 2. **Show the first image straight away:** in single folders and the 3D scene gallery, the rest loads in the background.
+> 3. **Load the whole sequence in the background** (6 at a time, nearest frames first) **and keep everything**, so stepping back and forth or holding an arrow key never waits on a frame it has already shown.
+> 4. **Remember each case's sections**, so switching Cp → Velocity → Cp doesn't reload Cp.
+>
+> Checking whether any test relies on the old memory limits, and that the viewer page loads `server-fs.js`:
+
+> One check asserts the old memory limit ("decoded frames limited to current ±2"); it will change to "every frame is loaded and kept". The other checks stay as they are. Now rewriting the loading part of the image viewer:
+
+> Next, opening a case (one request for the whole tree, section folders checked in parallel) and the per-section cache:
+
+> Now the single-folder loading and the arrow-key handler, which still called the removed function:
+
+> No references to the removed code remain. Updating the browser checks:
+> - **Replaced** "frames limited to ±2" with "every frame gets loaded and kept".
+> - **New:** stepping back reuses the same decoded image.
+> - **New:** switching to CpT and back to Cp reuses the already-loaded Cp frames.
+> - **New:** the 3D scene gallery loads all its images in the background.
+
+> The test edits are done. Running the browser suite:
+
+> All 131 browser checks pass. Next, a timing measurement on your real data: a headless browser opens `0924_corner2`'s Cp x-sections in the comparison window through your running HoMo, the same way a click does. Nothing is changed.
+
+> On your real data:
+> - **First image after 0.5 s.**
+> - **All 150 frames loaded in the background after about 9.6 s.**
+> - **About 45 ms per frame** when stepping as fast as possible through the loaded sequence.
+>
+> For a fair comparison, I'm measuring the previous version the same way: I temporarily put back the old `image-viewer.js` (saved copy, restored straight afterwards):
+
+> Previous version: first image after 0.6 s and **75 ms per frame**, and every step back re-read the image. Now: 0.5 s and **45 ms**, and stepping back is instant. File restored; the diff shows only my changes.
+>
+> The 3D scene gallery changed the most (it used to read all scenes first), so I'm measuring that before and after too:
+
+> 3D scene gallery: first scene after **0.42 s instead of 0.81 s** (18 scenes). The gap grows with folder size, because the old version read every file first. The new version is restored.
+>
+> Running the unit tests, then checking which docs mention the old memory limit:
+
+> Updating the docs to describe the new loading (speed over memory) with today's measurements:
+
+> Writing the log entry:
+
+### Work record
+
+- Measured through the user's serve.py (`0924_corner2`): `/api/list` of the case 106 ms; 39 section folders listed one by one 1.4 s; section PNGs 0.3 MB, 12 ms each.
+- `web/image-viewer.js`: removed the ±2 frame window (`RETAINED_FRAME_RADIUS`, `evictDistantFrames`, `preloadNearbyFrames`, `decodedSingleImage`). New background loader (`preloadSequence`, `nextFrameToLoad`, `pumpLoads`; 6 parallel, nearest frame first, failed frames skipped) keeps every frame; per-case section cache (`item.sectionFrames`); `listImages`; `createCaseView` prefetches the case tree with `prefetchServerTree` (serve.py) and checks section folders in parallel; single folders / 3D gallery list names only and show the first frame when it is read (`showSingleFrame` via `ensureFrameReady`, errors shown); `releaseCaseImages` releases all sections and stops preloading.
+- Real measurements (headless Chrome, iframe in place of the pop-up, user's server; old version measured by temporarily restoring `HEAD:web/image-viewer.js`, then restored): comparison window Cp x first image 0.50 s (old 0.60 s), all 150 frames 9.6 s in the background, stepping 45 ms/frame (old 75 ms); 3D gallery (18 scenes) first scene 0.42 s (old 0.81 s).
+- Tests: `tests/browser/picker-mode.html`: "decoded frames limited to ±2" replaced by "every frame loaded and kept"; new checks: stepping back reuses the decoded frame, switching back to a section reuses its frames, gallery loads all scenes; removed case releases all sections.
+- Docs: `STATUS.md`, `CHANGELOG.md`, `DECISIONS.md`, `tests/README.md`. Portable zip rebuilt.
+- Checks: `py -m unittest discover -s tests` 70/70 OK; `py tests/run_browser_tests.py` 131/131 passed.
+
+### Final response (verbatim)
+
+> You were right: the viewer threw images away to save memory, and that cost speed. Now it keeps everything.
+>
+> **What changed**
+> - **The first image shows as soon as it's read.** Before, a single folder and the 3D scene gallery read every image first.
+> - **The rest of the sequence loads in the background**, 6 images at a time, nearest to where you are first, and stays loaded. Stepping back and forth, or holding an arrow key, no longer waits for an image it has already shown.
+> - **Switching back is instant:** going from Cp to CpT and back to Cp, or X → Y → X, reuses the loaded images.
+> - **Opening a case in the comparison window is one request** instead of one per section folder (that listing alone took 1.4 s for `0924_corner2`).
+>
+> **Measured on your `0924_corner2`**, old vs new:
+> - Comparison window, Cp x-sections: first image 0.6 s → 0.5 s; each step 75 ms → 45 ms; all 150 images ready in the background after about 10 s.
+> - 3D scene gallery: open 0.81 s → 0.42 s (larger folders gain more).
+>
+> Memory: a full sequence is about 45 MB of image files per section and case, plus what the browser uses for decoded images. Closing the viewer window frees it all.
+>
+> Reload the page and reopen an image viewer to get the new version. All tests pass (70 unit tests, 131 browser checks), the portable zip is rebuilt, and the changes are on GitHub `master`. Tell me if anything still feels slow, and where (opening, first image, or stepping).

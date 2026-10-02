@@ -62,18 +62,27 @@ runTests(async () => {
   await idle(win);
   const held = captionIndex(viewer, 1);
   check("multi: held arrow key never steps backwards", monotonic && held > afterBurst, `${afterBurst} -> ${held}`);
-  const retained = win.eval("compareCases.map((c) => c.images.filter((f) => f.image || f.loading).length)");
-  const farRetained = win.eval("compareCases.map((c) => c.images.filter((f, i) => (f.image || f.loading) && Math.abs(i - c.frameIndex) > 2).length)");
-  check("multi: decoded frames limited to current ±2", retained.every((count) => count <= 5) && farRetained.every((count) => count === 0), `retained ${retained} far ${farRetained}`);
+  // Speed over memory: the whole sequence loads in the background and stays loaded.
+  await waitFor(() => win.eval("compareCases.every((c) => c.images.every((f) => f.image || f.failed))"), 15000);
+  const loaded = win.eval("compareCases.map((c) => `${c.images.filter((f) => f.image).length}/${c.images.length}`)");
+  check("multi: every frame of the shown sequences is loaded and kept", win.eval("compareCases.every((c) => c.images.every((f) => f.image))"), loaded.join(" "));
+  const beforeBack = win.eval("compareCases[1].images[compareCases[1].frameIndex - 1].image");
+  key(win, "ArrowLeft"); await idle(win);
+  check("multi: stepping back reuses the decoded frame", viewer.querySelectorAll(".compare-image-panel")[1].querySelector("img") === beforeBack);
+  const cpFrames = win.eval("compareCases[1].images");
   key(win, "y"); await idle(win);
   const axisNow = viewer.querySelectorAll(".compare-case-controls")[1].querySelector(".active")?.textContent;
   check("multi: Y key switches the focused panel's axis", axisNow === "Y" && captionIndex(viewer, 1) === 1, axisNow);
+  key(win, "x"); await idle(win);
+  check("multi: switching back to a section reuses its loaded frames", win.eval("compareCases[1].images") === cpFrames &&
+    cpFrames.every((frame) => frame.image), `${cpFrames.filter((frame) => frame.image).length}/${cpFrames.length}`);
   key(win, "t"); await idle(win);
   check("multi: T key switches the focused panel to CpT", viewer.querySelectorAll(".compare-case-controls select")[1].value === "CpT");
   win.eval("window.__removed = compareCases[1]");
   viewer.querySelectorAll(".compare-image-panel")[1].querySelector(".remove-case").click();
   await idle(win);
-  check("multi: removed case releases its images", viewer.querySelectorAll(".compare-image-panel").length === 1 && win.eval("__removed.images.filter((f) => f.image || f.url).length") === 0);
+  check("multi: removed case releases its images", viewer.querySelectorAll(".compare-image-panel").length === 1 &&
+    win.eval("[...__removed.sectionFrames.values()].flat().filter((f) => f.image || f.url).length") === 0 && !win.eval("preloadSequences.has(__removed)"));
   check("multi: viewer shows no error", viewer.getElementById("viewer-error").hidden, viewer.getElementById("viewer-error").textContent);
 
   // pressure overlay with a case missing the primary station (caseB has no 2460 mm)
@@ -114,6 +123,8 @@ runTests(async () => {
   check("gallery: stepping swaps in place, sized, position kept", stage.querySelector(".compare-zoom-frame") === galleryBox &&
     stage.querySelector("img").style.width !== "" && stage.scrollLeft === 30 && stage.scrollTop === 20,
     `${stage.scrollLeft},${stage.scrollTop} ${stage.querySelector("img").style.width}`);
+  await waitFor(() => win.eval("images.every((f) => f.image || f.failed)"), 10000);
+  check("gallery: all scenes load in the background", win.eval("images.length > 1 && images.every((f) => f.image)"), win.eval("images.map((f) => !!f.image).join()"));
 
   // ---- nested simulations
   resetFrames();

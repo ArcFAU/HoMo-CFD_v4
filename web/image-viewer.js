@@ -93,9 +93,54 @@ function runAction(action) {
   return actionQueue;
 }
 
-// Decoded frames kept around the current one; others are released so long
-// sequences don't accumulate every visited full-resolution image.
-const RETAINED_FRAME_RADIUS = 2;
+// Speed over memory: every frame of the sequences on screen is read and
+// decoded once in the background, nearest to the current frame first, and
+// kept, so stepping back and forth never waits for a frame twice. A case keeps
+// the frames of every section it has shown until it is removed or replaced.
+const MAX_PARALLEL_LOADS = 6;
+let activeLoads = 0;
+const preloadSequences = new Map(); // owner -> { frames, current: () => frame index }
+
+function preloadSequence(owner, frames, current) {
+  preloadSequences.set(owner, { frames, current });
+  pumpLoads();
+}
+
+function nextFrameToLoad() {
+  let best = null;
+  let bestDistance = Infinity;
+  for (const { frames, current } of preloadSequences.values()) {
+    const at = current();
+    for (let distance = 0; distance < Math.min(bestDistance, frames.length); distance++) {
+      const frame = [frames[at + distance], frames[at - distance]]
+        .find((candidate) => candidate && !candidate.image && !candidate.loading && !candidate.failed);
+      if (frame) {
+        best = frame;
+        bestDistance = distance;
+        break;
+      }
+    }
+  }
+  return best;
+}
+
+function pumpLoads() {
+  while (activeLoads < MAX_PARALLEL_LOADS) {
+    const frame = nextFrameToLoad();
+    if (!frame) return;
+    activeLoads++;
+    ensureFrameReady(frame)
+      .catch(() => { frame.failed = true; })
+      .finally(() => {
+        activeLoads--;
+        pumpLoads();
+      });
+  }
+}
+
+function newFrame(name, handle) {
+  return { name, handle, url: null, image: null, loading: null, failed: false, generation: 0 };
+}
 
 function releaseFrame(frame) {
   frame.generation++;
@@ -106,14 +151,10 @@ function releaseFrame(frame) {
 }
 
 function releaseCaseImages(item) {
-  item?.images.forEach(releaseFrame);
-}
-
-function evictDistantFrames(item) {
-  item.images.forEach((frame, index) => {
-    if (Math.abs(index - item.frameIndex) <= RETAINED_FRAME_RADIUS) return;
-    if (frame.image || frame.loading) releaseFrame(frame);
-  });
+  if (!item) return;
+  preloadSequences.delete(item);
+  item.images.forEach(releaseFrame);
+  item.sectionFrames?.forEach((frames) => frames.forEach(releaseFrame));
 }
 
 function renderFrame() {
@@ -134,26 +175,20 @@ function renderFrame() {
 
 // Single folder / scene gallery: the current image stays on screen until the
 // next one is decoded, then it is swapped in already sized, so stepping does
-// not flash. Neighbouring images are decoded ahead.
+// not flash. The other images load in the background (see pumpLoads).
 let singleFrameToken = 0;
-
-function decodedSingleImage(entry) {
-  if (!entry.decoded) {
-    const image = new Image();
-    image.decoding = "async";
-    image.draggable = false;
-    image.alt = entry.name;
-    image.src = entry.url;
-    entry.decoded = image.decode().then(() => image, () => image);
-  }
-  return entry.decoded;
-}
 
 async function showSingleFrame() {
   const token = ++singleFrameToken;
   const entry = images[frameIndex];
-  const image = await decodedSingleImage(entry);
-  if (token !== singleFrameToken) return;
+  let image;
+  try {
+    image = await ensureFrameReady(entry);
+  } catch (err) {
+    if (token === singleFrameToken) showError(`Could not open ${entry.name}: ${err?.message || err}`);
+    return;
+  }
+  if (token !== singleFrameToken || !image) return;
   let frameBox = stage.querySelector(".compare-zoom-frame");
   if (!frameBox) {
     frameBox = document.createElement("div");
@@ -162,10 +197,6 @@ async function showSingleFrame() {
   }
   swapImage(stage, frameBox, image);
   caption.textContent = `${entry.name} · ${frameIndex + 1} / ${images.length}`;
-  images.forEach((other, index) => {
-    if (Math.abs(index - frameIndex) <= RETAINED_FRAME_RADIUS) decodedSingleImage(other);
-    else other.decoded = null;
-  });
 }
 
 // Puts a decoded image into a zoom frame, sized before the browser paints and
@@ -479,20 +510,22 @@ async function ensureCurrentFramesReady() {
 async function createCaseView(target, preferredSectionPath) {
   const permission = await target.handle.queryPermission({ mode: "read" });
   if (permission !== "granted") throw new Error(`Folder access needs to be restored for ${target.path}.`);
-  const sections = [];
+  // With serve.py the whole case is listed in one request; otherwise the
+  // section folders are checked in parallel.
+  if (target.handle.homoServer) await prefetchServerTree(target.handle).catch(() => {});
+  const candidates = [];
   for await (const child of target.handle.values()) {
-    if (child.kind !== "directory") continue;
-    const match = child.name.match(/^(.+)_([xyz])-Section$/i);
-    if (!match) continue;
-    let containsImage = false;
-    for await (const entry of child.values()) {
-      if (entry.kind === "file" && /\.(png|jpe?g|webp)$/i.test(entry.name)) {
-        containsImage = true;
-        break;
-      }
-    }
-    if (containsImage) sections.push({ field: match[1], axis: match[2].toLowerCase(), handle: child });
+    const match = child.kind === "directory" && child.name.match(/^(.+)_([xyz])-Section$/i);
+    if (match) candidates.push({ field: match[1], axis: match[2].toLowerCase(), handle: child });
   }
+  const hasImage = async (folder) => {
+    for await (const entry of folder.values()) {
+      if (entry.kind === "file" && /\.(png|jpe?g|webp)$/i.test(entry.name)) return true;
+    }
+    return false;
+  };
+  const withImages = await Promise.all(candidates.map((section) => hasImage(section.handle)));
+  const sections = candidates.filter((_, index) => withImages[index]);
   sections.sort((left, right) => `${left.field}-${left.axis}`.localeCompare(`${right.field}-${right.axis}`));
   const preferredName = preferredSectionPath.split("/").pop()?.match(/^(.+)_([xyz])-Section$/i);
   const fields = [...new Set(sections.map((section) => section.field))].sort();
@@ -508,22 +541,31 @@ async function createCaseView(target, preferredSectionPath) {
   return item;
 }
 
+async function listImages(folder) {
+  const frames = [];
+  for await (const child of folder.values()) {
+    if (child.kind === "file" && /\.(png|jpe?g|webp)$/i.test(child.name)) frames.push(newFrame(child.name, child));
+  }
+  return frames.sort((left, right) => left.name.localeCompare(right.name, undefined, { numeric: true }));
+}
+
+// Each section's frames are kept per case, so switching back to a field or
+// axis shown before is instant.
 async function loadCaseImages(item) {
-  releaseCaseImages(item);
-  item.images = [];
   const section = item.sections.find((entry) => entry.field === item.field && entry.axis === item.axis);
-  if (!section) return;
-  for await (const child of section.handle.values()) {
-    if (child.kind !== "file" || !/\.(png|jpe?g|webp)$/i.test(child.name)) continue;
-    item.images.push({ name: child.name, handle: child, url: null, image: null, loading: null, generation: 0 });
+  if (!section) {
+    item.images = [];
+    preloadSequences.delete(item);
+    return;
   }
-  item.images.sort((left, right) => left.name.localeCompare(right.name, undefined, { numeric: true }));
+  item.sectionFrames ??= new Map();
+  const key = `${section.field}_${section.axis}`;
+  if (!item.sectionFrames.has(key)) item.sectionFrames.set(key, await listImages(section.handle));
+  item.images = item.sectionFrames.get(key);
   item.frameIndex = Math.min(item.frameIndex, Math.max(0, item.images.length - 1));
+  preloadSequence(item, item.images, () => item.frameIndex);
   const currentFrame = item.images[item.frameIndex];
-  if (currentFrame) {
-    await ensureFrameReady(currentFrame);
-    preloadNearbyFrames(item, item.frameIndex);
-  }
+  if (currentFrame) await ensureFrameReady(currentFrame);
 }
 
 // frame.generation changes whenever a frame is released, so a load that
@@ -538,6 +580,8 @@ async function ensureFrameReady(frame) {
       const url = URL.createObjectURL(file);
       const image = new Image();
       image.decoding = "async";
+      image.draggable = false;
+      image.alt = frame.name;
       image.src = url;
       try {
         await image.decode();
@@ -559,14 +603,6 @@ async function ensureFrameReady(frame) {
     });
   }
   return frame.loading;
-}
-
-function preloadNearbyFrames(item, index) {
-  evictDistantFrames(item);
-  for (const nearbyIndex of [index - 1, index + 1]) {
-    const frame = item.images[nearbyIndex];
-    if (frame) ensureFrameReady(frame).catch(() => {});
-  }
 }
 
 function updateAddCaseButton() {
@@ -609,13 +645,12 @@ async function loadFolder() {
     ? `${target.path || folderHandle.name} · Use left/right arrow keys to step through scenes; + / − / 0 to zoom.`
     : `${target.path || folderHandle.name} · Use left/right arrow keys to step through images.`;
   document.title = `${is3DSceneGallery ? "3D reference scenes" : target.path || folderHandle.name} | HoMo CFD`;
-  images = [];
-  for await (const child of folderHandle.values()) {
-    if (child.kind !== "file" || !/\.(png|jpe?g|webp)$/i.test(child.name)) continue;
-    const file = await child.getFile();
-    images.push({ name: child.name, url: URL.createObjectURL(file) });
-  }
-  images.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+  // Only the names are listed here; the first image shows as soon as it is
+  // read, and the others load in the background.
+  images.forEach(releaseFrame);
+  images = await listImages(folderHandle);
+  frameIndex = Math.min(frameIndex, Math.max(0, images.length - 1));
+  preloadSequence("single", images, () => frameIndex);
   if (!stage.classList.contains("single-stage")) {
     stage.classList.add("single-stage");
     enableDragPan(stage, null);
@@ -765,9 +800,7 @@ document.addEventListener("keydown", (event) => {
       await ensureFrameReady(item.images[nextIndex]);
       item.frameIndex = nextIndex;
     }
-    compareCases.forEach((compareCase) => {
-      if (compareCase) preloadNearbyFrames(compareCase, compareCase.frameIndex);
-    });
+    pumpLoads();
     updateComparisonImages();
   });
 });

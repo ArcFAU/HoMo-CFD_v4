@@ -66,6 +66,15 @@ change with speed; the hover note says so.
 The force columns are computed when the table is drawn, not stored with the
 cached CSV rows, so changing the speed or density only redraws the table.
 
+## 2026-10-02 — Image viewer: speed over memory
+
+The user prefers speed and reliability to a small memory footprint. Image
+sequences are therefore loaded completely in the background (nearest frames
+first, 6 in parallel) and kept for as long as the case is open, including the
+sections it showed before. The earlier limit of ±2 decoded frames is gone. A
+case's compressed files are small (about 0.3 MB per section image); decoded
+bitmaps are managed by the browser.
+
 ## 2026-10-02 — 3D viewer: a colour range per field
 
 Fields now differ by orders of magnitude (Cp around −5…1, skin friction around
