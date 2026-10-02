@@ -4774,3 +4774,31 @@ The background watcher of the post job (job 4285206 in `exp`) finished; no new u
 > **And the 3D export test on Fritz passed:** the car with all 10 fields, plus the λ2 vortices and bad cells, without errors. In the viewer you can now see the vortex cores at the front-wing endplates, the rear-wing tips and the wheels, colored by velocity. The macros in `SCRIPT_RANS` are this version, so new simulations get it automatically.
 >
 > The portable zip is rebuilt with all of this (teammates should rerun `Create desktop shortcut.bat` once). All tests pass (82 unit tests, 139 browser checks), and the changes are on GitHub `master`.
+
+## 2026-10-02 — Is the zip ready to share?
+
+### User message (verbatim)
+
+> okay, prepare the zip to share or is it already done?
+
+### Contributor messages (verbatim)
+
+> It should be current, since I rebuilt it after the last changes. Checking that every file in the zip matches the current version:
+
+### Work record
+
+- `dist/HoMo-CFD-portable.zip` (built 22:11, 57 files, 12.5 MB): all 20 app files match the current project files (line endings ignored). No rebuild needed; no code changes.
+
+### Final response (verbatim)
+
+> It's already done and up to date. The zip contains everything from today, including the window-less start, the Quit button, the icon and desktop-shortcut script, and the new 3D export macros. I compared all 20 app files in it with the current versions, and none is out of date.
+>
+> **The file to share:** `C:\Users\Archit\Downloads\HoMo-CFD\dist\HoMo-CFD-portable.zip` (12.5 MB)
+>
+> What to tell teammates:
+> 1. Unzip it anywhere, for example to `Documents\HoMo-CFD`.
+> 2. Double-click **Create desktop shortcut.bat** once, then start HoMo from the new **HoMo CFD** icon on the desktop. If Windows asks whether to run it, choose **More info → Run anyway**.
+> 3. Choose their working directory (the folder with `finished`, like in CFD-Tool).
+> 4. For Fritz: WinSCP with their own saved session, then **Cluster** at the bottom of the sidebar. For the automatic 3D export, the `starccm` folder in the zip has the two macros and a short README.
+>
+> Quit with the **⏻** button at the bottom of the sidebar.
