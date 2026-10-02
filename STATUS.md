@@ -57,7 +57,7 @@ Last updated: 2026-10-02
 - App: **Fritz cluster** sidebar button (server mode only) opens a card with WinSCP status, session dropdown (text field when no sessions are found), remote folder, **Test connection**, **Save**, and the WinSCP output in a collapsible box. Known WinSCP failures get a plain hint (host key not cached, login refused, passphrase/password needed, folder missing, no such session, network).
 - Checked on this PC without contacting Fritz: real `WinSCP.com` found and runs a script (exit 0; errors give 1); 2 saved sessions found (names not read).
 - First real test (user, 2026-10-02): Fritz was reached, but login stopped because the session's key has a **passphrase** (`/nointeractiveinput` correctly prevented a hidden prompt). Added Pageant support: `GET /api/cluster` reports `pageant {found, running}`; `POST /api/cluster/pageant {session}` starts `pageant.exe <session's key file>` (key file from the session's `PublicKeyFile` registry value; PuTTY's or WinSCP's own Pageant), and Pageant asks for the passphrase in its own window. The passphrase hint now comes first and the test result has `needsPassphrase`. Next: the user unlocks the key with Pageant and tests again.
-- **Step 1 confirmed working by the user (2026-10-02):** after unlocking the key with Pageant, Test connection connects; session and remote folder are saved. Saved working directory is still `D:\CFD_toolinished`.
+- **Step 1 confirmed working by the user (2026-10-02):** after unlocking the key with Pageant, Test connection connects; session and remote folder are saved. Saved working directory is still `D:\CFD_tool\finished`.
 
 ## Open items
 
