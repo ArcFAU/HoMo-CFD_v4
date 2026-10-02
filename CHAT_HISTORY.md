@@ -4238,3 +4238,27 @@ The background watcher of the post job (job 4285206 in `exp`) finished; no new u
 > Memory: a full sequence is about 45 MB of image files per section and case, plus what the browser uses for decoded images. Closing the viewer window frees it all.
 >
 > Reload the page and reopen an image viewer to get the new version. All tests pass (70 unit tests, 131 browser checks), the portable zip is rebuilt, and the changes are on GitHub `master`. Tell me if anything still feels slow, and where (opening, first image, or stepping).
+
+## 2026-10-02 — User confirms the faster image viewer
+
+### User message (verbatim)
+
+> nice, everything is working.
+
+### Contributor messages (verbatim)
+
+> Good to hear. Recording your confirmation in the notes and the log:
+
+### Work record
+
+- `STATUS.md`: image viewer change confirmed by the user. No code changes; tests not rerun.
+
+### Final response (verbatim)
+
+> Great. I've noted it in the project notes.
+>
+> Still open, whenever you want them:
+> 1. **Test the new 3D export on Fritz:** replace `export3D.java` in `exp` with `starccm\export3D.java` and rerun `post.sh` (about an hour). I can copy the file for you.
+> 2. **Put both macros into `SCRIPT_RANS`**, so every new simulation exports 3D data. Say "upload it".
+> 3. **Show "Post-processing failed" in HoMo** when a post job's macro fails.
+> 4. **Cleanup:** delete `starccm\post.o4285168` (it contains your licence key).
