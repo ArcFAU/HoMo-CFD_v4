@@ -13,6 +13,9 @@
 /inProgress/
 /unsimulated/
 /archive/
+/0830_mk3/
+/CFD-Tool.zip
+/homo-cfd_0930.zip
 **/plots/
 **/PressureDistributions/
 *.csv

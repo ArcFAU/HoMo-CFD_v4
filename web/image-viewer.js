@@ -3,6 +3,7 @@ const STORE_NAME = "folders";
 const searchParams = new URLSearchParams(location.search);
 const folderKey = searchParams.get("folder");
 const compareKey = searchParams.get("compare");
+const is3DSceneGallery = searchParams.get("gallery") === "3d";
 const initialSectionPath = searchParams.get("section") || "";
 const stage = document.getElementById("image-stage");
 const caption = document.getElementById("image-caption");
@@ -75,6 +76,44 @@ function showError(message) {
   error.textContent = message || "";
 }
 
+// Image loading is async, so user actions run one at a time in order.
+// Without this, two quick key presses both read the same frame index, and
+// two field switches could fill one panel with two image lists.
+let actionQueue = Promise.resolve();
+let pendingActions = 0;
+
+function runAction(action) {
+  pendingActions++;
+  actionQueue = actionQueue
+    .then(action)
+    .catch((err) => showError(err?.message || "Could not load images"))
+    .finally(() => { pendingActions--; });
+  return actionQueue;
+}
+
+// Decoded frames kept around the current one; others are released so long
+// sequences don't accumulate every visited full-resolution image.
+const RETAINED_FRAME_RADIUS = 2;
+
+function releaseFrame(frame) {
+  frame.generation++;
+  if (frame.url) URL.revokeObjectURL(frame.url);
+  frame.url = null;
+  frame.image = null;
+  frame.loading = null;
+}
+
+function releaseCaseImages(item) {
+  item?.images.forEach(releaseFrame);
+}
+
+function evictDistantFrames(item) {
+  item.images.forEach((frame, index) => {
+    if (Math.abs(index - item.frameIndex) <= RETAINED_FRAME_RADIUS) return;
+    if (frame.image || frame.loading) releaseFrame(frame);
+  });
+}
+
 function renderFrame() {
   if (compareKey) {
     renderComparisonFrame();
@@ -89,11 +128,16 @@ function renderFrame() {
     return;
   }
   const image = document.createElement("img");
-  image.src = images[frameIndex].url;
   image.alt = images[frameIndex].name;
-  image.style.transform = `scale(${zoom})`;
-  stage.replaceChildren(image);
-  caption.textContent = images[frameIndex].name;
+  image.draggable = false;
+  image.addEventListener("load", () => fitZoomedImage(stage), { once: true });
+  image.src = images[frameIndex].url;
+  const frameBox = document.createElement("div");
+  frameBox.className = "compare-zoom-frame";
+  frameBox.appendChild(image);
+  stage.replaceChildren(frameBox);
+  fitZoomedImage(stage);
+  caption.textContent = `${images[frameIndex].name} · ${frameIndex + 1} / ${images.length}`;
 }
 
 function focusCase(index) {
@@ -122,19 +166,15 @@ function renderComparisonFrame() {
     const emptyOption = new Option("Select simulation", "");
     caseSelect.add(emptyOption);
     caseCatalog.forEach((entry) => {
-      const option = new Option(entry.path, entry.path);
-      option.disabled = compareCases.some((selected, selectedIndex) =>
-        selectedIndex !== index && selected?.path === entry.path);
+      const option = new Option(entry.path || entry.name, entry.path);
       caseSelect.add(option);
     });
     caseSelect.value = item?.path ?? "";
-    caseSelect.addEventListener("change", async () => {
+    caseSelect.addEventListener("change", () => runAction(async () => {
       const selected = caseCatalog.find((entry) => entry.path === caseSelect.value);
-      if (!selected) {
-        compareCases[index] = null;
-      } else {
-        compareCases[index] = await createCaseView(selected, "");
-      }
+      const replacement = selected ? await createCaseView(selected, "") : null;
+      releaseCaseImages(compareCases[index]);
+      compareCases[index] = replacement;
       focusCase(index);
       if (syncImages) {
         applySyncedFrameIndex();
@@ -142,18 +182,19 @@ function renderComparisonFrame() {
       }
       zoom = compareCases[index]?.zoom ?? 1;
       renderFrame();
-    });
+    }));
     caseHeader.appendChild(caseSelect);
     if (compareCases.length > 1) {
       const remove = document.createElement("button");
       remove.type = "button";
       remove.className = "small-control remove-case";
       remove.textContent = "Remove";
-      remove.addEventListener("click", () => {
+      remove.addEventListener("click", () => runAction(() => {
+        releaseCaseImages(compareCases[index]);
         compareCases.splice(index, 1);
         focusedCaseIndex = Math.min(focusedCaseIndex, compareCases.length - 1);
         renderFrame();
-      });
+      }));
       caseHeader.appendChild(remove);
     }
     panel.appendChild(caseHeader);
@@ -176,18 +217,7 @@ function renderComparisonFrame() {
       event.stopPropagation();
       focusCase(index);
     });
-    fieldSelect.addEventListener("change", async () => {
-      item.field = fieldSelect.value;
-      const axes = axesForCase(item);
-      if (!axes.includes(item.axis)) item.axis = axes[0] ?? "x";
-      item.frameIndex = 0;
-      await loadCaseImages(item);
-      if (syncImages) {
-        syncFrameIndexes(index);
-        await ensureCurrentFramesReady();
-      }
-      renderFrame();
-    });
+    fieldSelect.addEventListener("change", () => runAction(() => showSection(index, fieldSelect.value, item.axis)));
     const axisControls = document.createElement("div");
     axisControls.className = "choices small";
     axesForCase(item).forEach((axis) => {
@@ -195,17 +225,10 @@ function renderComparisonFrame() {
       axisButton.type = "button";
       axisButton.textContent = axis.toUpperCase();
       axisButton.className = axis === item.axis ? "active" : "";
-      axisButton.addEventListener("click", async (event) => {
+      axisButton.addEventListener("click", (event) => {
         event.stopPropagation();
         focusCase(index);
-        item.axis = axis;
-        item.frameIndex = 0;
-        await loadCaseImages(item);
-        if (syncImages) {
-          syncFrameIndexes(index);
-          await ensureCurrentFramesReady();
-        }
-        renderFrame();
+        runAction(() => showSection(index, item.field, axis));
       });
       axisControls.appendChild(axisButton);
     });
@@ -217,10 +240,18 @@ function renderComparisonFrame() {
     imageStage.className = "compare-image-stage";
     imageStage.dataset.caseIndex = String(index);
     imageStage.addEventListener("scroll", () => syncPanFromStage(imageStage), { passive: true });
+    imageStage.addEventListener("wheel", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      focusCase(index);
+      setZoom((item.zoom ?? 1) * (event.deltaY < 0 ? 1.1 : 1 / 1.1));
+    }, { passive: false });
+    enableDragPan(imageStage, index);
     if (frame?.image) {
       const image = frame.image;
       image.src = frame.url;
       image.alt = `${item.name} ${item.field} ${item.axis.toUpperCase()} ${frame.name}`;
+      image.draggable = false;
       image.style.transform = "none";
       image.style.width = "";
       image.style.height = "";
@@ -249,10 +280,67 @@ function renderComparisonFrame() {
   });
   imageStageObserver.disconnect();
   stage.replaceChildren(...panels);
+  const columnCount = panels.length === 1 ? 1 : 2;
+  stage.style.gridTemplateColumns = `repeat(${columnCount}, minmax(0, 1fr))`;
+  stage.style.gridTemplateRows = `repeat(${Math.ceil(panels.length / columnCount)}, minmax(0, 1fr))`;
   stage.querySelectorAll(".compare-image-stage").forEach((imageStage) => imageStageObserver.observe(imageStage));
   caption.textContent = syncImages
     ? "Sync images is on: left/right arrow keys step every panel by frame index."
     : "Click an image panel, then use left/right arrow keys to step that simulation.";
+}
+
+function enableDragPan(imageStage, caseIndex) {
+  let pointerId = null;
+  let startX = 0;
+  let startY = 0;
+  let startScrollLeft = 0;
+  let startScrollTop = 0;
+
+  imageStage.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0) return;
+    if (!compareKey && zoom <= 1) return;
+    pointerId = event.pointerId;
+    startX = event.clientX;
+    startY = event.clientY;
+    startScrollLeft = imageStage.scrollLeft;
+    startScrollTop = imageStage.scrollTop;
+    if (caseIndex !== null) focusCase(caseIndex);
+    imageStage.classList.add("panning");
+    imageStage.setPointerCapture(pointerId);
+    event.preventDefault();
+  });
+
+  imageStage.addEventListener("pointermove", (event) => {
+    if (event.pointerId !== pointerId) return;
+    imageStage.scrollLeft = startScrollLeft - (event.clientX - startX);
+    imageStage.scrollTop = startScrollTop - (event.clientY - startY);
+  });
+
+  const finishPan = (event) => {
+    if (event.pointerId !== pointerId) return;
+    pointerId = null;
+    imageStage.classList.remove("panning");
+  };
+  imageStage.addEventListener("pointerup", finishPan);
+  imageStage.addEventListener("pointercancel", finishPan);
+  imageStage.addEventListener("lostpointercapture", finishPan);
+}
+
+// Switches one panel to a field/axis (keeping the axis when the field has
+// it) and resets to the first image.
+async function showSection(index, field, axis) {
+  const item = compareCases[index];
+  if (!item) return;
+  item.field = field;
+  const axes = axesForCase(item);
+  item.axis = axes.includes(axis) ? axis : axes[0] ?? "x";
+  item.frameIndex = 0;
+  await loadCaseImages(item);
+  if (syncImages) {
+    syncFrameIndexes(index);
+    await ensureCurrentFramesReady();
+  }
+  renderFrame();
 }
 
 function axesForCase(item) {
@@ -273,17 +361,17 @@ function applySyncedFrameIndex() {
 }
 
 function fitZoomedImage(imageStage) {
-  const item = compareCases[Number(imageStage.dataset.caseIndex)];
+  const zoomLevel = compareKey ? compareCases[Number(imageStage.dataset.caseIndex)]?.zoom : zoom;
   const image = imageStage.querySelector("img");
   const frameBox = imageStage.querySelector(".compare-zoom-frame");
-  if (!item || !image || !frameBox || !image.naturalWidth || !imageStage.clientWidth || !imageStage.clientHeight) return;
+  if (!zoomLevel || !image || !frameBox || !image.naturalWidth || !imageStage.clientWidth || !imageStage.clientHeight) return;
 
   const fitScale = Math.min(
     imageStage.clientWidth / image.naturalWidth,
     imageStage.clientHeight / image.naturalHeight,
   );
-  const width = Math.max(1, Math.round(image.naturalWidth * fitScale * item.zoom));
-  const height = Math.max(1, Math.round(image.naturalHeight * fitScale * item.zoom));
+  const width = Math.max(1, Math.round(image.naturalWidth * fitScale * zoomLevel));
+  const height = Math.max(1, Math.round(image.naturalHeight * fitScale * zoomLevel));
   frameBox.style.width = `${Math.max(imageStage.clientWidth, width)}px`;
   frameBox.style.height = `${Math.max(imageStage.clientHeight, height)}px`;
   image.style.width = `${width}px`;
@@ -291,7 +379,7 @@ function fitZoomedImage(imageStage) {
 }
 
 function applyZoomToVisiblePanels() {
-  const stages = [...document.querySelectorAll(".compare-image-stage")];
+  const stages = compareKey ? [...document.querySelectorAll(".compare-image-stage")] : [stage];
   const centers = stages.map((imageStage) => ({
     x: imageStage.scrollWidth ? (imageStage.scrollLeft + imageStage.clientWidth / 2) / imageStage.scrollWidth : 0.5,
     y: imageStage.scrollHeight ? (imageStage.scrollTop + imageStage.clientHeight / 2) / imageStage.scrollHeight : 0.5,
@@ -352,22 +440,19 @@ async function createCaseView(target, preferredSectionPath) {
   const axis = preferredName?.[2] && axes.includes(preferredName[2].toLowerCase())
     ? preferredName[2].toLowerCase()
     : axes.includes("x") ? "x" : axes[0] ?? "x";
-  const item = { ...target, name: target.path.split("/").pop(), sections, field, axis, frameIndex: 0, zoom: 1, images: [] };
+  const item = { ...target, name: target.name || target.path.split("/").pop(), sections, field, axis, frameIndex: 0, zoom: 1, images: [] };
   await loadCaseImages(item);
   return item;
 }
 
 async function loadCaseImages(item) {
-  item.images.forEach((image) => {
-    image.released = true;
-    if (image.url) URL.revokeObjectURL(image.url);
-  });
+  releaseCaseImages(item);
   item.images = [];
   const section = item.sections.find((entry) => entry.field === item.field && entry.axis === item.axis);
   if (!section) return;
   for await (const child of section.handle.values()) {
     if (child.kind !== "file" || !/\.(png|jpe?g|webp)$/i.test(child.name)) continue;
-    item.images.push({ name: child.name, handle: child, url: null, image: null, loading: null, released: false });
+    item.images.push({ name: child.name, handle: child, url: null, image: null, loading: null, generation: 0 });
   }
   item.images.sort((left, right) => left.name.localeCompare(right.name, undefined, { numeric: true }));
   item.frameIndex = Math.min(item.frameIndex, Math.max(0, item.images.length - 1));
@@ -378,16 +463,16 @@ async function loadCaseImages(item) {
   }
 }
 
+// frame.generation changes whenever a frame is released, so a load that
+// finishes after its frame was released discards its result.
 async function ensureFrameReady(frame) {
   if (frame.image) return frame.image;
   if (!frame.loading) {
-    frame.loading = (async () => {
+    const generation = frame.generation;
+    const loading = (async () => {
       const file = await frame.handle.getFile();
+      if (frame.generation !== generation) return null;
       const url = URL.createObjectURL(file);
-      if (frame.released) {
-        URL.revokeObjectURL(url);
-        return null;
-      }
       const image = new Image();
       image.decoding = "async";
       image.src = url;
@@ -397,7 +482,7 @@ async function ensureFrameReady(frame) {
         URL.revokeObjectURL(url);
         throw err;
       }
-      if (frame.released) {
+      if (frame.generation !== generation) {
         URL.revokeObjectURL(url);
         return null;
       }
@@ -405,16 +490,16 @@ async function ensureFrameReady(frame) {
       frame.image = image;
       return image;
     })();
+    frame.loading = loading;
+    loading.catch(() => {
+      if (frame.loading === loading) frame.loading = null;
+    });
   }
-  try {
-    return await frame.loading;
-  } catch (err) {
-    frame.loading = null;
-    throw err;
-  }
+  return frame.loading;
 }
 
 function preloadNearbyFrames(item, index) {
+  evictDistantFrames(item);
   for (const nearbyIndex of [index - 1, index + 1]) {
     const frame = item.images[nearbyIndex];
     if (frame) ensureFrameReady(frame).catch(() => {});
@@ -438,7 +523,7 @@ function setZoom(value, broadcast = true) {
     if (broadcast && syncZoom) zoomChannel?.postMessage({ source: viewerId, zoom });
     return;
   }
-  renderFrame();
+  applyZoomToVisiblePanels();
   if (broadcast && syncZoom) zoomChannel?.postMessage({ source: viewerId, zoom });
 }
 
@@ -456,9 +541,11 @@ async function loadFolder() {
     reconnectButton.hidden = false;
     throw new Error("Folder access needs to be reconnected in this window.");
   }
-  document.getElementById("viewer-title").textContent = folderHandle.name;
-  document.getElementById("viewer-path").textContent = `${target.path || folderHandle.name} · Use left/right arrow keys to step through images.`;
-  document.title = `${target.path || folderHandle.name} | HoMo CFD`;
+  document.getElementById("viewer-title").textContent = is3DSceneGallery ? "3D reference scenes" : folderHandle.name;
+  document.getElementById("viewer-path").textContent = is3DSceneGallery
+    ? `${target.path || folderHandle.name} · Use left/right arrow keys to step through scenes.`
+    : `${target.path || folderHandle.name} · Use left/right arrow keys to step through images.`;
+  document.title = `${is3DSceneGallery ? "3D reference scenes" : target.path || folderHandle.name} | HoMo CFD`;
   images = [];
   for await (const child of folderHandle.values()) {
     if (child.kind !== "file" || !/\.(png|jpe?g|webp)$/i.test(child.name)) continue;
@@ -466,6 +553,14 @@ async function loadFolder() {
     images.push({ name: child.name, url: URL.createObjectURL(file) });
   }
   images.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+  if (!stage.classList.contains("single-stage")) {
+    stage.classList.add("single-stage");
+    enableDragPan(stage, null);
+    imageStageObserver.observe(stage);
+  }
+  if (is3DSceneGallery) {
+    document.getElementById("viewer-path").textContent = `${target.path || folderHandle.name} · ${images.length} scenes · Use left/right arrow keys to step through scenes.`;
+  }
   renderFrame();
 }
 
@@ -482,8 +577,11 @@ async function loadComparison() {
       throw new Error(`Folder access needs to be reconnected for ${target.path}.`);
     }
   }
+  const initialCasePath = initialSectionPath.includes("/")
+    ? initialSectionPath.slice(0, initialSectionPath.lastIndexOf("/"))
+    : "";
   compareCases = await Promise.all(compareTargets.map((target) =>
-    createCaseView(target, target.path === initialSectionPath.slice(0, initialSectionPath.lastIndexOf("/")) ? initialSectionPath : ""),
+    createCaseView(target, target.path === initialCasePath ? initialSectionPath : ""),
   ));
   document.getElementById("add-case").addEventListener("click", () => {
     if (compareCases.length >= 4) return;
@@ -493,7 +591,7 @@ async function loadComparison() {
   });
   document.getElementById("sync-images-control").hidden = false;
   document.getElementById("viewer-title").textContent = "Simulation comparison";
-  document.getElementById("viewer-path").textContent = "Each panel has independent field, axis, frame, and zoom controls.";
+  document.getElementById("viewer-path").textContent = "Each panel has independent field, axis, frame, and zoom controls. T: CpT · V: Velocity · P: Cp · L: Lambda2 · X/Y/Z: axis (focused panel).";
   document.title = "Simulation comparison | HoMo CFD";
   stage.classList.add("compare-stage");
   renderFrame();
@@ -503,9 +601,13 @@ document.getElementById("zoom-out").addEventListener("click", () => setZoom(zoom
 document.getElementById("zoom-in").addEventListener("click", () => setZoom(zoom * 1.2));
 document.getElementById("zoom-reset").addEventListener("click", () => setZoom(1));
 document.getElementById("sync-images").addEventListener("change", (event) => {
-  syncImages = event.target.checked;
-  if (syncImages) syncFrameIndexes(focusedCaseIndex);
-  ensureCurrentFramesReady().then(renderFrame).catch((err) => showError(err?.message || "Could not prepare synchronized images"));
+  const checked = event.target.checked;
+  runAction(async () => {
+    syncImages = checked;
+    if (syncImages) syncFrameIndexes(focusedCaseIndex);
+    await ensureCurrentFramesReady();
+    renderFrame();
+  });
 });
 document.getElementById("full-screen").addEventListener("click", async () => {
   if (!document.fullscreenElement) await document.documentElement.requestFullscreen();
@@ -540,35 +642,61 @@ zoomChannel?.addEventListener("message", (event) => {
     setZoom(event.data.zoom, false);
   }
 });
-document.addEventListener("keydown", async (event) => {
-  if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
-    if (event.target?.tagName === "SELECT" || event.target?.tagName === "INPUT") return;
-    event.preventDefault();
-    if (compareKey) {
-      const item = compareCases[focusedCaseIndex];
-      if (!item?.images.length) return;
-      if (syncImages) {
-        const longestSequence = Math.max(0, ...compareCases.map((compareCase) => compareCase?.images.length ?? 0));
-        const nextIndex = Math.max(0, Math.min(longestSequence - 1, syncFrameIndex + (event.key === "ArrowRight" ? 1 : -1)));
-        for (const compareCase of compareCases) {
-          const frame = compareCase?.images[Math.min(nextIndex, (compareCase?.images.length ?? 1) - 1)];
-          if (frame) await ensureFrameReady(frame);
-        }
-        syncFrameIndex = nextIndex;
-        applySyncedFrameIndex();
-      } else {
-        const nextIndex = Math.max(0, Math.min(item.images.length - 1, item.frameIndex + (event.key === "ArrowRight" ? 1 : -1)));
-        await ensureFrameReady(item.images[nextIndex]);
-        item.frameIndex = nextIndex;
-      }
-      compareCases.forEach((compareCase) => {
-        if (compareCase) preloadNearbyFrames(compareCase, compareCase.frameIndex);
-      });
-    } else {
-      frameIndex = Math.max(0, Math.min(images.length - 1, frameIndex + (event.key === "ArrowRight" ? 1 : -1)));
+document.addEventListener("keydown", (event) => {
+  const target = event.target;
+  if (compareKey && !event.ctrlKey && !event.altKey && !event.metaKey) {
+    const key = event.key.toLowerCase();
+    const isTextEntry = target?.isContentEditable || ["INPUT", "TEXTAREA"].includes(target?.tagName);
+    const item = compareCases[focusedCaseIndex];
+    const requestedField = { t: "CpT", v: "Velocity", p: "Cp", l: "Lambda2" }[key];
+    if (requestedField && !isTextEntry && target?.tagName !== "SELECT" &&
+      item?.sections.some((section) => section.field === requestedField)) {
+      event.preventDefault();
+      runAction(() => showSection(focusedCaseIndex, requestedField, item.axis));
+      return;
     }
-    renderFrame();
+    // X/Y/Z also work while a field dropdown has focus (they aren't field names).
+    const requestedAxis = { x: "x", y: "y", z: "z" }[key];
+    if (requestedAxis && !isTextEntry && item && axesForCase(item).includes(requestedAxis)) {
+      event.preventDefault();
+      runAction(() => showSection(focusedCaseIndex, item.field, requestedAxis));
+      return;
+    }
   }
+  if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+  if (target?.tagName === "SELECT" || target?.tagName === "INPUT") return;
+  event.preventDefault();
+  const step = event.key === "ArrowRight" ? 1 : -1;
+  if (!compareKey) {
+    frameIndex = Math.max(0, Math.min(images.length - 1, frameIndex + step));
+    renderFrame();
+    return;
+  }
+  // A held key repeats faster than images load; ignore repeats until the
+  // current step has finished instead of queueing a backlog.
+  if (pendingActions) return;
+  runAction(async () => {
+    const item = compareCases[focusedCaseIndex];
+    if (!item?.images.length) return;
+    if (syncImages) {
+      const longestSequence = Math.max(0, ...compareCases.map((compareCase) => compareCase?.images.length ?? 0));
+      const nextIndex = Math.max(0, Math.min(longestSequence - 1, syncFrameIndex + step));
+      for (const compareCase of compareCases) {
+        const frame = compareCase?.images[Math.min(nextIndex, (compareCase?.images.length ?? 1) - 1)];
+        if (frame) await ensureFrameReady(frame);
+      }
+      syncFrameIndex = nextIndex;
+      applySyncedFrameIndex();
+    } else {
+      const nextIndex = Math.max(0, Math.min(item.images.length - 1, item.frameIndex + step));
+      await ensureFrameReady(item.images[nextIndex]);
+      item.frameIndex = nextIndex;
+    }
+    compareCases.forEach((compareCase) => {
+      if (compareCase) preloadNearbyFrames(compareCase, compareCase.frameIndex);
+    });
+    renderFrame();
+  });
 });
 
 loadFolder().catch((err) => showError(err?.message || "Could not load images"));

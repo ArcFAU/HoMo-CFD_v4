@@ -1,11 +1,11 @@
 :root {
   color-scheme: dark;
-  --bg: #0b0f14;
-  --panel: #141b24;
-  --border: #263041;
-  --text: #e8eef6;
-  --muted: #9aabc0;
-  --accent: #3d9cf0;
+  --bg: #0b0f14;  /* 0b0f14 */
+  --panel: #141b24; /* 141b24 */
+  --border: #263041;  /* 263041 */
+  --text: #e8eef6;  /* e8eef6 */
+  --muted: #9aabc0; /* 9aabc0 */
+  --accent: #3d9cf0;  /* 3d9cf0 */
 }
 
 * {
@@ -54,7 +54,7 @@ body {
   align-items: center;
   gap: 10px;
   font-size: 18px;
-  font-weight: 650;
+  font-weight: 700;
   letter-spacing: 0.02em;
 }
 
@@ -301,6 +301,122 @@ select {
   flex: none;
 }
 
+.table-mode-switch {
+  flex: none;
+}
+
+.coefficient-reference {
+  min-width: 150px;
+  max-width: 220px;
+  background: #0c1219;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 12px;
+}
+
+.comparison-note {
+  margin: -2px 0 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.monitor-chart-card {
+  margin-top: 18px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+.monitor-chart-card > summary {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.monitor-chart-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.monitor-chart-controls select {
+  min-width: 230px;
+  max-width: min(420px, 65vw);
+  background: #0c1219;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 6px 8px;
+  font: inherit;
+}
+
+.monitor-chart-note {
+  margin: 8px 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.monitor-chart-viewport {
+  max-height: 480px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  background: #0c1219;
+}
+
+.monitor-chart {
+  display: block;
+  width: 100%;
+  min-width: 720px;
+  height: auto;
+}
+
+.monitor-grid-line {
+  stroke: #263041;
+  stroke-width: 1;
+}
+
+.monitor-zero-line {
+  stroke: #e8eef6;
+  stroke-width: 1.5;
+}
+
+.monitor-tick-label,
+.monitor-value-label,
+.monitor-case-label {
+  fill: var(--muted);
+  font-family: "Segoe UI", system-ui, sans-serif;
+  font-size: 11px;
+}
+
+.monitor-case-label {
+  fill: var(--text);
+}
+
+.monitor-color-0 { fill: #3d9cf0; }
+.monitor-color-1 { fill: #ed6a5a; }
+.monitor-color-2 { fill: #65b891; }
+.monitor-color-3 { fill: #e5b64b; }
+.monitor-color-4 { fill: #aa82da; }
+.monitor-color-5 { fill: #62b9c6; }
+
+.coefficient-reference {
+  min-width: 150px;
+  max-width: 220px;
+  background: #0c1219;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 12px;
+}
+
 .column-dialog {
   width: min(620px, calc(100vw - 28px));
   max-width: none;
@@ -403,6 +519,278 @@ select {
   color: #a8d9c4;
   font-size: 13px;
   font-weight: 600;
+}
+
+.pressure-toolbar {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 8px 12px 0;
+}
+
+.pressure-toolbar select {
+  min-width: 125px;
+  max-width: min(260px, 40vw);
+  padding: 7px 9px;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.pressure-toolbar button {
+  align-self: end;
+}
+
+.pressure-image-toggle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  align-self: center;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.pressure-image-toggle input {
+  accent-color: var(--accent);
+}
+
+.pressure-image-controls {
+  display: flex;
+  align-items: end;
+  gap: 8px;
+}
+
+.pressure-image-controls[hidden],
+.pressure-image-gallery[hidden] {
+  display: none;
+}
+
+.pressure-case-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 6px 12px 0;
+}
+
+.pressure-case-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  padding: 4px 9px;
+  font-size: 12px;
+}
+
+.pressure-case-chip button {
+  border: 0;
+  padding: 0 2px;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+.pressure-case-color-0 { color: #3498db; }
+.pressure-case-color-1 { color: #e74c3c; }
+.pressure-case-color-2 { color: #2ecc71; }
+.pressure-case-color-3 { color: #f1c40f; }
+
+.pressure-position-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.pressure-measurement {
+  margin-left: auto;
+  padding: 7px 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.pressure-plot-container {
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+}
+
+.pressure-chart-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.pressure-chart {
+  display: block;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+  max-height: none;
+}
+
+.pressure-chart-title {
+  fill: var(--text);
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.pressure-grid-line {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.pressure-tick-label,
+.pressure-chart-details {
+  fill: var(--muted);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.pressure-axis-label {
+  fill: var(--text);
+  font-size: 13px;
+}
+
+.pressure-line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2.2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.pressure-line-positive {
+  stroke: #3498db;
+}
+
+.pressure-line-negative {
+  stroke: #e74c3c;
+}
+
+.pressure-legend-label {
+  fill: var(--muted);
+  font-size: 12px;
+}
+
+.pressure-chart-details {
+  margin: 0;
+  padding: 0 18px 14px;
+}
+
+.pressure-empty {
+  min-height: 140px;
+}
+
+.pressure-image-gallery {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: auto repeat(2, minmax(0, 1fr));
+  gap: 0;
+  overflow: hidden;
+  padding: 0;
+}
+
+.pressure-gallery-title {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 2px 8px;
+  color: var(--text);
+  font-size: 16px;
+}
+
+.pressure-image-count-1 {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.pressure-image-count-2 {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto repeat(2, minmax(0, 1fr));
+}
+
+.pressure-image-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: #070a0e;
+  overflow: hidden;
+}
+
+.pressure-image-card img {
+  display: block;
+  width: 100%;
+  height: 0;
+  min-height: 0;
+  flex: 1;
+  max-height: none;
+  object-fit: contain;
+  background: #070a0e;
+}
+
+.viewer:has(.pressure-workspace-layout) {
+  overflow: hidden;
+}
+
+.pressure-workspace-layout {
+  flex: 1 1 0;
+  min-height: 0;
+  gap: 0;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
+  align-content: stretch;
+  overflow: hidden;
+  padding: 8px 12px 12px;
+}
+
+.app.pressure-fullscreen {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.app.pressure-fullscreen > .sidebar {
+  display: none;
+}
+
+.app.pressure-fullscreen > .viewer {
+  height: 100vh;
+}
+
+.pressure-workspace-with-images.pressure-case-count-1 {
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+}
+
+.pressure-workspace-layout > .pressure-toolbar,
+.pressure-workspace-layout > .pressure-case-chips {
+  grid-column: 1 / -1;
+}
+
+.pressure-workspace-layout:not(.pressure-workspace-with-images) > .pressure-plot-container {
+  grid-column: 1 / -1;
+}
+
+.pressure-workspace-layout > .pressure-plot-container,
+.pressure-workspace-layout > .pressure-image-gallery {
+  height: 100%;
 }
 
 .csv-table-wrap {
@@ -787,6 +1175,13 @@ select {
   min-height: 0;
   overflow: auto;
   background: #070a0e;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.compare-image-stage.panning {
+  cursor: grabbing;
 }
 
 .compare-zoom-frame {
@@ -889,6 +1284,51 @@ select {
     padding: 12px;
   }
 
+  .viewer:has(.pressure-workspace-layout) {
+    overflow: auto;
+  }
+
+  .pressure-workspace-layout {
+    flex: none;
+    height: auto;
+    min-height: 0;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto minmax(420px, 1fr) auto;
+    overflow: visible;
+  }
+
+  .pressure-workspace-with-images.pressure-case-count-1 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .pressure-workspace-layout > .pressure-toolbar,
+  .pressure-workspace-layout > .pressure-case-chips,
+  .pressure-workspace-layout > .pressure-plot-container,
+  .pressure-workspace-layout > .pressure-image-gallery {
+    grid-column: 1;
+  }
+
+  .pressure-image-gallery {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto;
+    grid-auto-rows: minmax(180px, auto);
+    overflow: visible;
+    padding: 0;
+  }
+
+  .pressure-image-count-1 {
+    grid-template-rows: auto minmax(180px, 1fr);
+  }
+
+  .pressure-image-count-2 {
+    grid-template-rows: auto repeat(2, minmax(180px, 1fr));
+  }
+
+  .pressure-chart {
+    height: 420px;
+    flex: none;
+  }
+
   .image-viewer {
     padding: 8px;
   }
@@ -901,4 +1341,47 @@ select {
   .comparison-controls {
     display: none;
   }
+}
+
+/* A plot series or scene image taken from a different station than the plot title. */
+.station-mismatch {
+  color: #f0b429;
+  fill: #f0b429;
+}
+
+.pressure-image-card {
+  position: relative;
+}
+
+.pressure-image-card .station-mismatch {
+  position: absolute;
+  left: 6px;
+  bottom: 6px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(11, 15, 20, 0.85);
+  font-size: 12px;
+}
+
+#reconnect-results {
+  margin: 0 0 10px;
+}
+
+/* Single-folder viewer (3D scene gallery): zoom enlarges a scrollable frame. */
+.image-viewer-stage.single-stage {
+  display: block;
+  /* The frame box does its own centering; inherited centering would push a
+     zoomed frame past the left edge, out of scroll reach. */
+  place-items: normal;
+  cursor: grab;
+  user-select: none;
+}
+
+.image-viewer-stage.single-stage.panning {
+  cursor: grabbing;
+}
+
+.image-viewer-stage.single-stage img {
+  max-width: none;
+  max-height: none;
 }

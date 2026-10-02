@@ -43,17 +43,23 @@ Known groups:
 - `plots/`
 - residual / inspection quantities (TKE per volume, Laplace(TP), continuity/momentum residuals, …)
 
-The current UI intentionally exposes this tree in a searchable filesystem panel. Selecting a result or subfolder filters the collective coefficient summary; selecting an image-section folder opens its images in a separate viewer window.
+The current UI intentionally exposes this tree in a searchable filesystem panel. Selecting a result or subfolder filters the collective coefficient summary; selecting an image-section folder opens its images in a separate viewer window. A folder named `3D` that contains static images opens a dedicated 3D reference-scene gallery window.
 
 ## Filename convention: intentionally NOT used for navigation
 
-Filenames are not parsed for position. Each image-section folder's images are sorted naturally by filename and stepped through by index with left/right arrow keys. The filename remains visible beneath the image. Zoom is available, with optional synchronization across separate viewer windows.
+Filenames are not parsed for position. Each image-section folder's images are sorted naturally by filename and stepped through by index with left/right arrow keys. The filename remains visible beneath the image. The static `3D` reference gallery uses the same natural filename ordering and left/right keys. Zoom is available, with optional synchronization across separate viewer windows.
 
-`PressureDistributions/` CSVs (e.g. `001_pd_FW_x-Section_2500mm.csv`) are confirmed to have headers (`... Direction [0,1,0] (mm)`) but the one sample supplied had **no data rows**. These files are not displayed in the current UI; defer pressure-distribution graphing until a populated sample is available.
+`PressureDistributions/` contains six groups: `pd_FW_x/y-Section`, `pd_UT_x/y-Section`, and `pd_RW_x/y-Section`. The supplied `0830_mk3` case has populated CSVs with two columns: a directional coordinate in mm and `Pressure Coefficient`. X-section files use `Direction [0,1,0]` (transverse y coordinate); y-section files use `Direction [1,0,0]` (longitudinal x coordinate). Filenames include the section station in mm, for example `005_pd_FW_x-Section_2420mm.csv`. Some station files have headers but no data rows; skip those when plotting. The sample has 150 x-stations and 80 y-stations per group, with populated-file counts FW x/y 38/76, UT x/y 147/72, RW x/y 37/72.
+
+Pressure-distribution groups in the filesystem tree open their matching pressure plot directly in an immersive workspace that hides the folder tree. The chart overlays up to four selected cases with distinct colors; each case uses its nearest populated station when exact stations differ. Header-only station files are omitted. Stations follow the natural CSV sequence from front to back, are stepped with keyboard left/right, and have no position dropdown. The chart uses the legacy fixed Cp range (-5 to +1), with positive Cp plotted downward and negative Cp upward; pressure-side samples (Cp > +0.1) and suction-side samples (Cp < -0.1) use separate colors within each case. Scene images are optional; when added, choose Cp, Velocity, CpT, or Lambda2 and they stay linked to the pressure plot's axis and station plane. The plot and images share one viewport. One image gets the larger view, two are stacked, and three or four use a two-by-two grid. Image case names and filenames are not repeated around each image, and image gaps are removed. Inspection of the old plot bytecode indicates its “upper/lower” groups refer to Cp thresholds, not physical geometry curves.
 
 ## Coefficients summary (confirmed, implemented)
 
 Each case's `plots/` subfolder contains a `Coefficients*.csv` (e.g. `Coefficients_49.csv`): one row per solver iteration, with CzA/CxA component-monitor columns. The UI aggregates these files into the only displayed table: one row per simulation, using only each file's final iteration. Coefficient values display to three decimal places; the iteration number remains an integer. Do not display full coefficient histories or other CSV tables.
+
+The table's Stage 5 comparison mode can show signed `case - reference` differences for each exported monitor column, keyed by its original CSV header. A collapsible raw-monitor bar chart compares one selected monitor across the visible simulations. Do not convert signs, label values as positive benefit, or infer units/formulas for downforce, drag, or front balance until they are confirmed against CFD-Tool/STAR-CCM+ definitions. The reference row should be zero; the default values view remains available.
+
+The legacy `CFD-Tool.zip` `resources/tables` presets confirm display aliases for `CzPercentageFront`, total `CzA`/`CxA`, and FW/UT/RW/Mono/Remaining component monitors. These presets configure labels and visibility only; inspection found no formulas, signs, or units. Keep derived aero metrics blocked until their definitions are supplied or verified from authoritative STAR-CCM+ references. Do not open the possible `p.ppk` archive entry.
 
 ## Product stages (agreed)
 
@@ -63,7 +69,7 @@ Each case's `plots/` subfolder contains a `Coefficients*.csv` (e.g. `Coefficient
 | 1 | Design screens (cases, field, section, viewer, plots) |
 | 2 | Tiny app: open → select a case → see it |
 | 3 | Filesystem-first CSV browser with separate image-folder windows |
-| 4 | CSV pressure plots (blocked on a populated sample CSV) |
+| 4 | CSV pressure plots (FW/UT/RW × x/y section and station) |
 | 5 | FSAE-specific aerodynamic comparison |
 | 6 | Interactive CFD fields (VTK / 3D), not only PNGs |
 | 7 | Fritz: submit, monitor, download, delete |
@@ -86,8 +92,10 @@ Each case's `plots/` subfolder contains a `Coefficients*.csv` (e.g. `Coefficient
 - Web app from day one (easier for AI-assisted work; teammates can open a URL later).
 - Frontend: first versions are vanilla HTML/JS in `web/` served by `py serve.py` (this PC has Python, not Node). We can move to React later if needed.
 - Later: Python FastAPI + PyVista / meshio / VTK for real fields.
-- Plots: Plotly when CSVs land.
+- Plots: lightweight inline SVG for pressure distributions; add a chart library only if later plots require richer interaction.
 - 3D: Three.js / R3F only after PNG viewer works.
+- Interactive 3D first step: a separate WebGL2 surface viewer reads STAR-CCM+ EnSight Gold geometry plus a per-element scalar from a selected `3D-data` folder. Initial preview scope is Cp on `tria3` / `quad4` surfaces; volume cuts and broader format support remain later work.
+- The workspace's `0830_mk3/3D-data` folder currently contains a manageable EnSight Gold Frontwing surface case with five per-element fields: `CpX`, `CpZ`, `CpZCpX`, `PressureCoefficient`, and `TotalPressureCoefficient`. The viewer triangulates `tria3`, `quad4`, and `nsided` faces, offers field and editable range controls, **Auto range** based on the rendered surface values, and signed-axis orthographic presets (+/−X, +/−Y, +/−Z) plus isometric. The user confirmed their selected full-car export renders and considers that sufficient; do not block work on re-exporting it. The workspace Frontwing sample has ranges CpX −2.751…+2.343, CpZ −3.319…+2.135, CpZCpX −4.507…+2.957, and PressureCoefficient/TotalPressureCoefficient −3.720…+1.305. The +1 maximum therefore clips positive values in this local sample, but the interface can be adjusted or auto-ranged. The `0830_mk3/3D/` folder contains 21 static reference scenes (Cp/CpT/directional Cp/SFC/flow pattern); these open in a standalone image gallery from the searchable filesystem tree, with left/right arrow navigation. The user also supplied X/Y/Z sequences, Lambda2 X images, pressure CSVs, component coefficient histories, and job/report reference files in this case folder; inspect/use them when their workflow feature is next in scope. A previously inspected 4.58 GB volume export with an `Air` part was superseded; it should not be treated as the current sample.
 - Local-first: user points the app at a result folder on disk (no cluster upload in V1).
 
 ## Cooperation rules (Cursor + ChatGPT)
@@ -106,3 +114,5 @@ Each case's `plots/` subfolder contains a `Coefficients*.csv` (e.g. `Coefficient
 - Full STAR-CCM+ format support
 - Adjoint / mesh generation UI
 - Replacing PuTTY/WinSCP immediately
+
+Scatter pressure plots now assign each case a distinct marker symbol: circle, square, triangle, or diamond. Both pressure and suction points use that case symbol, while their Cp-side colors remain different. The graph legend shows each case's marker on both color swatches.

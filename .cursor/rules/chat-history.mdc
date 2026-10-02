@@ -1,0 +1,11 @@
+---
+description: Keep the append-only project conversation history current for every task
+alwaysApply: true
+---
+
+# Conversation history
+
+- Read `AGENTS.md` and `CHAT_HISTORY.md` before project work.
+- Before completing each task, append the user's request and clarifications verbatim, the contributor's user-visible responses verbatim, and a concise record of changes and verification to `CHAT_HISTORY.md`.
+- Never edit or replace previous log entries. Do not include hidden reasoning or secrets.
+- If earlier transcript text is unavailable, identify the gap instead of fabricating a verbatim transcript.

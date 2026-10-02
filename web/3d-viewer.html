@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>3D Cp Viewer — HoMo CFD</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./3d-viewer.css" />
+  </head>
+  <body class="cfd3d-body">
+    <header class="cfd3d-toolbar">
+      <div class="cfd3d-title"><strong>3D CFD Field</strong><span id="case-name">Select a 3D-data folder to begin</span></div>
+      <button class="primary small" id="open-folder" type="button">Open 3D-data folder</button>
+      <label class="range-control" id="field-control" hidden>Field <select id="field-select"></select></label>
+      <label class="range-control" id="view-control" hidden>View <select id="view-preset">
+        <option value="iso">Isometric</option>
+        <option value="front">Front (+X)</option>
+        <option value="rear">Rear (−X)</option>
+        <option value="side-plus">Side (+Y)</option>
+        <option value="side-minus">Side (−Y)</option>
+        <option value="top">Top (+Z)</option>
+        <option value="bottom">Bottom (−Z)</option>
+      </select></label>
+      <label class="range-control">Range min <input id="cp-min" type="number" value="-5" step="0.5" /></label>
+      <label class="range-control">Range max <input id="cp-max" type="number" value="1" step="0.5" /></label>
+      <button class="small-control" id="auto-range" type="button" disabled title="Set the color range to the current field's surface minimum and maximum">Auto range</button>
+      <button class="small-control" id="reset-view" type="button" disabled>Reset view</button>
+    </header>
+    <main class="cfd3d-stage">
+      <canvas id="scene" aria-label="Interactive three dimensional pressure coefficient surface"></canvas>
+      <div class="cfd3d-empty" id="message">Open the case’s <code>3D-data</code> folder to view an EnSight surface field.</div>
+      <div class="cfd3d-error" id="error" hidden></div>
+      <div class="cfd3d-legend" id="legend" hidden><span id="legend-min">−5</span><div></div><span id="legend-max">+1</span><b id="legend-title">Field value</b></div>
+      <div class="cfd3d-help">Drag to rotate · wheel to zoom · right drag to move · View menu for axis presets</div>
+    </main>
+    <script src="./3d-viewer.js"></script>
+  </body>
+</html>

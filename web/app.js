@@ -1,32 +1,10 @@
 const SECTION_FOLDER = /^(.+)_([xyz])-Section$/i;
-const CASE_LABELS = ["A", "B", "C", "D"];
-const SLOT_COUNT = 4;
-
-// --- state -----------------------------------------------------------
-
-const state = {
-  resultsRootName: null,
-  availableCases: [], // [{ name, handle }] — quick-scanned subfolders of the results root
-  cases: [null, null, null, null], // each: { name, sections, extraFolders, handle } | null
-  // one view state per case slot (not per "panel" — a loaded case IS a panel now)
-  view: Array.from({ length: SLOT_COUNT }, () => ({
-    field: "",
-    axis: "x",
-    frameIndex: -1, // index into the current section's frames; -1 = none/unavailable
-    linked: false,
-    zoom: 1,
-  })),
-  // shared target for linked slots: an axis + frame index (not a physical
-  // position — we no longer read any meaning out of filenames).
-  link: { axis: "x", index: -1 },
-  focusedSlot: 0, // which slot the left/right arrow keys act on
-  fullViewSlot: null,
-  zoomLinked: false,
-};
-
 const ROOT_DB = "homo-cfd-settings";
 const ROOT_STORE = "folders";
 const TABLE_COLUMN_PREFS_KEY = "homo-cfd-coefficient-table-columns-v1";
+// Viewer windows receive their folder handles through IndexedDB entries;
+// entries older than this are pruned when the main window starts.
+const VIEWER_ENTRY_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 function openSettingsDb() {
   return new Promise((resolve, reject) => {
@@ -58,77 +36,42 @@ async function getSavedResultsRoot() {
   return handle;
 }
 
-// --- parsing / scanning (pure, DOM-free where possible) --------------
-
-async function framesFromDir(dir) {
-  const frames = [];
-  for await (const child of dir.values()) {
-    if (child.kind !== "file") continue;
-    if (!/\.(png|jpe?g|webp)$/i.test(child.name)) continue;
-    const file = await child.getFile();
-    frames.push({ name: child.name, url: URL.createObjectURL(file) });
-  }
-  // No meaning is read out of the filename (no mm/position parsing) — just
-  // a stable, human-sane order to step through with prev/next/arrow keys.
-  frames.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
-  return frames;
+// Removes viewer hand-off entries (viewer:, viewer-path:, viewer-set:,
+// viewer-catalog:, viewer-time:) whose window was opened more than
+// VIEWER_ENTRY_MAX_AGE_MS ago, or that predate timestamps.
+async function pruneViewerEntries() {
+  const db = await openSettingsDb();
+  await new Promise((resolve, reject) => {
+    const transaction = db.transaction(ROOT_STORE, "readwrite");
+    const store = transaction.objectStore(ROOT_STORE);
+    const keysRequest = store.getAllKeys();
+    keysRequest.onsuccess = () => {
+      const keys = keysRequest.result.filter((key) => typeof key === "string" && key.startsWith("viewer"));
+      const times = new Map();
+      keys.filter((key) => key.startsWith("viewer-time:")).forEach((key) => {
+        const timeRequest = store.get(key);
+        timeRequest.onsuccess = () => times.set(key.slice("viewer-time:".length), timeRequest.result);
+      });
+      // Second pass runs after the time reads above complete (same transaction, FIFO).
+      store.count().onsuccess = () => {
+        const now = Date.now();
+        keys.forEach((key) => {
+          const id = key.slice(key.indexOf(":") + 1);
+          const time = times.get(id);
+          if (!Number.isFinite(time) || now - time > VIEWER_ENTRY_MAX_AGE_MS) store.delete(key);
+        });
+      };
+    };
+    transaction.oncomplete = resolve;
+    transaction.onerror = () => reject(transaction.error);
+  });
+  db.close();
 }
 
-// Cheap check used while scanning a results root: is this a case folder
-// (contains at least one Field_axis-Section subfolder), without reading
-// any images yet. Full scanCaseFolder only runs once a case is actually
-// assigned to a slot.
-async function looksLikeCaseFolder(dirHandle) {
-  for await (const child of dirHandle.values()) {
-    if (child.kind === "directory" && SECTION_FOLDER.test(child.name)) return true;
-  }
-  return false;
-}
+// --- coefficient column labels ---------------------------------------------
 
-async function scanCaseFolder(root) {
-  const sections = [];
-  const extraFolders = [];
-  let coefficients = null;
-  for await (const child of root.values()) {
-    if (child.kind !== "directory") continue;
-    const match = child.name.match(SECTION_FOLDER);
-    if (!match) {
-      extraFolders.push(child.name);
-      if (/^plots$/i.test(child.name)) coefficients = await findCoefficients(child);
-      continue;
-    }
-    sections.push({
-      field: match[1],
-      axis: match[2].toLowerCase(),
-      folderName: child.name,
-      frames: await framesFromDir(child),
-    });
-  }
-  sections.sort((a, b) => `${a.field}-${a.axis}`.localeCompare(`${b.field}-${b.axis}`));
-  extraFolders.sort();
-  return { name: root.name, sections, extraFolders, coefficients, handle: root };
-}
-
-// --- coefficients summary (from <case>/plots/Coefficients*.csv) ---------
-
-// Column order/labels match the CFD-Tool home screen table exactly,
-// including its inconsistent abbreviation of "CzA MO" vs "CxA Mono".
-const COEFF_COLUMNS = [
-  "CzA Front(%)",
-  "CzA",
-  "CzA FW",
-  "CzA UT",
-  "CzA RW",
-  "CzA MO",
-  "CzA Rem",
-  "CxA",
-  "CxA FW",
-  "CxA UT",
-  "CxA RW",
-  "CxA Mono",
-  "CxA Rem",
-];
-
+// Short labels matching the CFD-Tool home screen table, including its
+// inconsistent abbreviation of "CzA MO" vs "CxA Mono".
 function classifyHeader(header) {
   const lower = header.toLowerCase();
   const isCz = lower.startsWith("cza");
@@ -150,454 +93,19 @@ function classifyHeader(header) {
   return null;
 }
 
-// Quote-aware CSV split — good enough for this monitor-export format
-// (quoted header cells, plain numeric data cells).
-function splitCsvLine(line) {
-  return line
-    .split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/)
-    .map((cell) => cell.trim().replace(/^"|"$/g, ""));
-}
-
-// The CSV is a per-iteration convergence history; the summary table only
-// wants the final (most-converged) row, matching what CFD-Tool's home
-// screen shows per case.
-function coefficientsFromCsv(text) {
-  const lines = text.trim().split(/\r?\n/).filter(Boolean);
-  if (lines.length < 2) return null;
-  const header = splitCsvLine(lines[0]);
-  const lastRow = splitCsvLine(lines[lines.length - 1]);
-  const values = {};
-  header.forEach((h, i) => {
-    const label = classifyHeader(h);
-    if (label) values[label] = Number(lastRow[i]);
-  });
-  return values;
-}
-
-async function findCoefficients(plotsDir) {
-  for await (const file of plotsDir.values()) {
-    if (file.kind === "file" && /^coefficients.*\.csv$/i.test(file.name)) {
-      try {
-        const f = await file.getFile();
-        return coefficientsFromCsv(await f.text());
-      } catch {
-        return null;
-      }
-    }
-  }
-  return null;
-}
-
-function uniqueFields(cfdCase) {
-  if (!cfdCase) return [];
-  return [...new Set(cfdCase.sections.map((s) => s.field))].sort();
-}
-
-function axesForField(cfdCase, field) {
-  if (!cfdCase) return [];
-  return cfdCase.sections.filter((s) => s.field === field).map((s) => s.axis);
-}
-
-function findSection(cfdCase, field, axis) {
-  if (!cfdCase) return undefined;
-  return cfdCase.sections.find((s) => s.field === field && s.axis === axis);
-}
-
-// --- slot helpers --------------------------------------------------------
-
-function slotSection(index) {
-  return findSection(state.cases[index], state.view[index].field, state.view[index].axis);
-}
-
-function slotFrame(index) {
-  const section = slotSection(index);
-  const view = state.view[index];
-  if (!section || view.frameIndex < 0) return undefined;
-  return section.frames[view.frameIndex];
-}
-
-function loadedSlots() {
-  const out = [];
-  for (let i = 0; i < SLOT_COUNT; i++) if (state.cases[i]) out.push(i);
-  return out;
-}
-
-// Called when a slot's case or field changes (not a direct axis/frame
-// step): picks a sane default frame (the first one), or, if the slot is
-// linked, pulls from the current link target instead so it stays in sync
-// with the rest of its group.
-function resetSlotFrame(index) {
-  const view = state.view[index];
-  if (view.linked) {
-    syncSlotToLink(index);
-    return;
-  }
-  const section = slotSection(index);
-  view.frameIndex = section && section.frames.length ? 0 : -1;
-}
-
-function syncSlotToLink(index) {
-  const view = state.view[index];
-  view.axis = state.link.axis;
-  const section = slotSection(index);
-  view.frameIndex =
-    section && state.link.index >= 0 && state.link.index < section.frames.length
-      ? state.link.index
-      : -1;
-}
-
-// Called when a linked slot's own axis/frame control is used directly:
-// this slot becomes the new source of truth for every linked slot.
-function broadcastLink(fromIndex) {
-  const view = state.view[fromIndex];
-  state.link.axis = view.axis;
-  state.link.index = view.frameIndex;
-  for (const i of loadedSlots()) {
-    if (i !== fromIndex && state.view[i].linked) syncSlotToLink(i);
-  }
-}
-
-async function loadCaseIntoSlot(index, dirHandle) {
-  const scanned = await scanCaseFolder(dirHandle);
-  state.cases[index] = scanned;
-  const view = state.view[index];
-  view.linked = false; // start each newly (re)loaded case unlinked to avoid surprises
-  const fields = uniqueFields(scanned);
-  view.field = fields[0] ?? "";
-  const axes = axesForField(scanned, view.field);
-  view.axis = axes[0] ?? "x";
-  resetSlotFrame(index);
-  if (!loadedSlots().includes(state.focusedSlot)) state.focusedSlot = index;
-}
-
-function clearSlot(index) {
-  state.cases[index] = null;
-  state.view[index] = { field: "", axis: "x", frameIndex: -1, linked: false };
-  if (state.focusedSlot === index) {
-    const remaining = loadedSlots();
-    state.focusedSlot = remaining.length ? remaining[0] : 0;
-  }
-}
-
-// --- rendering ---------------------------------------------------------
+// --- shared DOM helpers ------------------------------------------------
 
 const el = {
   error: document.getElementById("error"),
   caseSlots: document.getElementById("case-slots"),
   summary: document.getElementById("summary"),
   panels: document.getElementById("panels"),
-  fullView: document.getElementById("full-view"),
+  reconnect: document.getElementById("reconnect-results"),
 };
 
 function showError(message) {
   el.error.hidden = !message;
   el.error.textContent = message || "";
-}
-
-function chip(label, active, onClick) {
-  const button = document.createElement("button");
-  button.type = "button";
-  button.textContent = label;
-  button.className = active ? "active" : "";
-  button.addEventListener("click", onClick);
-  return button;
-}
-
-function renderCaseSlots() {
-  const rows = [];
-
-  const rootRow = document.createElement("div");
-  rootRow.className = "results-root";
-  const rootBtn = document.createElement("button");
-  rootBtn.type = "button";
-  rootBtn.className = "primary small";
-  rootBtn.textContent = state.resultsRootName ? "Change results folder" : "Open results folder";
-  rootBtn.addEventListener("click", openResultsRoot);
-  rootRow.appendChild(rootBtn);
-  if (state.resultsRootName) {
-    const info = document.createElement("p");
-    info.className = "hint";
-    info.textContent = `${state.resultsRootName} · ${state.availableCases.length} case${state.availableCases.length === 1 ? "" : "s"} found`;
-    rootRow.appendChild(info);
-  }
-  rows.push(rootRow);
-
-  state.cases.forEach((cfdCase, index) => {
-    const row = document.createElement("div");
-    row.className = "case-slot";
-
-    const topLine = document.createElement("div");
-    topLine.className = "case-slot-row";
-    const label = document.createElement("span");
-    label.className = "case-slot-label";
-    label.textContent = `Case ${CASE_LABELS[index]}`;
-    topLine.appendChild(label);
-    row.appendChild(topLine);
-
-    const controlsLine = document.createElement("div");
-    controlsLine.className = "case-slot-row";
-
-    if (state.availableCases.length) {
-      const select = document.createElement("select");
-      const noneOpt = document.createElement("option");
-      noneOpt.value = "-1";
-      noneOpt.textContent = "— none —";
-      select.appendChild(noneOpt);
-      state.availableCases.forEach((c, i) => {
-        const opt = document.createElement("option");
-        opt.value = String(i);
-        opt.textContent = c.name;
-        select.appendChild(opt);
-      });
-      const matchIdx = cfdCase
-        ? state.availableCases.findIndex((c) => c.handle === cfdCase.handle)
-        : -1;
-      select.value = String(matchIdx);
-      select.addEventListener("change", async () => {
-        const i = Number(select.value);
-        if (i < 0) {
-          clearSlot(index);
-          render();
-          return;
-        }
-        await loadCaseIntoSlot(index, state.availableCases[i].handle);
-        render();
-      });
-      controlsLine.appendChild(select);
-
-      const browseBtn = document.createElement("button");
-      browseBtn.type = "button";
-      browseBtn.className = "primary small";
-      browseBtn.textContent = "Browse…";
-      browseBtn.addEventListener("click", () => openCaseIntoSlot(index));
-      controlsLine.appendChild(browseBtn);
-    } else {
-      const openBtn = document.createElement("button");
-      openBtn.type = "button";
-      openBtn.className = "primary small";
-      openBtn.textContent = cfdCase ? "Replace" : "Open";
-      openBtn.addEventListener("click", () => openCaseIntoSlot(index));
-      controlsLine.appendChild(openBtn);
-    }
-    row.appendChild(controlsLine);
-
-    const meta = document.createElement("p");
-    meta.className = "hint";
-    meta.textContent = cfdCase
-      ? `${cfdCase.name} · ${cfdCase.sections.length} section folders`
-      : "Not loaded";
-    row.appendChild(meta);
-
-    rows.push(row);
-  });
-
-  el.caseSlots.replaceChildren(...rows);
-}
-
-function renderPanel(index) {
-  const cfdCase = state.cases[index];
-  const view = state.view[index];
-
-  const card = document.createElement("div");
-  card.className = "panel" + (index === state.focusedSlot ? " focused" : "");
-  // Click-to-focus: this slot becomes the target of left/right arrow keys.
-  card.addEventListener("click", () => {
-    if (state.focusedSlot !== index) {
-      state.focusedSlot = index;
-      render();
-    }
-  });
-
-  const header = document.createElement("div");
-  header.className = "panel-header";
-
-  const title = document.createElement("span");
-  title.className = "panel-title";
-  title.textContent = `Case ${CASE_LABELS[index]} — ${cfdCase.name}`;
-
-  const expandBtn = document.createElement("button");
-  expandBtn.type = "button";
-  expandBtn.className = "small-control";
-  expandBtn.textContent = "Full view";
-  expandBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    state.fullViewSlot = index;
-    render();
-  });
-
-  const linkLabel = document.createElement("label");
-  linkLabel.className = "link-toggle";
-  const linkCheckbox = document.createElement("input");
-  linkCheckbox.type = "checkbox";
-  linkCheckbox.checked = view.linked;
-  linkCheckbox.addEventListener("click", (e) => e.stopPropagation());
-  linkCheckbox.addEventListener("change", () => {
-    view.linked = linkCheckbox.checked;
-    if (view.linked) {
-      // First slot to link seeds the shared target; later slots adopt it.
-      if (state.link.index === -1) broadcastLink(index);
-      else syncSlotToLink(index);
-    }
-    render();
-  });
-  linkLabel.append(linkCheckbox, document.createTextNode(" Link"));
-
-  header.append(title, expandBtn, linkLabel);
-  card.appendChild(header);
-
-  // field: dropdown, not chips — a case can have a dozen+ fields
-  // (Cp, CpT, Velocity, Mesh, TKE, every *-Residual…)
-  const fields = uniqueFields(cfdCase);
-  const controlsRow = document.createElement("div");
-  controlsRow.className = "controls-row";
-
-  const fieldSelect = document.createElement("select");
-  fields.forEach((f) => {
-    const opt = document.createElement("option");
-    opt.value = f;
-    opt.textContent = f;
-    if (f === view.field) opt.selected = true;
-    fieldSelect.appendChild(opt);
-  });
-  fieldSelect.addEventListener("click", (e) => e.stopPropagation());
-  fieldSelect.addEventListener("change", () => {
-    view.field = fieldSelect.value;
-    const axes = axesForField(cfdCase, view.field);
-    if (!axes.includes(view.axis)) view.axis = axes[0] ?? "x";
-    // Field is independent even when linked: re-resolve against the
-    // group's existing axis/index (resetSlotFrame pulls from the link).
-    resetSlotFrame(index);
-    render();
-  });
-  controlsRow.appendChild(fieldSelect);
-
-  // axis: still chips, only ever X / Y / Z
-  const axes = axesForField(cfdCase, view.field);
-  const axisRow = document.createElement("div");
-  axisRow.className = "choices small";
-  axisRow.append(
-    ...axes.map((a) =>
-      chip(a.toUpperCase(), a === view.axis, (e) => {
-        e.stopPropagation();
-        // Axis is a direct user action: this slot becomes the source of
-        // truth for the link group (do NOT pull from the link first).
-        view.axis = a;
-        const section = slotSection(index);
-        view.frameIndex = section && section.frames.length ? 0 : -1;
-        if (view.linked) broadcastLink(index);
-        render();
-      }),
-    ),
-  );
-  controlsRow.appendChild(axisRow);
-  card.appendChild(controlsRow);
-
-  // Frame navigation is keyboard-only; the filename caption identifies the image.
-  const section = slotSection(index);
-  const frames = section?.frames ?? [];
-
-  // image stage — sized to shrink, never to crop (object-fit: contain).
-  const stage = document.createElement("div");
-  stage.className = "stage";
-  const frame = slotFrame(index);
-  if (frame) {
-    const img = document.createElement("img");
-    img.src = frame.url;
-    img.alt = frame.name;
-    img.style.transform = `scale(${view.zoom ?? 1})`;
-    stage.appendChild(img);
-  } else {
-    const msg = document.createElement("div");
-    msg.className = "empty";
-    if (!view.field) {
-      msg.textContent = "This case has no section folders yet.";
-    } else if (view.linked && !axesForField(cfdCase, view.field).includes(state.link.axis)) {
-      msg.textContent = `Section unavailable: ${view.field} has no ${state.link.axis.toUpperCase()} sections for this case.`;
-    } else if (view.linked) {
-      msg.textContent = `Section unavailable: this case's ${view.field} ${state.link.axis.toUpperCase()} folder only has ${frames.length} frame${frames.length === 1 ? "" : "s"}.`;
-    } else {
-      msg.textContent = "No frames in this field/axis.";
-    }
-    stage.appendChild(msg);
-  }
-  card.appendChild(stage);
-
-  if (frame) {
-    const caption = document.createElement("div");
-    caption.className = "caption";
-    caption.textContent = frame.name;
-    card.appendChild(caption);
-  }
-
-  const zoomRow = document.createElement("div");
-  zoomRow.className = "zoom-row";
-  const zoomOut = document.createElement("button");
-  zoomOut.type = "button";
-  zoomOut.className = "small-control";
-  zoomOut.textContent = "−";
-  zoomOut.title = "Zoom out";
-  zoomOut.addEventListener("click", (e) => {
-    e.stopPropagation();
-    setZoom(index, (view.zoom ?? 1) / 1.2);
-  });
-  const zoomLabel = document.createElement("span");
-  zoomLabel.className = "zoom-label";
-  zoomLabel.textContent = `${Math.round((view.zoom ?? 1) * 100)}%`;
-  const zoomIn = document.createElement("button");
-  zoomIn.type = "button";
-  zoomIn.className = "small-control";
-  zoomIn.textContent = "+";
-  zoomIn.title = "Zoom in";
-  zoomIn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    setZoom(index, (view.zoom ?? 1) * 1.2);
-  });
-  const zoomReset = document.createElement("button");
-  zoomReset.type = "button";
-  zoomReset.className = "small-control";
-  zoomReset.textContent = "Reset";
-  zoomReset.addEventListener("click", (e) => {
-    e.stopPropagation();
-    setZoom(index, 1);
-  });
-  const zoomLink = document.createElement("label");
-  zoomLink.className = "link-toggle";
-  const zoomCheckbox = document.createElement("input");
-  zoomCheckbox.type = "checkbox";
-  zoomCheckbox.checked = state.zoomLinked;
-  zoomCheckbox.addEventListener("click", (e) => e.stopPropagation());
-  zoomCheckbox.addEventListener("change", () => {
-    state.zoomLinked = zoomCheckbox.checked;
-    if (state.zoomLinked) {
-      const zoom = view.zoom ?? 1;
-      loadedSlots().forEach((slot) => { state.view[slot].zoom = zoom; });
-    }
-    render();
-  });
-  zoomLink.append(zoomCheckbox, document.createTextNode(" Sync zoom"));
-  zoomRow.append(zoomOut, zoomLabel, zoomIn, zoomReset, zoomLink);
-  card.appendChild(zoomRow);
-
-  return card;
-}
-
-function setZoom(index, zoom) {
-  const boundedZoom = Math.max(0.5, Math.min(4, zoom));
-  if (state.zoomLinked) loadedSlots().forEach((slot) => { state.view[slot].zoom = boundedZoom; });
-  else state.view[index].zoom = boundedZoom;
-  render();
-}
-
-function stepSlot(index, delta) {
-  const view = state.view[index];
-  const section = slotSection(index);
-  const frames = section?.frames ?? [];
-  if (!frames.length || view.frameIndex < 0) return;
-  const next = view.frameIndex + delta;
-  if (next < 0 || next >= frames.length) return;
-  view.frameIndex = next;
-  if (view.linked) broadcastLink(index);
-  render();
 }
 
 function cell(tag, text) {
@@ -606,182 +114,20 @@ function cell(tag, text) {
   return e;
 }
 
-function renderSummary() {
-  const slots = loadedSlots();
-  if (!slots.length) {
-    el.summary.hidden = true;
-    el.summary.replaceChildren();
-    return;
-  }
-  el.summary.hidden = false;
-
-  const table = document.createElement("table");
-  table.className = "summary-table";
-
-  const headRow = document.createElement("tr");
-  headRow.appendChild(cell("th", "Case"));
-  COEFF_COLUMNS.forEach((c) => headRow.appendChild(cell("th", c)));
-  const thead = document.createElement("thead");
-  thead.appendChild(headRow);
-  table.appendChild(thead);
-
-  const tbody = document.createElement("tbody");
-  slots.forEach((i) => {
-    const c = state.cases[i];
-    const row = document.createElement("tr");
-    row.appendChild(cell("td", `${CASE_LABELS[i]} — ${c.name}`));
-    COEFF_COLUMNS.forEach((col) => {
-      const v = c.coefficients?.[col];
-      row.appendChild(cell("td", v == null || Number.isNaN(v) ? "—" : v.toFixed(3)));
-    });
-    tbody.appendChild(row);
-  });
-  table.appendChild(tbody);
-
-  el.summary.replaceChildren(table);
-}
-
-function render() {
-  renderCaseSlots();
-  renderSummary();
-  renderFullView();
-
-  const slots = loadedSlots();
-  if (!slots.length) {
-    el.panels.style.gridTemplateColumns = "1fr";
-    el.panels.style.gridTemplateRows = "1fr";
-    const empty = document.createElement("div");
-    empty.className = "panel-empty standalone";
-    empty.textContent = "Open a results folder and load a case to begin.";
-    el.panels.replaceChildren(empty);
-    return;
-  }
-
-  el.panels.style.gridTemplateColumns = "minmax(0, 1fr)";
-  el.panels.style.gridTemplateRows = `repeat(${slots.length}, minmax(70vh, auto))`;
-  el.panels.replaceChildren(...slots.map((i) => renderPanel(i)));
-}
-
-function renderFullView() {
-  if (state.fullViewSlot == null || !state.cases[state.fullViewSlot]) {
-    el.fullView.hidden = true;
-    el.fullView.replaceChildren();
-    return;
-  }
-  const slot = state.fullViewSlot;
-  el.fullView.hidden = false;
-  const close = document.createElement("button");
-  close.type = "button";
-  close.className = "small-control close-view";
-  close.textContent = "Close full view";
-  close.addEventListener("click", () => {
-    state.fullViewSlot = null;
-    render();
-  });
-  const panel = renderPanel(slot);
-  panel.classList.add("full-panel");
-  el.fullView.replaceChildren(close, panel);
-}
-
 // --- keyboard navigation -------------------------------------------------
 
+// Left/right arrow keys step pressure-distribution stations while the
+// pressure workspace is open. Image stepping lives in the viewer windows.
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && state.fullViewSlot != null) {
-    state.fullViewSlot = null;
-    render();
-    return;
-  }
   if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+  if (!document.querySelector(".pressure-toolbar")) return;
   const target = e.target;
-  if (target && (target.tagName === "SELECT" || target.tagName === "INPUT")) return;
-  if (!state.cases[state.focusedSlot]) return;
+  const isTextEntry = target?.isContentEditable || target?.tagName === "TEXTAREA" ||
+    (target?.tagName === "INPUT" && !["checkbox", "radio"].includes(target.type));
+  if (isTextEntry) return;
+  stepPressureStation(e.key === "ArrowRight" ? 1 : -1);
   e.preventDefault();
-  stepSlot(state.focusedSlot, e.key === "ArrowRight" ? 1 : -1);
 });
-
-// --- opening folders -----------------------------------------------------
-
-// Opens one parent folder (e.g. the "finished" folder from CFD-Tool) and
-// lists every immediate subfolder that looks like a case, so cases can be
-// picked from a dropdown afterwards instead of running the OS folder
-// picker again for every single case.
-async function openResultsRoot() {
-  showError("");
-  if (!window.showDirectoryPicker) {
-    showError("This browser cannot open a local folder. Use Chrome or Edge.");
-    return;
-  }
-  try {
-    const rootHandle = await window.showDirectoryPicker({ mode: "read" });
-    await saveResultsRoot(rootHandle);
-    await scanResultsRoot(rootHandle);
-  } catch (err) {
-    if (err?.name === "AbortError") return;
-    showError(err?.message || "Could not open results folder");
-  }
-}
-
-async function findCoefficientsForCase(caseHandle) {
-  try {
-    const plots = await caseHandle.getDirectoryHandle("plots");
-    return await findCoefficients(plots);
-  } catch {
-    return null;
-  }
-}
-
-async function restoreResultsRoot() {
-  try {
-    if (!window.showDirectoryPicker || !window.indexedDB) return;
-    const rootHandle = await getSavedResultsRoot();
-    if (!rootHandle) return;
-    if (await rootHandle.queryPermission({ mode: "read" }) !== "granted") {
-      showError(`Previously used folder “${rootHandle.name}” needs access. Choose it once with Open results folder to reconnect.`);
-      return;
-    }
-    await scanResultsRoot(rootHandle);
-  } catch (err) {
-    showError(err?.message || "Could not restore the remembered results folder");
-  }
-}
-
-async function scanResultsRoot(rootHandle) {
-  const found = [];
-  for await (const child of rootHandle.values()) {
-    if (child.kind !== "directory" || !(await looksLikeCaseFolder(child))) continue;
-    found.push({ name: child.name, handle: child, coefficients: await findCoefficientsForCase(child) });
-  }
-  found.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
-  if (!found.length) {
-    showError("No case folders found directly inside that folder. Pick the folder that holds all your cases.");
-    return;
-  }
-  state.resultsRootName = rootHandle.name;
-  state.availableCases = found;
-  await loadCaseIntoSlot(0, found[0].handle);
-  render();
-}
-
-async function openCaseIntoSlot(index) {
-  showError("");
-  if (!window.showDirectoryPicker) {
-    showError("This browser cannot open a local folder. Use Chrome or Edge.");
-    return;
-  }
-  try {
-    const handle = await window.showDirectoryPicker({ mode: "read" });
-    if (!(await looksLikeCaseFolder(handle))) {
-      showError(
-        "No folders matching Field_x-Section were found. Pick the postprocessing result directory for one case.",
-      );
-    }
-    await loadCaseIntoSlot(index, handle);
-    render();
-  } catch (err) {
-    if (err?.name === "AbortError") return;
-    showError(err?.message || "Could not open folder");
-  }
-}
 
 // --- filesystem and CSV workspace ------------------------------------
 
@@ -799,10 +145,26 @@ const browserState = {
   expandedCsv: new Set(),
   columnHeaders: [],
   coefficientRows: [],
+  monitorChartHeader: "",
+  coefficientView: "values",
+  coefficientReferencePath: "",
+  pressureCasePath: "",
+  pressureComparePaths: [],
+  pressureSurface: "FW",
+  pressureAxis: "x",
+  pressureStationPath: "",
+  pressureStationPosition: null,
+  pressureSceneField: "Cp",
+  pressureShowImages: false,
+  pressureImageUrls: [],
+  pressureRequestToken: 0,
+  pressureAvailability: new WeakMap(),
+  pressureStationFiles: [],
+  pressureRefresh: null,
 };
 
-async function buildFolderNode(handle, path = "", isSection = false) {
-  const node = { name: handle.name, path, handle, isSection, folders: [], files: [], csvFiles: [] };
+async function buildFolderNode(handle, path = "", isSection = false, sceneImageCount = 0) {
+  const node = { name: handle.name, path, handle, isSection, sceneImageCount, isSceneGallery: sceneImageCount > 0, folders: [], files: [], csvFiles: [] };
   if (isSection) {
     for await (const child of handle.values()) {
       if (child.kind !== "file" || !/\.csv$/i.test(child.name)) continue;
@@ -812,6 +174,7 @@ async function buildFolderNode(handle, path = "", isSection = false) {
     }
     return node;
   }
+  if (node.isSceneGallery) return node;
   for await (const child of handle.values()) {
     if (child.kind === "file") {
       if (/\.csv$/i.test(child.name)) {
@@ -821,10 +184,12 @@ async function buildFolderNode(handle, path = "", isSection = false) {
       }
       continue;
     }
-    if (child.kind !== "directory") continue;
+    // Skip hidden folders such as .git or .vscode; they never hold results.
+    if (child.kind !== "directory" || child.name.startsWith(".")) continue;
     const childPath = path ? `${path}/${child.name}` : child.name;
     const childIsSection = await isImageSectionFolder(child);
-    const folder = await buildFolderNode(child, childPath, childIsSection);
+    const sceneImageCount = childIsSection ? 0 : await countStatic3DImages(child);
+    const folder = await buildFolderNode(child, childPath, childIsSection, sceneImageCount);
     node.folders.push(folder);
     node.csvFiles.push(...folder.csvFiles);
   }
@@ -833,6 +198,15 @@ async function buildFolderNode(handle, path = "", isSection = false) {
   node.files.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
   node.csvFiles.sort((a, b) => a.path.localeCompare(b.path, undefined, { numeric: true }));
   return node;
+}
+
+async function countStatic3DImages(handle) {
+  if (!/^3d$/i.test(handle.name)) return 0;
+  let count = 0;
+  for await (const child of handle.values()) {
+    if (child.kind === "file" && /\.(png|jpe?g|webp)$/i.test(child.name)) count++;
+  }
+  return count;
 }
 
 async function isImageSectionFolder(handle) {
@@ -884,6 +258,16 @@ function renderFolderNode(node) {
     button.addEventListener("click", () => openImageFolder(node));
     return button;
   }
+  if (node.isSceneGallery) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "tree-entry image-folder scene-gallery-folder";
+    button.dataset.path = node.path;
+    button.textContent = `${node.name} · ${node.sceneImageCount} scenes`;
+    button.title = `Open ${node.sceneImageCount} static 3D scenes in the image viewer`;
+    button.addEventListener("click", () => openSceneGallery(node));
+    return button;
+  }
 
   const details = document.createElement("details");
   details.className = "folder-node";
@@ -892,8 +276,16 @@ function renderFolderNode(node) {
   summary.className = "tree-entry" + (browserState.selectedFolder?.path === node.path ? " selected" : "");
   summary.dataset.path = node.path;
   summary.textContent = node.name;
-  summary.title = `Show CSV tables in ${node.path}`;
-  summary.addEventListener("click", () => selectFolder(node));
+  const pressureGroup = pressureGroupFromNode(node);
+  summary.title = pressureGroup ? `Open ${pressureGroup.surface} ${pressureGroup.axis.toUpperCase()} pressure plot` : `Show CSV tables in ${node.path}`;
+  summary.addEventListener("click", (event) => {
+    if (pressureGroup) {
+      event.preventDefault();
+      openPressureGroup(node, pressureGroup);
+      return;
+    }
+    selectFolder(node);
+  });
   details.appendChild(summary);
 
   const children = document.createElement("div");
@@ -916,7 +308,29 @@ function renderCsvFileButton(file) {
   return button;
 }
 
+function pressureGroupFromNode(node) {
+  const parts = node.path.split("/");
+  const pressureIndex = parts.findIndex((part) => /^PressureDistributions$/i.test(part));
+  if (pressureIndex < 0 || pressureIndex !== parts.length - 2) return null;
+  const match = parts.at(-1).match(/^pd_(FW|UT|RW)_([xy])-Section$/i);
+  return match ? { surface: match[1].toUpperCase(), axis: match[2].toLowerCase(), casePath: parts.slice(0, pressureIndex).join("/") } : null;
+}
+
+function openPressureGroup(node, group) {
+  browserState.selectedFolder = node;
+  browserState.selectedFile = null;
+  browserState.pressureCasePath = group.casePath;
+  browserState.pressureComparePaths = [group.casePath];
+  browserState.pressureSurface = group.surface;
+  browserState.pressureAxis = group.axis;
+  browserState.pressureStationPath = "";
+  browserState.pressureStationPosition = null;
+  updateTreeSelection();
+  openPressureWorkspace();
+}
+
 async function selectFolder(node) {
+  browserState.pressureRequestToken++;
   browserState.selectedFolder = node;
   browserState.selectedFile = null;
   updateTreeSelection();
@@ -924,6 +338,7 @@ async function selectFolder(node) {
 }
 
 async function selectCsvFile(file) {
+  browserState.pressureRequestToken++;
   browserState.selectedFile = file;
   updateTreeSelection();
   await showCsvTables([file], file.path);
@@ -952,6 +367,8 @@ async function showCsvTables(files, title) {
 }
 
 function renderCsvWorkspaceHeader() {
+  el.panels.classList.remove("pressure-workspace-layout", "pressure-workspace-with-images");
+  el.panels.closest(".app")?.classList.remove("pressure-fullscreen");
   el.summary.hidden = false;
   const heading = document.createElement("h1");
   heading.className = "workspace-title";
@@ -973,11 +390,573 @@ function renderCsvWorkspaceHeader() {
   customize.textContent = "Customize columns";
   customize.disabled = !browserState.columnHeaders.length;
   customize.addEventListener("click", () => openColumnDialog());
-  el.summary.replaceChildren(heading, count, filter, customize);
+  const pressureButton = document.createElement("button");
+  pressureButton.type = "button";
+  pressureButton.className = "small-control";
+  pressureButton.textContent = "Pressure plots";
+  pressureButton.title = "View pressure coefficient distributions by surface and section";
+  pressureButton.addEventListener("click", () => openPressureWorkspace());
+  const comparisonMode = document.createElement("div");
+  comparisonMode.className = "table-mode-switch choices small";
+  const valuesButton = document.createElement("button");
+  valuesButton.type = "button";
+  valuesButton.textContent = "Values";
+  valuesButton.className = browserState.coefficientView === "values" ? "active" : "";
+  valuesButton.addEventListener("click", () => {
+    browserState.coefficientView = "values";
+    updateCoefficientViewControls();
+    renderCsvTables(browserState.coefficientRows);
+  });
+  const deltaButton = document.createElement("button");
+  deltaButton.type = "button";
+  deltaButton.textContent = "Δ vs reference";
+  deltaButton.className = browserState.coefficientView === "delta" ? "active" : "";
+  deltaButton.addEventListener("click", () => {
+    browserState.coefficientView = "delta";
+    updateCoefficientViewControls();
+    renderCsvTables(browserState.coefficientRows);
+  });
+  comparisonMode.append(valuesButton, deltaButton);
+  const referenceSelect = document.createElement("select");
+  referenceSelect.id = "coefficient-reference";
+  referenceSelect.className = "coefficient-reference";
+  referenceSelect.setAttribute("aria-label", "Reference simulation");
+  referenceSelect.addEventListener("change", () => {
+    browserState.coefficientReferencePath = referenceSelect.value;
+    renderCsvTables(browserState.coefficientRows);
+  });
+  el.summary.replaceChildren(heading, count, filter, customize, comparisonMode, referenceSelect, pressureButton);
+  updateCoefficientViewControls();
   el.panels.replaceChildren(Object.assign(document.createElement("div"), {
     className: "workspace-empty",
     textContent: "Loading coefficient summary…",
   }));
+}
+
+// Every simulation folder under the results root, at any depth; the root
+// itself counts when it is a simulation folder.
+function simulationNodes(node = browserState.root) {
+  if (!node) return [];
+  if (node.isCase) return [node];
+  return node.folders.flatMap((folder) => simulationNodes(folder));
+}
+
+function pressureCaseNodes() {
+  return simulationNodes();
+}
+
+// Parent folder path of a "a/b/c" style tree path; "" for top-level entries.
+function parentPath(path) {
+  const slash = path.lastIndexOf("/");
+  return slash < 0 ? "" : path.slice(0, slash);
+}
+
+function openPressureWorkspace() {
+  const cases = pressureCaseNodes();
+  browserState.pressureComparePaths = browserState.pressureComparePaths.filter((path) => cases.some((node) => node.path === path)).slice(0, 4);
+  if (!cases.some((node) => node.path === browserState.pressureCasePath)) browserState.pressureCasePath = cases[0]?.path ?? "";
+  if (!browserState.pressureComparePaths.length && browserState.pressureCasePath) browserState.pressureComparePaths = [browserState.pressureCasePath];
+  if (browserState.pressureComparePaths[0]) browserState.pressureCasePath = browserState.pressureComparePaths[0];
+  releasePressureImageUrls();
+  el.panels.closest(".app")?.classList.add("pressure-fullscreen");
+  renderPressureWorkspace();
+}
+
+function renderPressureWorkspace() {
+  el.summary.hidden = false;
+  const heading = document.createElement("h1");
+  heading.className = "workspace-title";
+  heading.textContent = "Pressure distributions";
+  const backButton = document.createElement("button");
+  backButton.type = "button";
+  backButton.className = "small-control";
+  backButton.textContent = "Back to coefficients";
+  backButton.addEventListener("click", async () => {
+    browserState.pressureRequestToken++;
+    releasePressureImageUrls();
+    renderCsvWorkspaceHeader();
+    el.panels.classList.remove("pressure-workspace-layout", "pressure-workspace-with-images");
+    await renderCsvPage();
+  });
+  el.summary.replaceChildren(heading, backButton);
+
+  const cases = pressureCaseNodes();
+  if (!cases.length) {
+    el.panels.replaceChildren(Object.assign(document.createElement("div"), {
+      className: "workspace-empty",
+      textContent: "No simulation cases are loaded. Open a results folder containing case folders to view pressure distributions.",
+    }));
+    return;
+  }
+
+  const toolbar = document.createElement("section");
+  toolbar.className = "pressure-toolbar";
+  const caseSelect = document.createElement("select");
+  caseSelect.setAttribute("aria-label", "Add simulation to comparison");
+  caseSelect.add(new Option("Choose case to add…", ""));
+  cases.filter((node) => !browserState.pressureComparePaths.includes(node.path)).forEach((node) => caseSelect.add(new Option(node.name, node.path)));
+  const addCase = document.createElement("button");
+  addCase.type = "button"; addCase.className = "small-control"; addCase.textContent = "Add case";
+  addCase.disabled = browserState.pressureComparePaths.length >= 4 || caseSelect.options.length < 2;
+  const surfaceSelect = document.createElement("select");
+  surfaceSelect.setAttribute("aria-label", "Surface");
+  [["FW", "Front wing"], ["UT", "Undertray"], ["RW", "Rear wing"]].forEach(([value, label]) => {
+    surfaceSelect.add(new Option(label, value));
+  });
+  surfaceSelect.value = browserState.pressureSurface;
+  const axisSelect = document.createElement("select");
+  axisSelect.setAttribute("aria-label", "Section axis");
+  axisSelect.add(new Option("X section", "x"));
+  axisSelect.add(new Option("Y section", "y"));
+  axisSelect.value = browserState.pressureAxis;
+  const showImages = document.createElement("input"); showImages.type = "checkbox"; showImages.checked = browserState.pressureShowImages;
+  const showImagesLabel = document.createElement("label"); showImagesLabel.className = "pressure-image-toggle";
+  showImagesLabel.append(showImages, document.createTextNode("Add scene images"));
+  const sceneField = document.createElement("select");
+  sceneField.setAttribute("aria-label", "Image field");
+  [["Cp", "Cp image"], ["Velocity", "Velocity image"], ["CpT", "CpT image"], ["Lambda2", "Lambda2 image"]].forEach(([value, label]) => sceneField.add(new Option(label, value)));
+  sceneField.value = browserState.pressureSceneField;
+  const measurement = document.createElement("span");
+  measurement.className = "pressure-measurement";
+  measurement.textContent = "Overlay up to 4 cases · use keyboard ← / → to step sections";
+  const imageControls = document.createElement("div"); imageControls.className = "pressure-image-controls";
+  imageControls.append(sceneField);
+  toolbar.append(caseSelect, addCase, surfaceSelect, axisSelect, showImagesLabel, imageControls, measurement);
+
+  const plotContainer = document.createElement("section");
+  plotContainer.className = "pressure-plot-container";
+  plotContainer.setAttribute("aria-live", "polite");
+  const selectedCases = document.createElement("div"); selectedCases.className = "pressure-case-chips";
+  const imageGallery = document.createElement("section"); imageGallery.className = "pressure-image-gallery";
+  el.panels.classList.add("pressure-workspace-layout");
+  el.panels.classList.toggle("pressure-workspace-with-images", showImages.checked);
+  imageControls.hidden = !showImages.checked;
+  imageGallery.hidden = !showImages.checked;
+  el.panels.replaceChildren(toolbar, selectedCases, plotContainer, imageGallery);
+
+  const updateCases = () => {
+    el.panels.classList.toggle("pressure-case-count-1", browserState.pressureComparePaths.length === 1);
+    renderPressureCaseChips(selectedCases, () => { updateCasePicker(); updateCases(); refresh(); });
+  };
+  const updateCasePicker = () => {
+    caseSelect.replaceChildren(new Option("Choose case to add…", ""));
+    cases.filter((node) => !browserState.pressureComparePaths.includes(node.path)).forEach((node) => caseSelect.add(new Option(node.name, node.path)));
+    addCase.disabled = browserState.pressureComparePaths.length >= 4 || caseSelect.options.length < 2;
+  };
+  const refresh = () => refreshPressureStations({ surfaceSelect, axisSelect, plotContainer, imageGallery, measurement });
+  browserState.pressureRefresh = refresh;
+  addCase.addEventListener("click", () => {
+    if (caseSelect.value && browserState.pressureComparePaths.length < 4) {
+      browserState.pressureComparePaths.push(caseSelect.value);
+      updateCasePicker(); updateCases(); refresh();
+    }
+  });
+  surfaceSelect.addEventListener("change", () => {
+    browserState.pressureSurface = surfaceSelect.value;
+    browserState.pressureStationPosition = null;
+    browserState.pressureStationPath = "";
+    refresh();
+  });
+  axisSelect.addEventListener("change", () => {
+    browserState.pressureAxis = axisSelect.value;
+    browserState.pressureStationPosition = null;
+    browserState.pressureStationPath = "";
+    refresh();
+  });
+  sceneField.addEventListener("change", () => { browserState.pressureSceneField = sceneField.value; refresh(); });
+  showImages.addEventListener("change", () => {
+    browserState.pressureShowImages = showImages.checked;
+    imageControls.hidden = !showImages.checked;
+    imageGallery.hidden = !showImages.checked;
+    el.panels.classList.toggle("pressure-workspace-with-images", showImages.checked);
+    refresh();
+  });
+  updateCasePicker(); updateCases();
+  refresh();
+}
+
+function renderPressureCaseChips(container, onChange) {
+  const nodes = pressureCaseNodes();
+  container.replaceChildren(...browserState.pressureComparePaths.map((path, index) => {
+    const node = nodes.find((entry) => entry.path === path);
+    const chip = document.createElement("span"); chip.className = `pressure-case-chip pressure-case-color-${index}`;
+    chip.textContent = node?.name ?? "Simulation";
+    const remove = document.createElement("button"); remove.type = "button"; remove.textContent = "×";
+    remove.setAttribute("aria-label", `Remove ${node?.name ?? "simulation"}`);
+    remove.addEventListener("click", () => {
+      browserState.pressureComparePaths = browserState.pressureComparePaths.filter((entry) => entry !== path);
+      if (browserState.pressureCasePath === path) browserState.pressureCasePath = browserState.pressureComparePaths[0] ?? "";
+      onChange();
+    });
+    chip.appendChild(remove); return chip;
+  }));
+}
+
+function releasePressureImageUrls() {
+  browserState.pressureImageUrls.forEach((url) => URL.revokeObjectURL(url));
+  browserState.pressureImageUrls = [];
+}
+
+function stepPressureStation(delta) {
+  const stations = browserState.pressureStationFiles;
+  if (stations.length < 2) return false;
+  const current = stations.findIndex((file) => file.path === browserState.pressureStationPath);
+  const next = Math.max(0, Math.min(stations.length - 1, (current < 0 ? 0 : current) + delta));
+  if (next === current) return false;
+  browserState.pressureStationPath = stations[next].path;
+  browserState.pressureStationPosition = stations[next].position;
+  browserState.pressureRefresh?.();
+  document.activeElement?.blur?.();
+  return true;
+}
+
+function pressureGroupFromFile(file) {
+  const parts = file.path.split("/");
+  const pressureIndex = parts.findIndex((part) => /^PressureDistributions$/i.test(part));
+  if (pressureIndex < 0 || pressureIndex + 1 >= parts.length) return null;
+  const match = parts[pressureIndex + 1].match(/^pd_(FW|UT|RW)_([xy])-Section$/i);
+  if (!match) return null;
+  const station = file.name.match(/_(-?\d+(?:\.\d+)?)mm\.csv$/i);
+  if (!station) return null;
+  return { surface: match[1].toUpperCase(), axis: match[2].toLowerCase(), position: Number(station[1]) };
+}
+
+function findPressureFiles(casePath, surface, axis) {
+  const caseNode = pressureCaseNodes().find((node) => node.path === casePath);
+  if (!caseNode) return [];
+  return caseNode.csvFiles.map((file) => ({ file, group: pressureGroupFromFile(file) }))
+    .filter((entry) => entry.group?.surface === surface && entry.group.axis === axis)
+    .sort((left, right) => left.file.name.localeCompare(right.file.name, undefined, { numeric: true }))
+    .map((entry) => ({ ...entry.file, position: entry.group.position }));
+}
+
+async function pressureFileHasData(file) {
+  if (browserState.pressureAvailability.has(file.handle)) return browserState.pressureAvailability.get(file.handle);
+  const checking = (async () => {
+    const blob = await file.handle.getFile();
+    const previewRows = parseCsv(await blob.slice(0, 512).text());
+    return previewRows.slice(1).some((row) => row.length >= 2 && Number.isFinite(Number(row[0])) && Number.isFinite(Number(row[1])));
+  })();
+  browserState.pressureAvailability.set(file.handle, checking);
+  try {
+    const available = await checking;
+    browserState.pressureAvailability.set(file.handle, available);
+    return available;
+  } catch (error) {
+    browserState.pressureAvailability.delete(file.handle);
+    throw error;
+  }
+}
+
+async function refreshPressureStations({ surfaceSelect, axisSelect, plotContainer, imageGallery, measurement }) {
+  const token = ++browserState.pressureRequestToken;
+  releasePressureImageUrls();
+  imageGallery.replaceChildren();
+  browserState.pressureStationFiles = [];
+  const primary = browserState.pressureComparePaths[0];
+  browserState.pressureCasePath = primary ?? "";
+  const files = findPressureFiles(primary, surfaceSelect.value, axisSelect.value);
+  plotContainer.replaceChildren(Object.assign(document.createElement("div"), {
+    className: "workspace-empty pressure-empty",
+    textContent: files.length ? "Finding stations with measurements…" : "No pressure CSVs found for this case, surface, and section.",
+  }));
+  if (!files.length) { measurement.textContent = "No pressure stations"; return; }
+
+  const availability = await Promise.all(files.map(async (file) => ({ file, hasData: await pressureFileHasData(file).catch(() => false) })));
+  if (token !== browserState.pressureRequestToken) return;
+  const populated = availability.filter((entry) => entry.hasData).map((entry) => entry.file);
+  browserState.pressureStationFiles = populated;
+  if (!populated.length) {
+    measurement.textContent = "No populated stations";
+    plotContainer.replaceChildren(Object.assign(document.createElement("div"), {
+      className: "workspace-empty pressure-empty",
+      textContent: "These CSV files contain no pressure measurements.",
+    }));
+    return;
+  }
+
+  const defaultFile = populated[0];
+  const chosen = populated.find((file) => file.path === browserState.pressureStationPath) ??
+    (Number.isFinite(browserState.pressureStationPosition)
+      ? populated.reduce((best, file) => Math.abs(file.position - browserState.pressureStationPosition) < Math.abs(best.position - browserState.pressureStationPosition) ? file : best)
+      : defaultFile);
+  browserState.pressureStationPath = chosen.path;
+  browserState.pressureStationPosition = chosen.position;
+  measurement.textContent = `${formatStation(chosen.position)} mm · keyboard ← / → to step · up to 4 cases`;
+  await renderPressureComparison(populated, chosen.position, { surface: surfaceSelect.value, axis: axisSelect.value, plotContainer, imageGallery, token });
+}
+
+// Stations from different cases or image sets count as the same plane
+// within half a millimetre (filenames round to whole millimetres).
+function stationsMatch(left, right) {
+  return Math.abs(left - right) < 0.5;
+}
+
+function formatStation(value) {
+  return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(3)));
+}
+
+async function renderPressureComparison(primaryFiles, position, options) {
+  const { surface, axis, plotContainer, imageGallery, token } = options;
+  plotContainer.replaceChildren(Object.assign(document.createElement("div"), { className: "workspace-empty pressure-empty", textContent: "Loading pressure measurements…" }));
+  releasePressureImageUrls();
+  try {
+    const series = await Promise.all(browserState.pressureComparePaths.map(async (path, colorIndex) => {
+      const node = pressureCaseNodes().find((entry) => entry.path === path);
+      const files = path === browserState.pressureCasePath ? primaryFiles : findPressureFiles(path, surface, axis);
+      if (!files.length) return null;
+      const availableFiles = path === browserState.pressureCasePath
+        ? files
+        : (await Promise.all(files.map(async (entry) => await pressureFileHasData(entry) ? entry : null))).filter(Boolean);
+      if (!availableFiles.length) return null;
+      const file = availableFiles.reduce((best, entry) => Math.abs(entry.position - position) < Math.abs(best.position - position) ? entry : best);
+      const rows = parseCsv(await (await file.handle.getFile()).text());
+      const headers = rows.shift() ?? [];
+      const coordinateIndex = headers.findIndex((header) => /Direction/i.test(header));
+      const cpIndex = headers.findIndex((header) => /Pressure Coefficient/i.test(header));
+      const points = rows.map((row) => ({ x: Number(row[coordinateIndex]), cp: Number(row[cpIndex]) }))
+        .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.cp))
+        .sort((left, right) => left.x - right.x);
+      const coordinate = (headers[coordinateIndex] ?? "").replace(/^[^:]*:\s*/, "");
+      return points.length ? { name: node?.name ?? "Simulation", path, position: file.position, points, colorIndex, coordinate } : null;
+    }));
+    if (token !== browserState.pressureRequestToken) return;
+    const validSeries = series.filter(Boolean);
+    if (!validSeries.length) {
+      plotContainer.replaceChildren(Object.assign(document.createElement("div"), { className: "workspace-empty pressure-empty", textContent: "No selected case has measurements at this station." }));
+      return;
+    }
+    drawPressureChart(plotContainer, validSeries, {
+      surface,
+      axis,
+      station: position,
+      caseName: validSeries.map((entry) => entry.name).join(", "),
+      coordinate: validSeries[0].coordinate || (axis === "x" ? "Y coordinate (mm)" : "X coordinate (mm)"),
+    });
+    if (browserState.pressureShowImages) await renderPressureImages(position, imageGallery, token);
+  } catch (error) {
+    if (token !== browserState.pressureRequestToken) return;
+    plotContainer.replaceChildren(Object.assign(document.createElement("div"), { className: "workspace-empty pressure-empty", textContent: error?.message || "Could not read the selected pressure CSVs." }));
+  }
+}
+
+async function findPressureSceneImage(casePath, field, axis, station) {
+  const caseNode = pressureCaseNodes().find((node) => node.path === casePath);
+  const section = caseNode?.folders.find((folder) => new RegExp(`^${field}_${axis}-Section$`, "i").test(folder.name));
+  if (!section) return null;
+  const images = [];
+  for await (const child of section.handle.values()) {
+    if (child.kind === "file" && /\.(png|jpe?g|webp)$/i.test(child.name)) images.push({ name: child.name, path: `${section.path}/${child.name}`, handle: child });
+  }
+  const positionFromName = (name) => {
+    const match = name.match(/_(-?\d+(?:\.\d+)?)mm\.(?:png|jpe?g|webp)$/i);
+    return match ? Number(match[1]) : null;
+  };
+  const positioned = images.map((file) => ({ file, position: positionFromName(file.name) })).filter((item) => item.position !== null);
+  // Images without an mm station in their name can't be matched to the plot plane.
+  return positioned.length ? positioned.reduce((best, item) => Math.abs(item.position - station) < Math.abs(best.position - station) ? item : best) : null;
+}
+
+async function renderPressureImages(station, gallery, token) {
+  gallery.replaceChildren();
+  gallery.className = `pressure-image-gallery pressure-image-count-${browserState.pressureComparePaths.length}`;
+  const heading = document.createElement("h2"); heading.className = "pressure-gallery-title";
+  heading.textContent = `${browserState.pressureSceneField} ${browserState.pressureAxis.toUpperCase()} scene`;
+  gallery.appendChild(heading);
+  const cards = await Promise.all(browserState.pressureComparePaths.map(async (path, index) => {
+    const match = await findPressureSceneImage(path, browserState.pressureSceneField, browserState.pressureAxis, station);
+    const file = match?.file;
+    const name = pressureCaseNodes().find((node) => node.path === path)?.name ?? "Simulation";
+    const card = document.createElement("figure"); card.className = `pressure-image-card pressure-case-color-${index}`;
+    card.title = name;
+    if (!file) { card.setAttribute("aria-label", `${name}: no matching scene image`); card.appendChild(Object.assign(document.createElement("div"), { className: "workspace-empty", textContent: "No matching scene image" })); return card; }
+    const blob = await file.handle.getFile();
+    if (token !== browserState.pressureRequestToken) return card;
+    const url = URL.createObjectURL(blob); browserState.pressureImageUrls.push(url);
+    const image = document.createElement("img"); image.src = url; image.alt = `${name} · ${file.name}`;
+    card.appendChild(image);
+    if (!stationsMatch(match.position, station)) {
+      card.appendChild(Object.assign(document.createElement("figcaption"), {
+        className: "station-mismatch",
+        textContent: `Image plane ${formatStation(match.position)} mm (plot ${formatStation(station)} mm)`,
+      }));
+    }
+    return card;
+  }));
+  if (token === browserState.pressureRequestToken) gallery.append(...cards);
+}
+
+function drawPressureChart(container, series, metadata) {
+  const NS = "http://www.w3.org/2000/svg";
+  const width = 1040;
+  const height = 590;
+  const margin = { top: 52, right: 30, bottom: 86, left: 86 };
+  const chartWidth = width - margin.left - margin.right;
+  const chartHeight = height - margin.top - margin.bottom;
+  const points = series.flatMap((entry) => entry.points);
+  const xMin = Math.min(...points.map((point) => point.x));
+  const xMax = Math.max(...points.map((point) => point.x));
+  // CFD-Tool's pressure renderer uses a consistent Cp window for every section.
+  // Keeping the same range makes stations easier to compare and leaves headroom
+  // for the positive-pressure peak.
+  const yMin = -5;
+  const yMax = 1;
+  const xScale = (value) => margin.left + (xMax === xMin ? 0.5 : (value - xMin) / (xMax - xMin)) * chartWidth;
+  const yScale = (value) => margin.top + (value - yMin) / (yMax - yMin) * chartHeight;
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", `${metadata.surface} ${metadata.axis.toUpperCase()} pressure distribution at ${formatStation(metadata.station)} millimetres`);
+  svg.classList.add("pressure-chart");
+  const clipId = `pressure-clip-${crypto.randomUUID()}`;
+  const defs = document.createElementNS(NS, "defs");
+  const clipPath = document.createElementNS(NS, "clipPath"); clipPath.setAttribute("id", clipId);
+  const clipRect = document.createElementNS(NS, "rect");
+  clipRect.setAttribute("x", String(margin.left)); clipRect.setAttribute("y", String(margin.top));
+  clipRect.setAttribute("width", String(chartWidth)); clipRect.setAttribute("height", String(chartHeight));
+  clipPath.appendChild(clipRect); defs.appendChild(clipPath); svg.appendChild(defs);
+  const title = document.createElementNS(NS, "title");
+  title.textContent = `${metadata.caseName} · ${metadata.surface} · ${metadata.axis.toUpperCase()} section · ${formatStation(metadata.station)} mm`;
+  svg.appendChild(title);
+
+  const heading = document.createElementNS(NS, "text");
+  heading.setAttribute("x", String(margin.left));
+  heading.setAttribute("y", "30");
+  heading.setAttribute("class", "pressure-chart-title");
+  heading.textContent = `${metadata.surface} · ${metadata.axis.toUpperCase()} section at ${formatStation(metadata.station)} mm`;
+  svg.appendChild(heading);
+
+  const xTicks = createTicks(xMin, xMax, 6);
+  const yTicks = [-5, -4, -3, -2, -1, 0, 1];
+  yTicks.forEach((tick) => {
+    const y = yScale(tick);
+    const grid = document.createElementNS(NS, "line");
+    grid.setAttribute("x1", String(margin.left)); grid.setAttribute("x2", String(width - margin.right));
+    grid.setAttribute("y1", String(y)); grid.setAttribute("y2", String(y));
+    grid.setAttribute("class", "pressure-grid-line"); svg.appendChild(grid);
+    const label = document.createElementNS(NS, "text");
+    label.setAttribute("x", String(margin.left - 12)); label.setAttribute("y", String(y + 4));
+    label.setAttribute("text-anchor", "end"); label.setAttribute("class", "pressure-tick-label");
+    label.textContent = formatTick(tick); svg.appendChild(label);
+  });
+  xTicks.forEach((tick) => {
+    const x = xScale(tick);
+    const grid = document.createElementNS(NS, "line");
+    grid.setAttribute("x1", String(x)); grid.setAttribute("x2", String(x));
+    grid.setAttribute("y1", String(margin.top)); grid.setAttribute("y2", String(height - margin.bottom));
+    grid.setAttribute("class", "pressure-grid-line"); svg.appendChild(grid);
+    const label = document.createElementNS(NS, "text");
+    label.setAttribute("x", String(x)); label.setAttribute("y", String(height - margin.bottom + 24));
+    label.setAttribute("text-anchor", "middle"); label.setAttribute("class", "pressure-tick-label");
+    label.textContent = formatTick(tick); svg.appendChild(label);
+  });
+
+  // The legacy importer separates suction and pressure-side Cp samples around
+  // +/-0.1. Keep pressure and suction points visually distinct, and leave
+  // near-zero samples out as the old plot did.
+  const colors = [
+    { pressure: "#3498db", suction: "#e73a27" },
+    { pressure: "#0f3f5f", suction: "#c0392b" },
+    { pressure: "#48c9b0", suction: "#d6a813" },
+    { pressure: "#6a5de2", suction: "#f1948a" },
+  ];
+  const markerShapes = ["circle", "square", "triangle", "diamond"];
+  const addMarker = (shape, x, y, fill, size = 2.5, clipped = true) => {
+    let marker;
+    if (shape === "circle") {
+      marker = document.createElementNS(NS, "circle");
+      marker.setAttribute("cx", x); marker.setAttribute("cy", y); marker.setAttribute("r", size);
+    } else if (shape === "square") {
+      marker = document.createElementNS(NS, "rect");
+      marker.setAttribute("x", x - size); marker.setAttribute("y", y - size);
+      marker.setAttribute("width", size * 2); marker.setAttribute("height", size * 2);
+    } else {
+      const shapePoints = shape === "triangle"
+        ? `${x},${y - size * 1.3} ${x + size * 1.2},${y + size} ${x - size * 1.2},${y + size}`
+        : `${x},${y - size * 1.3} ${x + size * 1.3},${y} ${x},${y + size * 1.3} ${x - size * 1.3},${y}`;
+      marker = document.createElementNS(NS, "polygon");
+      marker.setAttribute("points", shapePoints);
+    }
+    marker.setAttribute("fill", fill);
+    if (clipped) marker.setAttribute("clip-path", `url(#${clipId})`);
+    svg.appendChild(marker);
+  };
+  const legendX = margin.left + 12;
+  series.forEach((entry, index) => {
+    const color = colors[entry.colorIndex % colors.length];
+    const shape = markerShapes[entry.colorIndex % markerShapes.length];
+    const positive = entry.points.filter((point) => point.cp > 0.1);
+    const negative = entry.points.filter((point) => point.cp < -0.1);
+    [[positive, color.pressure], [negative, color.suction]].forEach(([selected, stroke]) => {
+      selected.forEach((point) => {
+        addMarker(shape, xScale(point.x), yScale(point.cp), stroke);
+      });
+    });
+    const keyX = legendX + index * 230;
+    const key = document.createElementNS(NS, "line");
+    key.setAttribute("x1", String(keyX)); key.setAttribute("x2", String(keyX + 22));
+    key.setAttribute("y1", "43"); key.setAttribute("y2", "43");
+    key.setAttribute("class", "pressure-line"); key.style.stroke = color.pressure; svg.appendChild(key);
+    addMarker(shape, keyX + 11, 43, color.pressure, 3, false);
+    const suctionKey = document.createElementNS(NS, "line");
+    suctionKey.setAttribute("x1", String(keyX + 25)); suctionKey.setAttribute("x2", String(keyX + 47));
+    suctionKey.setAttribute("y1", "43"); suctionKey.setAttribute("y2", "43");
+    suctionKey.setAttribute("class", "pressure-line"); suctionKey.style.stroke = color.suction; svg.appendChild(suctionKey);
+    addMarker(shape, keyX + 36, 43, color.suction, 3, false);
+    const label = document.createElementNS(NS, "text");
+    label.setAttribute("x", String(keyX + 53)); label.setAttribute("y", "47");
+    label.setAttribute("class", "pressure-legend-label");
+    label.textContent = stationsMatch(entry.position, metadata.station)
+      ? entry.name
+      : `${entry.name} @ ${formatStation(entry.position)} mm`;
+    if (!stationsMatch(entry.position, metadata.station)) label.classList.add("station-mismatch");
+    svg.appendChild(label);
+  });
+  const sideLegend = document.createElementNS(NS, "text");
+  sideLegend.setAttribute("x", String(width - margin.right)); sideLegend.setAttribute("y", "28");
+  sideLegend.setAttribute("text-anchor", "end"); sideLegend.setAttribute("class", "pressure-legend-label");
+  sideLegend.textContent = "Pressure side (+Cp) · Suction side (−Cp)"; svg.appendChild(sideLegend);
+  const xLabel = document.createElementNS(NS, "text");
+  xLabel.setAttribute("x", String(margin.left + chartWidth / 2));
+  xLabel.setAttribute("y", String(height - 20)); xLabel.setAttribute("text-anchor", "middle");
+  xLabel.setAttribute("class", "pressure-axis-label"); xLabel.textContent = metadata.coordinate;
+  svg.appendChild(xLabel);
+  const yLabel = document.createElementNS(NS, "text");
+  yLabel.setAttribute("transform", `translate(22 ${margin.top + chartHeight / 2}) rotate(-90)`);
+  yLabel.setAttribute("text-anchor", "middle"); yLabel.setAttribute("class", "pressure-axis-label");
+  yLabel.textContent = "Pressure coefficient (Cp)"; svg.appendChild(yLabel);
+
+  const card = document.createElement("section");
+  card.className = "pressure-chart-card";
+  const details = document.createElement("p");
+  details.className = "pressure-chart-details";
+  details.textContent = `${series.length} cases · ${points.length.toLocaleString()} measurements · ${formatTick(xMin)} to ${formatTick(xMax)} mm · Cp ${formatTick(Math.min(...points.map((point) => point.cp)))} to ${formatTick(Math.max(...points.map((point) => point.cp)))}`;
+  const offStation = series.filter((entry) => !stationsMatch(entry.position, metadata.station));
+  if (offStation.length) {
+    details.textContent += ` · ${offStation.length === 1 ? "1 case has" : `${offStation.length} cases have`} no data at ${formatStation(metadata.station)} mm and ${offStation.length === 1 ? "is" : "are"} shown at the nearest station (see legend)`;
+    details.classList.add("station-mismatch");
+  }
+  card.append(svg, details);
+  container.replaceChildren(card);
+}
+
+function createTicks(min, max, targetCount) {
+  if (min === max) return [min];
+  const rawStep = (max - min) / Math.max(1, targetCount - 1);
+  const magnitude = 10 ** Math.floor(Math.log10(rawStep));
+  const fraction = rawStep / magnitude;
+  const niceFraction = fraction <= 1 ? 1 : fraction <= 2 ? 2 : fraction <= 5 ? 5 : 10;
+  const step = niceFraction * magnitude;
+  const first = Math.ceil(min / step) * step;
+  const ticks = [];
+  for (let tick = first; tick <= max + step * 1e-8 && ticks.length < 100; tick += step) ticks.push(tick);
+  return ticks.length ? ticks : [min, max];
+}
+
+function formatTick(value) {
+  if (!Number.isFinite(value)) return "";
+  if (Math.abs(value) >= 100 || (Math.abs(value) > 0 && Math.abs(value) < 0.01)) return value.toExponential(1);
+  return String(Number(value.toFixed(2)));
 }
 
 async function renderCsvPage() {
@@ -1051,15 +1030,28 @@ function parseCsv(text) {
   return rows;
 }
 
+function coefficientReadErrors(coefficientRows) {
+  const failed = coefficientRows.filter((data) => data.error);
+  if (!failed.length) return null;
+  const note = document.createElement("p");
+  note.className = "error";
+  note.textContent = `Could not read ${failed.length} coefficient file${failed.length === 1 ? "" : "s"}: ` +
+    failed.map((data) => `${data.path} (${data.error})`).join("; ");
+  return note;
+}
+
 function renderCsvTables(coefficientRows) {
-  browserState.columnHeaders = [...new Set(coefficientRows.flatMap((data) => data.headers))];
+  const validRows = coefficientRows.filter((data) => Array.isArray(data.headers) && Array.isArray(data.rows));
+  const readErrors = coefficientReadErrors(coefficientRows);
+  browserState.columnHeaders = [...new Set(validRows.flatMap((data) => data.headers))];
   const customizeButton = el.summary.querySelector(".customize-columns");
   if (customizeButton) customizeButton.disabled = !browserState.columnHeaders.length;
-  if (!coefficientRows.length) {
+  updateCoefficientViewControls();
+  if (!validRows.length) {
     const empty = document.createElement("div");
     empty.className = "workspace-empty";
     empty.textContent = "No coefficient summaries in this folder.";
-    el.panels.replaceChildren(empty);
+    el.panels.replaceChildren(...[readErrors, empty].filter(Boolean));
     return;
   }
 
@@ -1067,11 +1059,23 @@ function renderCsvTables(coefficientRows) {
   collective.className = "csv-card collective-table-card";
   const heading = document.createElement("h2");
   heading.className = "csv-card-title";
-  heading.textContent = "Final iteration by simulation";
+  const referencePath = browserState.coefficientReferencePath || validRows[0].path;
+  const referenceRow = validRows.find((data) => data.path === referencePath) ?? validRows[0];
+  heading.textContent = browserState.coefficientView === "delta"
+    ? `Monitor differences from ${simulationNameFromCsvPath(referenceRow.path)}`
+    : "Final iteration by simulation";
   collective.appendChild(heading);
+  if (readErrors) collective.appendChild(readErrors);
+  if (browserState.coefficientView === "delta") {
+    const note = document.createElement("p");
+    note.className = "comparison-note";
+    note.textContent = "Δ = this simulation minus the reference, using exported monitor values without sign or unit conversion.";
+    collective.appendChild(note);
+  }
 
     const headers = orderedColumnDefinitions(browserState.columnHeaders);
-    const visibleHeaders = headers.filter((column) => column.visible);
+    const visibleHeaders = headers.filter((column) => column.visible &&
+      (browserState.coefficientView !== "delta" || !/^iteration$/i.test(column.key)));
     const tableWrap = document.createElement("div");
     tableWrap.className = "csv-table-wrap";
     const table = document.createElement("table");
@@ -1079,26 +1083,175 @@ function renderCsvTables(coefficientRows) {
     const head = document.createElement("thead");
     const headerRow = document.createElement("tr");
     headerRow.appendChild(cell("th", "Simulation"));
-    visibleHeaders.forEach((column) => headerRow.appendChild(cell("th", column.label)));
+    visibleHeaders.forEach((column) => headerRow.appendChild(cell(
+      "th",
+      browserState.coefficientView === "delta" ? `Δ ${column.label}` : column.label,
+    )));
     head.appendChild(headerRow);
     table.appendChild(head);
 
     const body = document.createElement("tbody");
-    coefficientRows.forEach((data) => {
+    validRows.forEach((data) => {
       const sourceRow = data.rows[data.rows.length - 1] ?? [];
       const row = document.createElement("tr");
+      if (data.path === referenceRow.path) row.className = "reference-row";
       row.appendChild(cell("td", simulationNameFromCsvPath(data.path)));
       visibleHeaders.forEach((column) => {
-        const index = data.headers.indexOf(column.key);
-        const value = index < 0 ? "" : sourceRow[index] ?? "";
-        row.appendChild(cell("td", formatCoefficientValue(column.key, value)));
+        if (browserState.coefficientView === "delta") {
+          const value = coefficientValue(data, column.key);
+          const referenceValue = coefficientValue(referenceRow, column.key);
+          const difference = value === null || referenceValue === null ? null : value - referenceValue;
+          row.appendChild(cell("td", difference === null ? "" : difference.toFixed(3)));
+        } else {
+          const index = data.headers.indexOf(column.key);
+          const value = index < 0 ? "" : sourceRow[index] ?? "";
+          row.appendChild(cell("td", formatCoefficientValue(column.key, value)));
+        }
       });
       body.appendChild(row);
     });
     table.appendChild(body);
     tableWrap.appendChild(table);
     collective.appendChild(tableWrap);
+    collective.appendChild(renderMonitorChart(validRows, referenceRow));
   el.panels.replaceChildren(collective);
+}
+
+function renderMonitorChart(coefficientRows, referenceRow) {
+  const columns = browserState.columnHeaders.filter((header) => !/^iteration$/i.test(header));
+  const chart = document.createElement("details");
+  chart.className = "monitor-chart-card";
+  chart.open = coefficientRows.length <= 8;
+  const title = document.createElement("summary");
+  title.textContent = "Monitor comparison";
+  chart.appendChild(title);
+
+  const controls = document.createElement("label");
+  controls.className = "monitor-chart-controls";
+  controls.appendChild(document.createTextNode("Monitor"));
+  const select = document.createElement("select");
+  select.setAttribute("aria-label", "Monitor to chart");
+  orderedColumnDefinitions(columns).forEach((column) => select.add(new Option(column.label, column.key)));
+  if (!columns.includes(browserState.monitorChartHeader)) {
+    browserState.monitorChartHeader = columns.find((header) => classifyHeader(header) === "CzA") ?? columns[0] ?? "";
+  }
+  select.value = browserState.monitorChartHeader;
+  controls.appendChild(select);
+  chart.appendChild(controls);
+
+  const note = document.createElement("p");
+  note.className = "monitor-chart-note";
+  note.textContent = browserState.coefficientView === "delta"
+    ? `Raw Δ for ${select.selectedOptions[0]?.textContent ?? "monitor"}: case minus ${simulationNameFromCsvPath(referenceRow.path)}. Sign meaning is not interpreted.`
+    : `Raw exported values for ${select.selectedOptions[0]?.textContent ?? "monitor"}; sign meaning is not interpreted.`;
+  chart.appendChild(note);
+
+  const chartViewport = document.createElement("div");
+  chartViewport.className = "monitor-chart-viewport";
+  const draw = () => {
+    browserState.monitorChartHeader = select.value;
+    note.textContent = browserState.coefficientView === "delta"
+      ? `Raw Δ for ${select.selectedOptions[0]?.textContent ?? "monitor"}: case minus ${simulationNameFromCsvPath(referenceRow.path)}. Sign meaning is not interpreted.`
+      : `Raw exported values for ${select.selectedOptions[0]?.textContent ?? "monitor"}; sign meaning is not interpreted.`;
+    chartViewport.replaceChildren(drawMonitorChart(coefficientRows, select.value, referenceRow));
+  };
+  select.addEventListener("change", draw);
+  draw();
+  chart.appendChild(chartViewport);
+  return chart;
+}
+
+function drawMonitorChart(coefficientRows, header, referenceRow) {
+  const namespace = "http://www.w3.org/2000/svg";
+  const width = 960;
+  const rowHeight = 32;
+  const height = Math.max(100, 48 + coefficientRows.length * rowHeight);
+  const labelWidth = 230;
+  const plotWidth = 570;
+  const zeroX = labelWidth + plotWidth / 2;
+  const values = coefficientRows.map((data) => {
+    const value = coefficientValue(data, header);
+    if (browserState.coefficientView !== "delta" || value === null) return value;
+    const reference = coefficientValue(referenceRow, header);
+    return reference === null ? null : value - reference;
+  });
+  const maxMagnitude = Math.max(1e-9, ...values.filter(Number.isFinite).map((value) => Math.abs(value)));
+  const scale = (plotWidth / 2 - 18) / maxMagnitude;
+  const svg = document.createElementNS(namespace, "svg");
+  svg.classList.add("monitor-chart");
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", `Raw monitor comparison: ${header}`);
+
+  [-maxMagnitude, 0, maxMagnitude].forEach((tick) => {
+    const x = zeroX + tick * scale;
+    const line = document.createElementNS(namespace, "line");
+    line.setAttribute("x1", String(x));
+    line.setAttribute("x2", String(x));
+    line.setAttribute("y1", "26");
+    line.setAttribute("y2", String(height - 8));
+    line.setAttribute("class", tick === 0 ? "monitor-zero-line" : "monitor-grid-line");
+    svg.appendChild(line);
+    const label = document.createElementNS(namespace, "text");
+    label.setAttribute("x", String(x));
+    label.setAttribute("y", "18");
+    label.setAttribute("text-anchor", "middle");
+    label.setAttribute("class", "monitor-tick-label");
+    label.textContent = tick.toFixed(3);
+    svg.appendChild(label);
+  });
+
+  coefficientRows.forEach((data, index) => {
+    const y = 42 + index * rowHeight;
+    const value = values[index];
+    const label = document.createElementNS(namespace, "text");
+    label.setAttribute("x", "8");
+    label.setAttribute("y", String(y + 4));
+    label.setAttribute("class", "monitor-case-label");
+    label.textContent = simulationNameFromCsvPath(data.path);
+    svg.appendChild(label);
+    if (value === null || !Number.isFinite(value)) return;
+    const bar = document.createElementNS(namespace, "rect");
+    bar.setAttribute("x", String(value < 0 ? zeroX + value * scale : zeroX));
+    bar.setAttribute("y", String(y - 8));
+    bar.setAttribute("width", String(Math.abs(value * scale)));
+    bar.setAttribute("height", "16");
+    bar.setAttribute("rx", "2");
+    bar.setAttribute("class", `monitor-bar monitor-color-${index % 6}`);
+    svg.appendChild(bar);
+    const valueLabel = document.createElementNS(namespace, "text");
+    valueLabel.setAttribute("x", String(labelWidth + plotWidth + 16));
+    valueLabel.setAttribute("y", String(y + 4));
+    valueLabel.setAttribute("class", "monitor-value-label");
+    valueLabel.textContent = value.toFixed(3);
+    svg.appendChild(valueLabel);
+  });
+  return svg;
+}
+
+function coefficientValue(data, header) {
+  const index = data.headers.indexOf(header);
+  if (index < 0) return null;
+  const value = Number(data.rows[data.rows.length - 1]?.[index]);
+  return Number.isFinite(value) ? value : null;
+}
+
+function updateCoefficientViewControls() {
+  const buttons = document.querySelectorAll(".table-mode-switch button");
+  buttons.forEach((button, index) => {
+    button.classList.toggle("active", (index === 0) === (browserState.coefficientView === "values"));
+  });
+
+  const reference = document.getElementById("coefficient-reference");
+  if (!reference) return;
+  const rows = browserState.coefficientRows.filter((data) => Array.isArray(data.headers));
+  reference.replaceChildren(...rows.map((data) => new Option(simulationNameFromCsvPath(data.path), data.path)));
+  if (!rows.some((data) => data.path === browserState.coefficientReferencePath)) {
+    browserState.coefficientReferencePath = rows[0]?.path ?? "";
+  }
+  reference.value = browserState.coefficientReferencePath;
+  reference.hidden = browserState.coefficientView !== "delta";
+  reference.disabled = rows.length < 2;
 }
 
 function readColumnPreferences() {
@@ -1216,17 +1369,25 @@ function simulationNameFromCsvPath(path) {
   const parts = path.split("/");
   const plotsIndex = parts.findIndex((part) => /^plots$/i.test(part));
   if (plotsIndex > 0) return parts[plotsIndex - 1];
-  return parts.length > 1 ? parts[parts.length - 2] : parts[0];
+  // "plots/Coefficients.csv" directly under the root: the root is the simulation.
+  if (plotsIndex === 0 || parts.length === 1) return browserState.root?.name ?? parts[0];
+  return parts[parts.length - 2];
+}
+
+function viewerTarget(node) {
+  return { handle: node.handle, path: node.path, name: node.name };
 }
 
 async function saveViewerHandle(key, handle, path) {
   const db = await openSettingsDb();
   await new Promise((resolve, reject) => {
-    const store = db.transaction(ROOT_STORE, "readwrite").objectStore(ROOT_STORE);
+    const transaction = db.transaction(ROOT_STORE, "readwrite");
+    const store = transaction.objectStore(ROOT_STORE);
     store.put(handle, `viewer:${key}`);
-    const request = store.put(path, `viewer-path:${key}`);
-    request.onsuccess = resolve;
-    request.onerror = () => reject(request.error);
+    store.put(path, `viewer-path:${key}`);
+    store.put(Date.now(), `viewer-time:${key}`);
+    transaction.oncomplete = resolve;
+    transaction.onerror = () => reject(transaction.error);
   });
   db.close();
 }
@@ -1234,19 +1395,44 @@ async function saveViewerHandle(key, handle, path) {
 async function saveViewerSet(key, nodes, catalog) {
   const db = await openSettingsDb();
   await new Promise((resolve, reject) => {
-    const store = db.transaction(ROOT_STORE, "readwrite").objectStore(ROOT_STORE);
-    store.put(nodes.map((node) => ({ handle: node.handle, path: node.path })), `viewer-set:${key}`);
-    const request = store.put(catalog.map((node) => ({ handle: node.handle, path: node.path })), `viewer-catalog:${key}`);
-    request.onsuccess = resolve;
-    request.onerror = () => reject(request.error);
+    const transaction = db.transaction(ROOT_STORE, "readwrite");
+    const store = transaction.objectStore(ROOT_STORE);
+    store.put(nodes.map(viewerTarget), `viewer-set:${key}`);
+    store.put(catalog.map(viewerTarget), `viewer-catalog:${key}`);
+    store.put(Date.now(), `viewer-time:${key}`);
+    transaction.oncomplete = resolve;
+    transaction.onerror = () => reject(transaction.error);
   });
   db.close();
 }
 
 async function openImageFolder(node) {
-  const casePath = node.path.slice(0, node.path.lastIndexOf("/"));
-  const simulation = findFolderByPath(browserState.root, casePath);
-  if (simulation) await openComparisonWindow([simulation], node.path);
+  const simulation = findFolderByPath(browserState.root, parentPath(node.path));
+  if (!simulation) {
+    showError(`Could not find the simulation folder for ${node.path}.`);
+    return;
+  }
+  await openComparisonWindow([simulation], node.path);
+}
+
+async function openSceneGallery(node) {
+  const popup = window.open(
+    "about:blank",
+    `homo-cfd-scenes-${crypto.randomUUID()}`,
+    `popup,width=${screen.availWidth},height=${screen.availHeight},left=0,top=0`,
+  );
+  if (!popup) {
+    showError("The 3D scene window was blocked. Allow pop-ups for this local app and try again.");
+    return;
+  }
+  const key = crypto.randomUUID();
+  try {
+    await saveViewerHandle(key, node.handle, node.path);
+    popup.location.href = `./image-viewer.html?folder=${encodeURIComponent(key)}&gallery=3d`;
+  } catch (err) {
+    popup.close();
+    showError(err?.message || "Could not open the 3D scene gallery");
+  }
 }
 
 async function openComparisonWindow(nodes, initialSectionPath = "") {
@@ -1261,7 +1447,8 @@ async function openComparisonWindow(nodes, initialSectionPath = "") {
   }
   const key = crypto.randomUUID();
   try {
-    const catalog = browserState.root?.folders.filter((folder) => folder.isCase) ?? nodes;
+    const simulations = simulationNodes();
+    const catalog = simulations.length ? simulations : nodes;
     await saveViewerSet(key, nodes, catalog);
     popup.location.href = `./image-viewer.html?compare=${encodeURIComponent(key)}${initialSectionPath ? `&section=${encodeURIComponent(initialSectionPath)}` : ""}`;
   } catch (err) {
@@ -1271,6 +1458,9 @@ async function openComparisonWindow(nodes, initialSectionPath = "") {
 }
 
 async function loadResultsRoot(handle) {
+  browserState.pressureRequestToken++;
+  el.reconnect.hidden = true;
+  el.panels.classList.remove("pressure-workspace-layout", "pressure-workspace-with-images");
   el.summary.hidden = true;
   el.panels.replaceChildren(Object.assign(document.createElement("div"), {
     className: "workspace-empty",
@@ -1308,22 +1498,47 @@ async function chooseResultsRoot() {
   }
 }
 
+// The browser only re-grants access to a remembered folder from a click,
+// so a restored folder without permission gets a one-click reconnect.
+function offerReconnect(handle) {
+  showError(`Access to “${handle.name}” needs to be confirmed again.`);
+  el.reconnect.textContent = `Reconnect ${handle.name}`;
+  el.reconnect.hidden = false;
+  el.reconnect.onclick = async () => {
+    try {
+      if (await handle.requestPermission({ mode: "read" }) !== "granted") {
+        showError(`Access to “${handle.name}” was not granted. Use Open folder to choose a results folder.`);
+        return;
+      }
+      showError("");
+      await loadResultsRoot(handle);
+    } catch (err) {
+      showError(err?.message || "Could not reconnect the results folder");
+    }
+  };
+}
+
 async function startFilesystemWorkspace() {
   document.getElementById("open-results").addEventListener("click", chooseResultsRoot);
+  document.getElementById("open-3d-viewer").addEventListener("click", () => {
+    const popup = window.open("./3d-viewer.html", "homo-cfd-3d", `popup,width=${screen.availWidth},height=${screen.availHeight},left=0,top=0`);
+    if (!popup) showError("The 3D viewer window was blocked. Allow pop-ups for this local app and try again.");
+  });
   document.getElementById("folder-search").addEventListener("input", (event) => {
     browserState.query = event.target.value.trim().toLowerCase();
     renderFilesystemTree();
   });
   el.panels.replaceChildren(Object.assign(document.createElement("div"), {
     className: "workspace-empty",
-    textContent: "Open a results folder, choose simulations in Case A–D, then open a comparison.",
+    textContent: "Open an image section from the results tree to start a comparison, then add cases in its viewer.",
   }));
   try {
     if (!window.showDirectoryPicker || !window.indexedDB) return;
+    await pruneViewerEntries().catch(() => {});
     const handle = await getSavedResultsRoot();
     if (!handle) return;
     if (await handle.queryPermission({ mode: "read" }) !== "granted") {
-      showError(`Previously used folder “${handle.name}” needs access. Choose it once with Open results folder to reconnect.`);
+      offerReconnect(handle);
       return;
     }
     await loadResultsRoot(handle);

@@ -11,14 +11,16 @@
       <aside class="sidebar">
         <div class="brand">
           <span><img src="./High-Voltage_white.png" alt="High Voltage Motorsports" /> </span>
-        </div class="brand">
           <span>HoMo CFD</span>
+        </div>
         <div class="error" id="error" hidden></div>
+        <button class="primary small" id="reconnect-results" type="button" hidden>Reconnect folder</button>
         <div class="group">
           <div class="filesystem-heading">
             <h2>Results</h2>
             <button class="primary small" id="open-results" type="button">Open folder</button>
           </div>
+          <button class="small-control" id="open-3d-viewer" type="button">Open 3D Cp viewer</button>
           <input id="folder-search" class="folder-search" type="search" placeholder="Filter folders" aria-label="Filter folders" />
           <div id="case-slots"></div>
         </div>

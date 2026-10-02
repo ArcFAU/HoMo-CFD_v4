@@ -1,0 +1,26 @@
+.cfd3d-body { height: 100%; overflow: hidden; display: flex; flex-direction: column; }
+.cfd3d-toolbar { min-height: 58px; padding: 9px 14px; display: flex; align-items: center; gap: 12px; background: var(--panel); border-bottom: 1px solid var(--border); }
+.cfd3d-title { display: flex; flex-direction: column; min-width: 210px; gap: 2px; }
+.cfd3d-title span { max-width: 40vw; color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.range-control { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
+.range-control input,.range-control select { width: 150px; padding: 6px; color: var(--text); background: #0c1219; border: 1px solid var(--border); border-radius: 5px; }
+.range-control input { width: 74px; }
+#view-preset { width: 132px; }
+#auto-range { white-space: nowrap; }
+.cfd3d-stage { position: relative; flex: 1; min-height: 0; background: #070b10; }
+#scene { width: 100%; height: 100%; display: block; touch-action: none; }
+.cfd3d-empty,.cfd3d-error { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; padding: 32px; color: var(--muted); pointer-events: none; }
+.cfd3d-empty[hidden],.cfd3d-error[hidden] { display: none; }
+.cfd3d-empty code { color: var(--text); }
+.cfd3d-error { inset: auto 16px 16px; padding: 12px; color: #ffb4ab; background: #3b1719; border: 1px solid #7d3034; border-radius: 8px; white-space: pre-wrap; }
+.cfd3d-legend { position: absolute; left: 50%; bottom: 26px; transform: translateX(-50%); display: grid; grid-template-columns: auto minmax(180px, 32vw) auto; align-items: center; gap: 8px; font-size: 12px; text-shadow: 0 1px 3px #000; }
+.cfd3d-legend div { height: 14px; border: 1px solid #8290a0; border-radius: 2px; background: linear-gradient(90deg,#3011a4,#1478df,#21d4c2,#28dc42,#f1df12,#f78b13,#cc1414); }
+.cfd3d-legend b { grid-column: 1 / -1; justify-self: center; font-weight: 500; }
+.cfd3d-help { position: absolute; right: 14px; bottom: 12px; color: #aebacc; font-size: 11px; pointer-events: none; }
+@media(max-width:700px) { .cfd3d-toolbar { flex-wrap: wrap; } .cfd3d-title { flex: 1 0 100%; } .cfd3d-title span { max-width: 90vw; } }
+
+/* Range min above Range max: limits are applied swapped; flag the inputs. */
+.range-control input:invalid {
+  outline: 2px solid #f0b429;
+  outline-offset: 1px;
+}
