@@ -2585,3 +2585,39 @@ MEMORY.md:77-79|note=[grounded the next improvements in the existing CFD image a
 > Both test suites pass (15 unit tests, 67 browser checks). Committed and pushed to GitHub `master`. Reload the page at http://127.0.0.1:5173 to see the new labels.
 >
 > One small side effect: if you renamed, hid or reordered the old Downforce/Drag columns under **Customize columns**, set that again for the renamed ones.
+
+## 2026-10-02 — Question: the downforce equation
+
+### User message (verbatim)
+
+> go you know the equation for downforce?
+
+### Work record
+
+- Question only; no code or project files changed apart from this log entry.
+
+### Final response (verbatim)
+
+> Yes. Downforce is dynamic pressure times the downforce coefficient times the reference area:
+>
+> ```text
+> F = q · Cz · A = ½ · ρ · v² · CzA
+> ```
+>
+> - **ρ** is the air density (about 1.204 kg/m³ at 20 °C, sea level).
+> - **v** is the car's speed (the freestream velocity) in m/s.
+> - **CzA** is what your `Coefficients*.csv` exports: Cz × A, in m².
+>
+> With your sign convention (negative CzA is downforce), positive downforce is `−½ · ρ · v² · CzA`. Drag works the same way with CxA.
+>
+> **Example:** CzA = −3.0 m² at 60 km/h (16.67 m/s):
+>
+> - q = ½ · 1.204 · 16.67² ≈ 167 Pa
+> - Downforce = 167 · 3.0 ≈ **500 N**, about the weight of 51 kg.
+>
+> Two caveats:
+>
+> - Use the same reference density as in the STAR-CCM+ coefficient report. Otherwise the force won't match the simulation.
+> - Scaling to other speeds with v² assumes CzA stays constant with speed. That's a good approximation, but it's only exact at the simulated speed.
+>
+> If useful, HoMo CFD could show a **downforce in N** column for a speed you enter, but I'd keep that for after the current phases unless you want it now.
