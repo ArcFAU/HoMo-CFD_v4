@@ -201,6 +201,7 @@ class ClusterApiTests(ApiTests):
         status, data = self.request("GET", "/api/cluster")
         self.assertEqual(status, 200)
         self.assertEqual(json.loads(data), {"winscp": str(Path("C:/fake/WinSCP.com")), "sessions": ["Fritz", "Other"],
+                                            "sessionHosts": {},
                                             "pageant": {"found": True, "running": False}, "session": "", "remoteFolder": "",
                                             "submitSession": "", "templateFolder": "SCRIPT_FABSI"})
 
@@ -352,8 +353,8 @@ class ClusterApiTests(ApiTests):
         status, data = self.post("/api/cluster/new-case", {"name": "new1", "settings": settings, "simPath": str(sim)})
         self.assertEqual((status, data["state"]), (200, "running"))
         self.assertEqual(self.wait_for_task("new1"), "done")
-        self.assertEqual(self.fake.uploads[-1], [("Vehicle State/Velocity : 60.0\n", "/home/vault/g/u/new1/Settings"),
-                                                 (str(sim), "/home/vault/g/u/new1/")])
+        self.assertEqual(self.fake.uploads[-1], [(["mesh.sh"], "new1/"), ("Vehicle State/Velocity : 60.0\n", "new1/Settings"),
+                                                 (str(sim), "new1/")])
         # Start: only prepared cases from the last list, and only once.
         self.assertEqual(self.post("/api/cluster/submit", {"case": "caseD"})[0], 409)
         self.assertEqual(self.post("/api/cluster/submit", {"case": "notListed"})[0], 400)

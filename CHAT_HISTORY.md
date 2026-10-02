@@ -3396,3 +3396,110 @@ Messages that quoted the user's cluster user name or host are shown with those m
 > **What I haven't done for real:** creating a case, uploading a `.sim` or starting a job. Those change things on Fritz and use compute time, so the first real run is yours. A small test case would be ideal. The rest was tested with a fake WinSCP: all tests pass (59 unit tests, 105 browser checks). Committed and pushed to GitHub `master`.
 >
 > Reload http://127.0.0.1:5173 to get it. Tell me how the first real case goes, especially the `.sim` upload (how long it takes and whether the progress message is enough).
+
+## 2026-10-02 — First real try of New simulation on Fritz: jump-host job session, create in one login
+
+### User message (verbatim; the user name in the path is masked)
+
+> Connected. Remote folder: /home/vault/<group>/<user>. But the session for starting jobs: This session cannot start jobs (no SLURM there). Could not reach Fritz. Check the network or VPN connection.
+> 1002_homo_test: Could not create the folder. Fritz refused the login. Check the user name and key in this WinSCP session (log in with WinSCP to try it).
+
+### Contributor messages (verbatim)
+
+> Two separate failures here. I'll look at the code paths and the settings first, then rerun the same read-only checks to see WinSCP's actual output.
+
+> The create step uses your main session (the one that connected fine), and the job test uses the fritz session. Let me check which sessions are saved and run the same read-only commands to see WinSCP's actual messages (user name and host masked).
+
+> Two findings already. The session chosen for starting jobs reaches `csnhr`, which has no SLURM. And `csnhr` sometimes refuses a connection outright ("Connection refused"), which looks like a limit on how many logins it accepts in a short time. Checking which saved sessions point where (names and users masked):
+
+> Next I'm checking which of your saved WinSCP sessions point to `csnhr` and which to `fritz`. This only reads the registry, and names are masked.
+
+> Found the cause of the first message. **Session for starting jobs** is set to the same session as the main one, and that session goes to `csnhr`, NHR's jump host. Fritz itself says so: "There is no 'sbatch' command on 'csnhr' by design". You also have a second saved session that goes to `fritz`, and that's the one HoMo needs there. Next I'm reading the log of the failed create from your running HoMo:
+
+> The task log isn't exposed through the app, so I'll check Fritz directly. This is one read-only command to see whether `1002_homo_test` was created:
+
+> Nothing was created on Fritz, so no cleanup is needed.
+>
+> The create failure has a different cause. To run a shell command such as the copy, WinSCP opens a second login, and `csnhr` sometimes refuses logins that come quickly one after another. I just saw it happen myself: "Connection to … refused". A safer design avoids shell commands for creating a case altogether. WinSCP's own `mkdir` stops the script when the folder already exists, and that check is reliable. Checking that the fritz session works right now and that this WinSCP supports `echo`:
+
+> Your fritz session works right now (SLURM 25.11.8), and WinSCP's `echo` command works. Plan:
+> - **Your one-time fix:** choose the second session, the one to `fritz`, as **Session for starting jobs**. I'll make this obvious in the app.
+> - **Code change:** create a case in a single login with no shell command. The template files are fetched first; WinSCP's own `mkdir` then acts as the guard; finally everything is uploaded.
+>
+> Reading the parts of the code that need to change:
+
+> The other option is WinSCP's own remote `cp`. It copies on the server without passing the template's scripts, and their licence key, through your PC. Whether it needs a second login depends on whether Fritz's SFTP server supports a copy extension. Checking that in a WinSCP log (read-only: connect and exit; I only print the extension lines):
+
+> Fritz's SFTP server has no copy extension, so WinSCP's `cp` would also need a second login. I'll go with: fetch the template's 7 small files, create the folder with WinSCP's `mkdir`, upload them, all in one login. Before that, I'm checking the template's file permissions and whether the scripts call each other directly. This is read-only through the fritz session, and lines with the licence key are filtered out:
+
+> The template isn't in your remote folder (`/home/vault/<user>/<user>`): "No such file or directory". Earlier it was found there, so either the remote folder or the template has changed since. Looking for it read-only:
+
+> Your remote folder now contains different cases (`0830_mk2.2`, `SCRIPT_ASHWIN`, `SCRIPT_RANS`…) than the one used earlier today (`0830_mk3`, `0923_corner`, `test_homo`, `SCRIPT_FABSI`). So the saved remote folder has changed. Checking what it was before:
+
+> Your settings explain the rest. The template folder is now `SCRIPT_RANS`; `SCRIPT_FABSI` no longer exists in your folder, and the cases from earlier were the ones you cleaned up. `SCRIPT_RANS` is there, so that part is fine. Next I'm checking what `SCRIPT_RANS` contains (read-only, licence-key lines filtered):
+
+> `SCRIPT_RANS` holds the 7 files a case needs. The scripts call each other with plain `sbatch rans.sh` / `sbatch post.sh` and need no special permissions, so uploading copies of them works the same as `cp`. Reading the UI and test parts I'll change:
+
+> Before rewriting, I'm verifying the key guarantee on Fritz: WinSCP's own `mkdir` on a folder that already exists must stop the script, so nothing after it runs. The test uses `SCRIPT_RANS`, which exists, so it can't create anything:
+
+> The safety check was blocked because it would run `mkdir` on Fritz, even on a folder that already exists. I'll leave that real test to you. I can check the same WinSCP rule safely on this PC instead: a failing built-in command must stop the script.
+
+> That confirms it: the failing command stopped the script, and `HOMO-AFTER` never printed (exit code 1). That's the rule the new create step relies on. Now writing the changes in `cluster.py`:
+
+> Now the create step itself: one login, no shell commands, and WinSCP's `mkdir` as the guard.
+
+> Excluding `.sim` files from the template fetch, so a template that happens to contain one can't trigger a multi-GB download:
+
+> Now the app side: a clear warning when the session for starting jobs goes to the jump host, plus a suggested fritz session.
+
+> Now the tests. Checking where the fake's upload records and the old create commands are used:
+
+> Rewriting the fake WinSCP so it follows the new create script, including WinSCP's rule that the first failing command stops everything:
+
+> Now the test cases themselves: script order, success, an existing name, a missing template, a refused login and an interrupted upload.
+
+> Running the unit tests:
+
+> All 62 unit tests pass. Next, browser checks for the new jump-host warning:
+
+> All 108 browser checks pass. A quick screenshot to check the warning's layout, using the fake server:
+
+> The warning shows under the field, as intended. Next I'm restarting your HoMo server on port 5173 so it runs the new code:
+
+> Server restarted and answering. Next I'm updating the docs. First, the current wording in each:
+
+> Docs updated. One more read-only check on `SCRIPT_RANS`, since it now serves as your template: which STAR-CCM+ version its job scripts load. It's from November 2025, older than the scripts used earlier. I'm only printing the `module load` lines:
+
+> Same version as before (STAR-CCM+ 2506-r8-clang), so `SCRIPT_RANS` works as a template. Writing the log entry:
+
+### Work record
+
+- Diagnosis (read-only, user/host/session names masked): both HoMo settings `session` and `submitSession` were the csnhr session; csnhr answers `sbatch --version` with "There is no 'sbatch' command on 'csnhr' by design". The user's second saved session points to fritz and returns `slurm 25.11.8`. A `call` (second login) to csnhr was once refused (`Network error: Connection … refused`). `1002_homo_test` does not exist on Fritz (nothing created). Template is now `SCRIPT_RANS` (7 files, `-rw-r--r--`, scripts chain via `sbatch rans.sh` / `sbatch post.sh`, `module load star-ccm+/2506-r8-clang`); `SCRIPT_FABSI` is no longer in the remote folder. WinSCP 6.5.3; Fritz SFTP (version 3) has no copy-file/copy-data extension. Locally verified: with `option batch abort`, a failing WinSCP command stops the script; `echo` works.
+- A real `mkdir` test on Fritz (on the existing `SCRIPT_RANS`) was blocked by the permission system as a change to Fritz and was not run.
+- `cluster.py`: hints for csnhr's "no 'sbatch' command" (choose the fritz session) and "refused" (wait a minute, try again); `WinScp.session_value`, `session_hosts`; `new_case_script` replaces `create_case_script` / `upload_case_script` (one login, no `call`: `get -filemask="|*.sim; *.sim~"` template → temp folder, `echo`, `mkdir`, `echo`, `put -filemask="|Settings"` template files, `put` Settings, `put` .sim, `echo`); `run_new_case` streams that run, reports per stage whether Fritz was changed, removes the temporary folder and Settings.
+- `serve.py`: `/api/cluster` returns `sessionHosts`.
+- `web/app.js`, `web/styles.css`: note under "Session for starting jobs" (warning for csnhr sessions naming the fritz session; suggestion when empty).
+- Tests: `tests/test_cluster.py` (fake follows the new script and WinSCP's stop-on-error; script order, success, existing name, missing template, refused login, interrupted upload; 2 new hints), `tests/test_serve.py` (sessionHosts, new upload records), `tests/run_browser_tests.py` (fake hosts), `tests/browser/server-mode.html` (+3 checks for the note).
+- Docs: `CHANGELOG.md` (Fixed), `STATUS.md`, `DECISIONS.md`, `docs/STAGE7_FRITZ.md`, `tests/README.md`.
+- User's server on 5173 restarted with the new code.
+- Checks: `py -m unittest discover -s tests` 62/62 OK; `py tests/run_browser_tests.py` 108/108 passed.
+
+### Final response (verbatim)
+
+> Both problems are understood and fixed in the app. Nothing was created on Fritz (`1002_homo_test` doesn't exist), so you can simply try again.
+>
+> **What went wrong**
+> 1. **Session for starting jobs** was set to the same session as the main one, which logs in to `csnhr`, NHR's jump host. csnhr has no SLURM by design. Your other saved session, the one to `fritz`, works: I checked it and it found SLURM 25.11.8.
+> 2. **Create on Fritz** ran the copy as a shell command, and WinSCP runs shell commands through a second login. csnhr sometimes turns such logins away; I saw it refuse one myself.
+>
+> **What I changed**
+> - Creating a case now uses one login and only WinSCP's own commands. HoMo fetches the template's 7 small files (never a `.sim`) into a temporary folder on your PC. It creates the case folder with WinSCP's `mkdir`, then uploads the files, your edited `Settings` and the `.sim`. If the name already exists, `mkdir` fails and WinSCP stops, so nothing is uploaded. One side effect: the job scripts, including the licence key, now pass briefly through your PC's temp folder, and HoMo deletes them right afterwards.
+> - If the session for starting jobs goes to csnhr, the card now shows a warning under the field that names your fritz session. Error messages now say whether anything was changed on Fritz, and a refused connection tells you to wait a minute and try again.
+>
+> **What you do now** (reload http://127.0.0.1:5173; I restarted the server):
+> 1. In **Fritz cluster**, choose your fritz session under **Session for starting jobs**, click **Save**, then **Test connection**. It should end with "Jobs: slurm 25.11.8".
+> 2. Click **Create on Fritz** again for `1002_homo_test`.
+>
+> Your template is now `SCRIPT_RANS` (`SCRIPT_FABSI` is no longer in your folder). It has all 7 files and uses STAR-CCM+ 2506-r8-clang, like the scripts before, so it works as a template.
+>
+> I couldn't test a real create myself: even a harmless `mkdir` on Fritz was blocked as a change to Fritz. I checked the WinSCP rule it relies on locally instead. All tests pass (62 unit tests, 108 browser checks). Committed and pushed to GitHub `master`.

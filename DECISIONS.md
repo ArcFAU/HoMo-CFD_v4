@@ -72,9 +72,12 @@ The team prepares cases on Fritz by copying `SCRIPT_FABSI`, so HoMo CFD does
 the same instead of generating scripts: CFD-Tool's generator is outdated and
 the team's scripts (which already contain the licence key) stay untouched, as
 the user chose. HoMo CFD only writes Settings (edited in a form) and uploads
-the base `.sim`. Creation is guarded by one shell command that never touches
-an existing folder, because WinSCP `call` does not stop on errors; uploads run
-separately and only after a confirmed `HOMO-CREATED`. Jobs start with
+the base `.sim`. Creation uses only WinSCP's own commands in one login
+(update the same day): `call` needs a second login, which the csnhr jump host
+sometimes refuses, and does not stop on errors. The template's small files
+are fetched to a temporary local folder, then `mkdir <case>` is the guard (a
+failing WinSCP command stops the script, so nothing is uploaded into an
+existing folder), then the files, Settings and `.sim` are uploaded. Jobs start with
 `sbatch mesh.sh` through a second WinSCP session to a Fritz login node (the
 jump host has no SLURM), after a confirmation, only for cases that have not
 started. The licence key no longer needs a place in HoMo CFD.

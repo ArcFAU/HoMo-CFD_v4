@@ -56,6 +56,8 @@ class FakeWinScp(cluster.WinScp):
         self.release = threading.Event()
         self.existing = {"SCRIPT_FABSI", "caseA"}   # folders on the fake Fritz
         self.uploads = []
+        self.refuse = False               # the jump host turns the login away
+        self.hosts = {}
         self.jobs_output = f"{cluster.JOB_PREFIX}4100|resTAURANtS|RUNNING|1:02:03|/home/vault/g/u/caseD"
         self.settings_text = "Vehicle State/Velocity : 40.0\nRun Settings/Mesh Nodes : 2\n"
 
@@ -67,6 +69,9 @@ class FakeWinScp(cluster.WinScp):
 
     def registry_sessions(self):
         return {name: name for name in self.session_names}
+
+    def session_hosts(self):
+        return {name: host for name, host in self.hosts.items() if name in self.session_names}
 
     def session_key_file(self, session):
         return self.key_files.get(session)
@@ -91,12 +96,6 @@ class FakeWinScp(cluster.WinScp):
             return self.code, "Session started.\nslurm 25.11.8"
         if "&& sbatch mesh.sh" in script:
             return self.code, "Session started.\nSubmitted batch job 4242"
-        if "echo HOMO-CREATED" in script:
-            case = re.search(r'if \[ -e "([^"]+)" \]', script).group(1)
-            if case in self.existing:
-                return 0, "HOMO-EXISTS"
-            self.existing.add(case)
-            return 0, "HOMO-CREATED"
         fetch = re.search(r'^get "[^"]+" "([^"]+)"', script, re.M)
         if fetch:
             Path(fetch.group(1)).write_text(self.settings_text, encoding="utf-8")
@@ -106,11 +105,8 @@ class FakeWinScp(cluster.WinScp):
     def stream(self, lines, on_line, on_start=lambda process: None):
         self.scripts.append(lines)
         on_start(FakeProcess(self))
-        puts = [re.match(r'put "([^"]+)" "([^"]+)"', line) for line in lines if line.startswith("put ")]
-        if puts:
-            self.uploads.append([(Path(m.group(1)).read_text(encoding="utf-8", errors="replace")[:200]
-                                  if m.group(2).endswith("/Settings") else m.group(1), m.group(2)) for m in puts])
-            return self.stream_code
+        if any(line.startswith("mkdir ") for line in lines):
+            return self.new_case(lines, on_line)
         local = re.search(r'synchronize local -filemask="[^"]*" "([^"]+)"', "\n".join(lines)).group(1)
         on_line(f"{cluster.TOTAL_PREFIX}2|300")
         (Path(local) / "plots").mkdir(parents=True, exist_ok=True)
@@ -121,6 +117,45 @@ class FakeWinScp(cluster.WinScp):
             return 1
         on_line("DONE                      |            0 B | 2463.9 KB/s | binary |   0%")
         return self.stream_code
+
+    def new_case(self, lines, on_line):
+        """The new-case script, run like WinSCP: the first failing command stops it."""
+        script = "\n".join(lines)
+        if self.refuse:
+            on_line('Network error: Connection to "fritz" refused.')
+            return 1
+        template, template_dir = re.search(r'^get -filemask="[^"]*" "([^"]+)/\*" "([^"]+)\\"$', script, re.M).groups()
+        if template not in self.existing:
+            on_line(f"Can't get attributes of file '{template}'.")
+            on_line("No such file or directory.")
+            return 1
+        for name in ("mesh.sh", "Settings"):
+            (Path(template_dir) / name).write_text(f"template {name}\n", encoding="utf-8")
+        on_line(cluster.TEMPLATE_FETCHED)
+        case = re.search(r'^mkdir "([^"]+)"$', script, re.M).group(1)
+        if case in self.existing:
+            on_line(f"Error creating folder '{case}'.")
+            return 1
+        self.existing.add(case)
+        on_line(cluster.FOLDER_CREATED)
+        if self.stream_code:
+            on_line("Network error: Software caused connection abort.")
+            return self.stream_code
+        uploaded = []
+        for line in lines:
+            match = re.match(r'put (?:-filemask="\|([^"]*)" )?"([^"]+)" "([^"]+)"$', line)
+            if not match:
+                continue
+            excluded, source, target = match.groups()
+            if source.endswith("\\*"):
+                uploaded.append((sorted(path.name for path in Path(source[:-2]).iterdir() if path.name != excluded), target))
+            elif target.endswith("/Settings"):
+                uploaded.append((Path(source).read_text(encoding="utf-8"), target))
+            else:
+                uploaded.append((source, target))
+        self.uploads.append(uploaded)
+        on_line(cluster.CASE_UPLOADED)
+        return 0
 
 
 class InputTests(unittest.TestCase):
@@ -167,6 +202,8 @@ class ScriptTests(unittest.TestCase):
             'Error changing directory to "/nope".': "remote folder",
             'Host "Fritz" does not exist.': "no saved session",
             "Network error: Connection timed out.": "network",
+            'Network error: Connection to "csnhr" refused.': "Wait a minute",
+            "!!! ERROR !!! There is no 'sbatch' command on 'csnhr' by design!": "fritz.nhr.fau.de",
         }
         for output, expected in cases.items():
             with self.subTest(output=output):
@@ -281,35 +318,67 @@ class NewCaseTests(unittest.TestCase):
                 cluster.check_settings(bad)
 
     def test_create_never_overwrites(self):
-        command = cluster.create_case_script("Fritz", "/home/vault/g/u", "SCRIPT_FABSI", "new1")[4]
-        self.assertTrue(command.startswith('call if [ -e "new1" ]; then echo HOMO-EXISTS;'))
-        self.assertIn('mkdir "new1" && cp -rp "SCRIPT_FABSI"/. "new1"/ && echo HOMO-CREATED', command)
-        upload = cluster.upload_case_script("Fritz", "/home/vault/g/u", "new1", "C:/t/s", "D:/base.sim")
-        self.assertEqual([line.split()[0] for line in upload[3:]], ["put", "put", "exit"])
+        lines = cluster.new_case_script("Fritz", "/home/vault/g/u", "SCRIPT_FABSI", "new1", "C:\\t\\tpl", "C:\\t\\s", "D:\\base.sim")
+        self.assertEqual(lines[:4], ["option batch abort", "option confirm off", 'open "Fritz"', 'cd "/home/vault/g/u"'])
+        commands = [line.split()[0] for line in lines[4:]]
+        self.assertEqual(commands, ["get", "echo", "mkdir", "echo", "put", "put", "put", "echo", "exit"])
+        self.assertNotIn("call", commands, "no shell command: it needs a second login and does not stop on errors")
+        self.assertEqual(lines[4], 'get -filemask="|*.sim; *.sim~" "SCRIPT_FABSI/*" "C:\\t\\tpl\\"')
+        self.assertEqual(lines[6], 'mkdir "new1"', "mkdir (fails if new1 exists) comes before any upload")
+        self.assertEqual(lines[8:11], ['put -filemask="|Settings" "C:\\t\\tpl\\*" "new1/"',
+                                       'put "C:\\t\\s" "new1/Settings"', 'put "D:\\base.sim" "new1/"'])
 
-    def run_new_case(self, fake, name):
+    def run_new_case(self, fake, name, template="SCRIPT_FABSI"):
         handle, temp_name = tempfile.mkstemp(prefix="homo-cfd-settings-test-")
         os.close(handle)
         settings_file = Path(temp_name)
         settings_file.write_text("Vehicle State/Velocity : 60.0\n", encoding="utf-8")
         task = cluster.Download(name)
-        cluster.run_new_case(fake, task, "Fritz", "/home/vault/g/u", "SCRIPT_FABSI", name, str(settings_file), "D:/base.sim")
+        cluster.run_new_case(fake, task, "Fritz", "/home/vault/g/u", template, name, str(settings_file), "D:/base.sim")
         self.assertFalse(settings_file.exists(), "temporary Settings removed")
+        template_dir = re.search(r'"([^"]+)\\"$', fake.scripts[-1][4]).group(1)
+        self.assertFalse(Path(template_dir).exists(), "temporary template copy removed")
         return task
 
     def test_new_case_created_then_uploaded(self):
         fake = FakeWinScp()
         task = self.run_new_case(fake, "new1")
         self.assertEqual(task.state, "done", task.message)
-        self.assertEqual(fake.uploads, [[("Vehicle State/Velocity : 60.0\n", "/home/vault/g/u/new1/Settings"),
-                                         ("D:/base.sim", "/home/vault/g/u/new1/")]])
+        self.assertEqual(fake.uploads, [[(["mesh.sh"], "new1/"), ("Vehicle State/Velocity : 60.0\n", "new1/Settings"),
+                                         ("D:/base.sim", "new1/")]])
+        self.assertEqual(len(fake.scripts), 1, "one WinSCP run (one login)")
 
     def test_existing_folder_is_not_touched(self):
         fake = FakeWinScp()
         task = self.run_new_case(fake, "caseA")
         self.assertEqual(task.state, "failed")
-        self.assertIn("already exists", task.message)
+        self.assertIn("probably exists already", task.message)
+        self.assertIn("Nothing was changed", task.message)
         self.assertEqual(fake.uploads, [], "nothing uploaded into an existing folder")
+
+    def test_missing_template_changes_nothing(self):
+        fake = FakeWinScp()
+        task = self.run_new_case(fake, "new1", template="SCRIPT_GONE")
+        self.assertEqual(task.state, "failed")
+        self.assertIn("The template folder SCRIPT_GONE was not found", task.message)
+        self.assertNotIn("new1", fake.existing)
+        self.assertEqual(fake.uploads, [])
+
+    def test_refused_login_says_wait_and_retry(self):
+        fake = FakeWinScp()
+        fake.refuse = True
+        task = self.run_new_case(fake, "new1")
+        self.assertEqual(task.state, "failed")
+        self.assertIn("Nothing was changed", task.message)
+        self.assertIn("Wait a minute", task.message)
+        self.assertNotIn("new1", fake.existing)
+
+    def test_interrupted_upload_says_incomplete(self):
+        fake = FakeWinScp()
+        fake.stream_code = 1
+        task = self.run_new_case(fake, "new1")
+        self.assertEqual(task.state, "failed")
+        self.assertIn("exists on Fritz but is incomplete; do not start it", task.message)
 
     def test_jobs_and_submit_parsing(self):
         jobs = cluster.parse_jobs("noise\n" + FakeWinScp().jobs_output)

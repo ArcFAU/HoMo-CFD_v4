@@ -191,8 +191,12 @@ folders and job logs.
   Fritz (`SCRIPT_FABSI`, configurable), upload the edited Settings and the base
   `.sim`. The job scripts stay exactly as in the template (they already hold
   the licence key), so the licence-key question (Q6) no longer applies.
-- WinSCP `call` keeps going after a failed command, so the existence check and
-  the copy are one shell command that reports its outcome, and uploads run in a
-  separate WinSCP run only after the folder was created.
+- WinSCP `call` keeps going after a failed command and opens a second login,
+  which csnhr sometimes refuses. So creating a case uses only WinSCP's own
+  commands in one login: `get` the template (no `.sim`) to a temporary local
+  folder, `mkdir` the case (stops the script if it exists), `put` the files,
+  the edited Settings and the `.sim`; `echo` lines mark the progress.
+- The session for starting jobs must point to a Fritz login node
+  (`fritz.nhr.fau.de`); the card warns when a csnhr session is chosen.
 - Jobs start with `sbatch mesh.sh` through a second WinSCP session to a Fritz
   login node; the same session lists your jobs (`squeue`) for the case list.

@@ -95,6 +95,7 @@ def make_handler(serve, working_dir):
     class TestHandler(serve.Handler):
         # Never the user's real WinSCP sessions or Fritz.
         winscp = FakeWinScp(0, "Session started.\n/home/vault/g/u/Pipeline\n", sessions=["Fritz", "Other"])
+        winscp.hosts = {"Fritz": "csnhr.nhr.fau.de", "Other": "fritz.nhr.fau.de"}
         results = []
         result_ready = threading.Event()
 

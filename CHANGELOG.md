@@ -26,6 +26,8 @@ User-visible changes, newest first. Detailed reasoning lives in
 - Faster start-up with many simulations: 120 simulations load in about 4 s (was 5.7 s).
 
 ### Fixed
+- **Create on Fritz** failed with "Fritz refused the login": its shell command needed a second login, which NHR's jump host sometimes turns away. A new simulation is now created in one login with WinSCP's own commands only (the template's files are copied through a temporary folder on this computer, never a `.sim`), and WinSCP's `mkdir` stops everything if the name exists. Messages now say whether anything was changed on Fritz.
+- **Session for starting jobs**: choosing the jump-host session (csnhr, no SLURM) now shows a warning under the field that names your fritz session; Test connection explains the same instead of "Could not reach Fritz", and a refused connection says to wait a minute and try again.
 - Choosing a single simulation folder as the results root broke image sections and named the simulation "plots".
 - Simulations nested below the results root were missing from Add case and pressure overlays.
 - Pressure overlays silently mixed stations; off-station cases and scene images are now labelled. Missing x-axis label and "undefined" chart title.

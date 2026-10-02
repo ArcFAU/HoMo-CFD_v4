@@ -188,7 +188,16 @@ runTests(async () => {
   const confirmed = [];
   app.contentWindow.confirm = (message) => { confirmed.push(message); return true; };
   check("not-started case has no Start without a job session", !clusterRow("caseF")?.querySelector("button"), clusterRow("caseF")?.textContent);
-  doc.getElementById("cluster-submit-session").value = "Other";
+  const submitSelect = doc.getElementById("cluster-submit-session");
+  const submitNote = doc.getElementById("cluster-submit-note");
+  check("job session suggests the fritz login node", !submitNote.hidden && /choose "Other"/.test(submitNote.textContent), submitNote.textContent);
+  submitSelect.value = "Fritz";
+  submitSelect.dispatchEvent(new app.contentWindow.Event("change"));
+  check("jump host as job session is flagged", !submitNote.hidden && /csnhr, NHR's jump host, which cannot start jobs\. Choose "Other" instead/.test(submitNote.textContent),
+    submitNote.textContent);
+  submitSelect.value = "Other";
+  submitSelect.dispatchEvent(new app.contentWindow.Event("change"));
+  check("login node as job session has no warning", submitNote.hidden, submitNote.textContent);
   doc.getElementById("cluster-save").click();
   await waitFor(() => clusterRow("caseF")?.querySelector("button")?.textContent === "Start", 10000);
   check("running job shown from the queue", /Running 1:02:03 \(job 4100, resTAURANtS\)/.test(clusterRow("caseD")?.cells[1].textContent ?? ""),

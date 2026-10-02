@@ -372,6 +372,7 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_json({
             "winscp": str(executable) if executable else None,
             "sessions": self.winscp.sessions(),
+            "sessionHosts": self.winscp.session_hosts(),
             "pageant": {"found": self.winscp.pageant() is not None, "running": self.winscp.pageant_running()},
             **self.cluster_settings(),
         })

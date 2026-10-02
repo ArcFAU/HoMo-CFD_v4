@@ -28,6 +28,8 @@ SESSIONS_KEY = r"Software\Martin Prikryl\WinSCP 2\Sessions"
 
 # Known WinSCP messages and what the user can do about them; first match wins.
 HINTS = [
+    ("no 'sbatch' command", "This session logs in to csnhr, NHR's jump host, which cannot start jobs. "
+                            "Under \"Session for starting jobs\", choose your session to fritz.nhr.fau.de, then save."),
     ("passphrase", "Your key is protected by a passphrase, which HoMo CFD never types. Click \"Unlock key with Pageant\": "
                    "Pageant asks for the passphrase in its own window, then WinSCP can use the key. Then test again."),
     ("host key", "WinSCP does not know Fritz's host key yet. Open WinSCP, log in with this session once and accept the key, then test again."),
@@ -35,6 +37,8 @@ HINTS = [
     ("password", "The session asks for a password, which HoMo CFD cannot type. Use a key (as with CFD-Tool), or log in with WinSCP to check."),
     ("changing directory", "Logged in, but the remote folder could not be opened. Check the path."),
     ("does not exist", "WinSCP found no saved session or host with this name. Check the session name in WinSCP."),
+    ("refused", "Fritz turned the connection away. NHR's jump host does this now and then when logins come in quick "
+                "succession. Wait a minute, then try again."),
     ("network error", "Could not reach Fritz. Check the network or VPN connection."),
     ("connection failed", "Could not reach Fritz. Check the network or VPN connection."),
     ("timed out", "Fritz did not answer in time. Check the network or VPN connection."),
@@ -122,17 +126,27 @@ class WinScp:
         """Names of the WinSCP saved sessions (from the registry), sorted."""
         return sorted(self.registry_sessions(), key=str.lower)
 
-    def session_key_file(self, session):
-        """The private key file set in a saved session, or None."""
+    def session_value(self, session, field):
+        """One stored value of a saved session (e.g. HostName), or None."""
         raw = self.registry_sessions().get(session)
         if raw is None:
             return None
         import winreg
         try:
             with winreg.OpenKey(winreg.HKEY_CURRENT_USER, SESSIONS_KEY + "\\" + raw) as key:
-                value = unquote(winreg.QueryValueEx(key, "PublicKeyFile")[0])
+                return winreg.QueryValueEx(key, field)[0]
         except OSError:
             return None
+
+    def session_hosts(self):
+        """{session name: host name} for the saved sessions that have one."""
+        hosts = {name: self.session_value(name, "HostName") for name in self.sessions()}
+        return {name: host for name, host in hosts.items() if isinstance(host, str) and host}
+
+    def session_key_file(self, session):
+        """The private key file set in a saved session, or None."""
+        value = self.session_value(session, "PublicKeyFile")
+        value = unquote(value) if isinstance(value, str) else ""
         return Path(value) if value and Path(value).is_file() else None
 
     def pageant(self):
@@ -436,28 +450,31 @@ def settings_fetch_script(session, remote_folder, source, local_file):
             f'get "{remote_folder}/{source}/Settings" "{local_file}"', "exit"]
 
 
-def create_case_script(session, remote_folder, template, case):
-    """Create <case> as a copy of the template, only if the name is free.
+TEMPLATE_FETCHED = "HOMO-TEMPLATE-FETCHED"
+FOLDER_CREATED = "HOMO-CREATED"
+CASE_UPLOADED = "HOMO-UPLOADED"
 
-    WinSCP's "call" does not stop the script when a command fails, so the
-    check and the copy are one shell command that reports the outcome
-    (HOMO-CREATED / HOMO-EXISTS / HOMO-NO-TEMPLATE). Uploads run separately,
-    and only after HOMO-CREATED, so an existing case is never overwritten.
+
+def new_case_script(session, remote_folder, template, case, template_dir, settings_file, sim_file):
+    """Create <case> as a copy of the template with the edited Settings and the .sim.
+
+    One login and only WinSCP's own commands: "call" (a shell command) needs a
+    second login, which NHR's jump host sometimes refuses, and does not stop
+    the script when it fails. WinSCP's own commands do stop it (option batch
+    abort), so "mkdir" is the guard: it fails if <case> exists, and nothing
+    after it runs. The template's few small files (never a .sim) pass through
+    template_dir on this computer; the echo lines mark how far the script got.
     """
     return [
         "option batch abort", "option confirm off", f'open "{session}"', f'cd "{remote_folder}"',
-        f'call if [ -e "{case}" ]; then echo HOMO-EXISTS; elif [ ! -d "{template}" ]; then echo HOMO-NO-TEMPLATE; '
-        f'else mkdir "{case}" && cp -rp "{template}"/. "{case}"/ && echo HOMO-CREATED; fi',
-        "exit",
-    ]
-
-
-def upload_case_script(session, remote_folder, case, settings_file, sim_file):
-    """Upload the edited Settings (replacing the template's copy) and the base .sim."""
-    return [
-        "option batch abort", "option confirm off", f'open "{session}"',
-        f'put "{settings_file}" "{remote_folder}/{case}/Settings"',
-        f'put "{sim_file}" "{remote_folder}/{case}/"',
+        f'get -filemask="|*.sim; *.sim~" "{template}/*" "{template_dir}\\"',
+        f"echo {TEMPLATE_FETCHED}",
+        f'mkdir "{case}"',
+        f"echo {FOLDER_CREATED}",
+        f'put -filemask="|Settings" "{template_dir}\\*" "{case}/"',
+        f'put "{settings_file}" "{case}/Settings"',
+        f'put "{sim_file}" "{case}/"',
+        f"echo {CASE_UPLOADED}",
         "exit",
     ]
 
@@ -498,42 +515,48 @@ def parse_jobs(output):
 
 
 def run_new_case(winscp, task, session, remote_folder, template, case, settings_file, sim_file):
-    """Background task: create the case on Fritz, upload Settings and the
-    .sim, then remove the temporary Settings file."""
+    """Background task: create the case on Fritz in one WinSCP run (see
+    new_case_script), then remove the temporary Settings and template files."""
+    template_dir = tempfile.mkdtemp(prefix="homo-cfd-template-")
+    reached = set()
+    steps = {TEMPLATE_FETCHED: "Creating the folder…", FOLDER_CREATED: "Uploading Settings and the .sim file…"}
+
+    def on_line(line):
+        task.on_line(line)
+        mark = line.strip()
+        if mark in (TEMPLATE_FETCHED, FOLDER_CREATED, CASE_UPLOADED):
+            reached.add(mark)
+            task.message = steps.get(mark, task.message)
+
     try:
-        task.message = "Creating the folder from the template…"
-        code, output = winscp.run(create_case_script(session, remote_folder, template, case))
-        task.log = output.splitlines()[-60:]
-        created = [line.strip() for line in output.splitlines() if line.strip().startswith("HOMO-")]
-        if "HOMO-EXISTS" in created:
-            task.state = "failed"
-            task.message = f"A folder named {case} already exists on Fritz; nothing was changed."
-            return
-        if "HOMO-NO-TEMPLATE" in created:
-            task.state = "failed"
-            task.message = f"The template folder {template} was not found on Fritz; nothing was changed."
-            return
-        if code != 0 or "HOMO-CREATED" not in created:
-            task.state = "failed"
-            task.message = " ".join(filter(None, ["Could not create the folder.", hint_for(output)]))
-            return
-        task.message = "Uploading Settings and the .sim file…"
-        code = winscp.stream(upload_case_script(session, remote_folder, case, settings_file, sim_file),
-                             task.on_line, lambda process: setattr(task, "process", process))
-        if task.cancelled:
-            task.state = "cancelled"
-            task.message = "Cancelled during the upload. The folder exists on Fritz but is incomplete; do not start it."
-        elif code == 0:
-            task.state = "done"
-            task.message = "Created on Fritz. Start it from the list when you are ready."
+        task.message = f"Reading the template folder {template}…"
+        code = winscp.stream(new_case_script(session, remote_folder, template, case, template_dir, settings_file, sim_file),
+                             on_line, lambda process: setattr(task, "process", process))
+        log = "\n".join(task.log)
+        hint = hint_for(log)
+        if code == 0 and CASE_UPLOADED in reached:
+            task.state, task.message = "done", "Created on Fritz. Start it from the list when you are ready."
+        elif FOLDER_CREATED in reached:
+            task.state = "cancelled" if task.cancelled else "failed"
+            stopped = "Cancelled during the upload." if task.cancelled else "The upload stopped."
+            task.message = " ".join(filter(None, [f"{stopped} The folder {case} exists on Fritz but is incomplete; "
+                                                  "do not start it.", hint]))
         else:
-            task.state = "failed"
-            task.message = " ".join(filter(None, ["The upload stopped; the folder on Fritz is incomplete.",
-                                                  hint_for("\n".join(task.log))]))
+            task.state = "cancelled" if task.cancelled else "failed"
+            if task.cancelled:
+                reason = "Cancelled."
+            elif TEMPLATE_FETCHED in reached:
+                reason = f"Could not create the folder {case} on Fritz; a folder with this name probably exists already."
+            elif re.search(r"no such file|no file matching|not found", log, re.I) and not hint:
+                reason = f"The template folder {template} was not found on Fritz."
+            else:
+                reason = f"Could not read the template folder {template} on Fritz."
+            task.message = " ".join(filter(None, [reason, "Nothing was changed on Fritz.", hint]))
     except Exception as err:  # never leave a task shown as running
         task.state = "failed"
         task.message = f"Could not create the case: {err}"
     finally:
+        shutil.rmtree(template_dir, ignore_errors=True)
         try:
             os.unlink(settings_file)
         except OSError:

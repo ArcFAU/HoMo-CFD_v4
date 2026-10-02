@@ -2269,7 +2269,21 @@ async function showClusterSettings() {
   if (config.submitSession && !sessions.includes(config.submitSession)) submitSession.add(new Option(config.submitSession, config.submitSession));
   submitSession.value = config.submitSession || "";
   submitSession.title = "A WinSCP session to a Fritz login node (e.g. fritz.nhr.fau.de). The jump host has no SLURM, so jobs are started and listed through this one.";
-  submitField.appendChild(submitSession);
+  const submitNote = Object.assign(document.createElement("span"), { id: "cluster-submit-note", className: "cluster-field-note" });
+  submitField.append(submitSession, submitNote);
+  // The jump host (csnhr) cannot run SLURM; point at a saved session to a Fritz login node instead.
+  const hosts = config.sessionHosts || {};
+  const describeSubmitSession = () => {
+    const host = hosts[submitSession.value] || "";
+    const loginNode = sessions.find((name) => /fritz/i.test(hosts[name] || ""));
+    const suggestion = loginNode ? `Choose "${loginNode}" instead, then save.` : "Choose a session to fritz.nhr.fau.de instead, then save.";
+    submitNote.textContent = /csnhr/i.test(host)
+      ? `This session logs in to csnhr, NHR's jump host, which cannot start jobs. ${suggestion}`
+      : !submitSession.value && loginNode ? `To start jobs from HoMo CFD, choose "${loginNode}" (a Fritz login node).` : "";
+    submitNote.hidden = !submitNote.textContent;
+  };
+  submitSession.addEventListener("change", describeSubmitSession);
+  describeSubmitSession();
 
   const templateField = document.createElement("label");
   templateField.className = "cluster-field";

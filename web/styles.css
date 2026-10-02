@@ -1511,6 +1511,16 @@ select {
   flex: 0 1 520px;
 }
 
+.cluster-field-note {
+  flex-basis: 100%;
+  padding-left: 132px;
+  color: #ffb86b;
+}
+
+.cluster-field-note[hidden] {
+  display: none;
+}
+
 .cluster-status.cluster-ok {
   color: #65b891;
 }
