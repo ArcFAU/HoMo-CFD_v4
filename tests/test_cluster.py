@@ -26,6 +26,7 @@ STATUS_OUTPUT = "\n".join([
     f"HOMO|caseC|SDMTRP|{NOW - 2000}",   # ready to download
     f"HOMO|caseD|SMT|{NOW - 600}",       # solving
     "HOMO|caseE|SDMTR|1600000000",      # post-processing, but long silent
+    "HOMO|caseF||0",                    # created, not started
     "HOMO|bad/name|SDMTRP|1",           # not usable as a folder name
 ])
 
@@ -53,6 +54,10 @@ class FakeWinScp(cluster.WinScp):
         self.stream_code = 0
         self.hold = False                 # keep a download "running" until cancelled
         self.release = threading.Event()
+        self.existing = {"SCRIPT_FABSI", "caseA"}   # folders on the fake Fritz
+        self.uploads = []
+        self.jobs_output = f"{cluster.JOB_PREFIX}4100|resTAURANtS|RUNNING|1:02:03|/home/vault/g/u/caseD"
+        self.settings_text = "Vehicle State/Velocity : 40.0\nRun Settings/Mesh Nodes : 2\n"
 
     def executable(self):
         return Path("C:/fake/WinSCP.com") if self.installed else None
@@ -77,13 +82,35 @@ class FakeWinScp(cluster.WinScp):
 
     def run(self, lines):
         self.scripts.append(lines)
-        if any(line.startswith("call for d in") for line in lines):
+        script = "\n".join(lines)
+        if "call for d in" in script:
             return self.code, self.status_output
+        if "call squeue" in script:
+            return self.code, self.jobs_output
+        if "sbatch --version" in script:
+            return self.code, "Session started.\nslurm 25.11.8"
+        if "&& sbatch mesh.sh" in script:
+            return self.code, "Session started.\nSubmitted batch job 4242"
+        if "echo HOMO-CREATED" in script:
+            case = re.search(r'if \[ -e "([^"]+)" \]', script).group(1)
+            if case in self.existing:
+                return 0, "HOMO-EXISTS"
+            self.existing.add(case)
+            return 0, "HOMO-CREATED"
+        fetch = re.search(r'^get "[^"]+" "([^"]+)"', script, re.M)
+        if fetch:
+            Path(fetch.group(1)).write_text(self.settings_text, encoding="utf-8")
+            return 0, ""
         return self.code, self.output
 
     def stream(self, lines, on_line, on_start=lambda process: None):
         self.scripts.append(lines)
         on_start(FakeProcess(self))
+        puts = [re.match(r'put "([^"]+)" "([^"]+)"', line) for line in lines if line.startswith("put ")]
+        if puts:
+            self.uploads.append([(Path(m.group(1)).read_text(encoding="utf-8", errors="replace")[:200]
+                                  if m.group(2).endswith("/Settings") else m.group(1), m.group(2)) for m in puts])
+            return self.stream_code
         local = re.search(r'synchronize local -filemask="[^"]*" "([^"]+)"', "\n".join(lines)).group(1)
         on_line(f"{cluster.TOTAL_PREFIX}2|300")
         (Path(local) / "plots").mkdir(parents=True, exist_ok=True)
@@ -159,7 +186,7 @@ class StatusTests(unittest.TestCase):
 
     def test_parse_cases(self):
         cases = cluster.parse_cases("noise\n" + STATUS_OUTPUT + "\nHOMO|broken", now=NOW)
-        self.assertEqual([case["name"] for case in cases], ["caseD", "caseC", "caseA", "caseE", "bad/name"])
+        self.assertEqual([case["name"] for case in cases], ["caseD", "caseC", "caseA", "caseE", "bad/name", "caseF"])
         by_name = {case["name"]: case for case in cases}
         self.assertEqual((by_name["caseC"]["state"], by_name["caseC"]["stale"]), ("ready", False))
         self.assertEqual((by_name["caseD"]["state"], by_name["caseD"]["stale"]), ("solving", False))
@@ -240,6 +267,55 @@ class DownloadTests(unittest.TestCase):
         cluster.run_download(FakeWinScp(), download, self.lines(), self.partial, self.finished)
         self.assertEqual(download.state, "failed")
         self.assertTrue((self.finished / "keep").is_dir())
+
+
+class NewCaseTests(unittest.TestCase):
+    def test_settings_round_trip(self):
+        text = "Vehicle State/Velocity : 40.0\nMesh/Base Size : 4\nnot a setting\n"
+        pairs = cluster.parse_settings(text)
+        self.assertEqual(pairs, [("Vehicle State/Velocity", "40.0"), ("Mesh/Base Size", "4")])
+        self.assertEqual(cluster.format_settings(cluster.check_settings([list(pair) for pair in pairs])),
+                         "Vehicle State/Velocity : 40.0\nMesh/Base Size : 4\n")
+        for bad in ([], [["", "1"]], [["a", "x\ny"]], [["a : b", "1"]], [["a", 1]], "text"):
+            with self.subTest(settings=bad), self.assertRaises(ValueError):
+                cluster.check_settings(bad)
+
+    def test_create_never_overwrites(self):
+        command = cluster.create_case_script("Fritz", "/home/vault/g/u", "SCRIPT_FABSI", "new1")[4]
+        self.assertTrue(command.startswith('call if [ -e "new1" ]; then echo HOMO-EXISTS;'))
+        self.assertIn('mkdir "new1" && cp -rp "SCRIPT_FABSI"/. "new1"/ && echo HOMO-CREATED', command)
+        upload = cluster.upload_case_script("Fritz", "/home/vault/g/u", "new1", "C:/t/s", "D:/base.sim")
+        self.assertEqual([line.split()[0] for line in upload[3:]], ["put", "put", "exit"])
+
+    def run_new_case(self, fake, name):
+        handle, temp_name = tempfile.mkstemp(prefix="homo-cfd-settings-test-")
+        os.close(handle)
+        settings_file = Path(temp_name)
+        settings_file.write_text("Vehicle State/Velocity : 60.0\n", encoding="utf-8")
+        task = cluster.Download(name)
+        cluster.run_new_case(fake, task, "Fritz", "/home/vault/g/u", "SCRIPT_FABSI", name, str(settings_file), "D:/base.sim")
+        self.assertFalse(settings_file.exists(), "temporary Settings removed")
+        return task
+
+    def test_new_case_created_then_uploaded(self):
+        fake = FakeWinScp()
+        task = self.run_new_case(fake, "new1")
+        self.assertEqual(task.state, "done", task.message)
+        self.assertEqual(fake.uploads, [[("Vehicle State/Velocity : 60.0\n", "/home/vault/g/u/new1/Settings"),
+                                         ("D:/base.sim", "/home/vault/g/u/new1/")]])
+
+    def test_existing_folder_is_not_touched(self):
+        fake = FakeWinScp()
+        task = self.run_new_case(fake, "caseA")
+        self.assertEqual(task.state, "failed")
+        self.assertIn("already exists", task.message)
+        self.assertEqual(fake.uploads, [], "nothing uploaded into an existing folder")
+
+    def test_jobs_and_submit_parsing(self):
+        jobs = cluster.parse_jobs("noise\n" + FakeWinScp().jobs_output)
+        self.assertEqual(jobs, {"caseD": [{"id": "4100", "name": "resTAURANtS", "state": "RUNNING", "elapsed": "1:02:03"}]})
+        self.assertEqual(cluster.SUBMITTED.search("Submitted batch job 4242").group(1), "4242")
+        self.assertIn('call cd "/home/vault/g/u/new1" && sbatch mesh.sh', cluster.submit_script("Fritz", "/home/vault/g/u", "new1"))
 
 
 @unittest.skipUnless(os.name == "nt", "runs a .cmd file")

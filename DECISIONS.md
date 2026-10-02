@@ -66,6 +66,19 @@ change with speed; the hover note says so.
 The force columns are computed when the table is drawn, not stored with the
 cached CSV rows, so changing the speed or density only redraws the table.
 
+## 2026-10-02 — New simulations copy the team template; jobs start via a login-node session
+
+The team prepares cases on Fritz by copying `SCRIPT_FABSI`, so HoMo CFD does
+the same instead of generating scripts: CFD-Tool's generator is outdated and
+the team's scripts (which already contain the licence key) stay untouched, as
+the user chose. HoMo CFD only writes Settings (edited in a form) and uploads
+the base `.sim`. Creation is guarded by one shell command that never touches
+an existing folder, because WinSCP `call` does not stop on errors; uploads run
+separately and only after a confirmed `HOMO-CREATED`. Jobs start with
+`sbatch mesh.sh` through a second WinSCP session to a Fritz login node (the
+jump host has no SLURM), after a confirmation, only for cases that have not
+started. The licence key no longer needs a place in HoMo CFD.
+
 ## 2026-10-02 — Step 2 reads state from files; downloads via inProgress
 
 The WinSCP session reaches csnhr, a jump host without SLURM, so HoMo CFD

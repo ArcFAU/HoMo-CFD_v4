@@ -183,5 +183,39 @@ runTests(async () => {
     clusterRow("caseC")?.querySelector("button")?.textContent === "Reload results", clusterRow("caseC")?.textContent);
   const afterList = await (await fetch("/api/list?path=")).json();
   check("downloaded case is in finished", afterList.some((entry) => entry.name === "caseC"), afterList.map((entry) => entry.name).join(","));
+
+  // Steps 3-4: job session, Start, new simulation (fake WinSCP; confirmations accepted).
+  const confirmed = [];
+  app.contentWindow.confirm = (message) => { confirmed.push(message); return true; };
+  check("not-started case has no Start without a job session", !clusterRow("caseF")?.querySelector("button"), clusterRow("caseF")?.textContent);
+  doc.getElementById("cluster-submit-session").value = "Other";
+  doc.getElementById("cluster-save").click();
+  await waitFor(() => clusterRow("caseF")?.querySelector("button")?.textContent === "Start", 10000);
+  check("running job shown from the queue", /Running 1:02:03 \(job 4100, resTAURANtS\)/.test(clusterRow("caseD")?.cells[1].textContent ?? ""),
+    clusterRow("caseD")?.cells[1].textContent);
+  clusterRow("caseF").querySelector("button").click();
+  await waitFor(() => /caseF started: job 4242/.test(doc.querySelector(".cluster-cases .cluster-status")?.textContent ?? ""), 10000);
+  check("Start asks first and reports the job", /Start caseF on Fritz\?/.test(confirmed[0] ?? "") &&
+    /job 4242/.test(doc.querySelector(".cluster-cases .cluster-status")?.textContent ?? ""), doc.querySelector(".cluster-cases .cluster-status")?.textContent);
+  await waitFor(() => /submitted \(job 4242\)/.test(clusterRow("caseF")?.cells[1].textContent ?? ""), 10000);
+  check("started case cannot be started again", !clusterRow("caseF")?.querySelector("button") && /submitted \(job 4242\)/.test(clusterRow("caseF")?.cells[1].textContent ?? ""),
+    clusterRow("caseF")?.textContent);
+
+  doc.querySelector(".cluster-new-case").open = true;
+  doc.getElementById("new-case-name").value = "new1";
+  doc.getElementById("new-case-load").click();
+  await waitFor(() => doc.querySelectorAll("#new-case-settings input[data-key]").length === 2, 10000);
+  const velocity = doc.querySelector('#new-case-settings input[data-key="Vehicle State/Velocity"]');
+  check("template Settings load into the form", velocity?.value === "40.0" && /Copy of caseC/.test(doc.getElementById("new-case-source").textContent),
+    `${velocity?.value} | ${doc.getElementById("new-case-source").textContent}`);
+  velocity.value = "60.0";
+  velocity.dispatchEvent(new app.contentWindow.Event("input"));
+  check("changed setting is highlighted", velocity.classList.contains("changed"));
+  doc.getElementById("new-case-sim").value = new URLSearchParams(location.search).get("sim");
+  doc.getElementById("new-case-create").click();
+  await waitFor(() => /new1: Created on Fritz/.test(doc.querySelector(".cluster-new-case .cluster-status")?.textContent ?? ""), 15000);
+  check("new simulation is created after confirming", /1 changed setting/.test(confirmed[1] ?? "") &&
+    /Created on Fritz/.test(doc.querySelector(".cluster-new-case .cluster-status")?.textContent ?? ""),
+    `${confirmed[1]} | ${doc.querySelector(".cluster-new-case .cluster-status")?.textContent}`);
 });
 </script></body></html>

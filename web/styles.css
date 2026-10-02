@@ -1580,3 +1580,53 @@ select {
 .compare-image-stage::-webkit-scrollbar {
   display: none;
 }
+
+/* New simulation on Fritz (Stage 7, steps 3-4). */
+.cluster-new-case {
+  margin-top: 22px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.cluster-new-case > summary {
+  cursor: pointer;
+  font-weight: 650;
+}
+
+.settings-editor {
+  margin: 10px 0;
+}
+
+.settings-group {
+  margin: 6px 0;
+}
+
+.settings-group > summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: minmax(180px, 320px) minmax(120px, 260px);
+  gap: 4px 12px;
+  align-items: center;
+  margin: 6px 0 6px 14px;
+  font-size: 12px;
+}
+
+.settings-grid input {
+  background: #0c1219;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 3px 6px;
+  font: inherit;
+}
+
+.settings-grid input.changed {
+  border-color: var(--accent);
+  color: var(--accent);
+}

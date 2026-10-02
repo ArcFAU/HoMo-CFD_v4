@@ -3270,3 +3270,129 @@ Messages that quoted the user's cluster user name or host are shown with those m
 > Close and reopen any open viewer windows to get the fix. All tests pass (50 unit tests, 98 browser checks). Committed and pushed to GitHub `master`.
 >
 > If you still see flicker anywhere, tell me which window (comparison or gallery) and whether you're holding the arrow key or tapping it.
+
+## 2026-10-02 — Stage 7 steps 3–4: new simulations from the team template, Start, live job states
+
+### User message (verbatim)
+
+> okay, lets move further
+
+### Clarifications (question tool; the user's answers verbatim)
+
+- How do you prepare and start a new simulation today? → "This is how we used to do. there is a folder on winscp named "SCRIPT_FABSI". I copy all them to the folder i want to keep my simulation in. change the things if needed in them."
+- When HoMo prepares job scripts, where should nodes and run times come from? → "Keep team scripts (Recommended)"
+- Which session should HoMo use to start jobs? → "My fritz session (Recommended)"
+- Six case folders (0830_mk2, 0830_mk3, 0822_upsi, 0823_upsi, 0923_corner, asdf) disappeared from Fritz today at 13:58. Did you delete them? → "Yes, I deleted them"
+
+### Contributor messages (verbatim)
+
+> Next is step 3: HoMo writes the job scripts (`mesh.sh`, `rans.sh`, `post.sh`) from a case's `Settings`, the way CFD-Tool does. That part only works on your PC. First I need to know exactly how CFD-Tool builds those scripts and prepares a case. Looking inside CFD-Tool (without the key file) and at your existing scripts, with the licence key and e-mail masked:
+
+> CFD-Tool doesn't ship the STAR-CCM+ macros (`mesh.java`, `rans.java`, `postprocessing.java`) or a base `.sim`, so a case must get those from somewhere else. Reading CFD-Tool's preparation step to see what it writes and copies:
+
+> CFD-Tool's own script templates are **older** than what your team actually runs:
+> - **CFD-Tool's templates:** STAR-CCM+ `2402`, Intel MPI with a machine file.
+> - **Your 0830_mk3 scripts:** STAR-CCM+ `2506-r8-clang`, SLURM-managed MPI.
+>
+> Also, the scripts on Fritz are byte-identical across cases (same size, dated 12 Jan 2026), so they seem to be copied from a common template rather than generated per case. Comparing your real scripts' job headers with that case's `Settings` (licence key and e-mail masked):
+
+> The real scripts don't follow the `Settings` run settings either. `Settings` says Mesh Nodes 2 and 1 h, but `mesh.sh` uses 1 node and 1:10 h, and post-processing uses 1:30 h. So the scripts are hand-maintained templates, not generated per case. Looking for where those templates live on your PC:
+
+> I need your input before building this step. Your team's real workflow doesn't match CFD-Tool's built-in templates, so copying CFD-Tool would produce outdated scripts. I also found loose template copies in your Downloads folder (`mesh.java`, `mesh.sh`, `postprocessing.java`) and in `D:\CFD\finished\…\cluster files`, so there's no single template folder.
+
+> Thanks, that clears it up. So preparation happens **on Fritz**: you copy everything from `SCRIPT_FABSI` into a new case folder, adjust what's needed, and start it. And good to know the six folders were your own cleanup.
+>
+> Listing `SCRIPT_FABSI` (read-only) to see what a new case starts from:
+
+> `SCRIPT_FABSI` holds `Settings`, the three macros and the three job scripts, but **no `.sim`**. So a new case means: copy those files into a new folder, add your base `.sim`, adjust `Settings` if needed, then start `mesh.sh` from a Fritz login node. The scripts on Fritz already contain the licence key, so HoMo never has to handle it.
+>
+> Before designing around your fritz session, I'll check it can see the job queue. I'll find it by its host name without printing the session name, and run only read-only commands (`sbatch --version`, `squeue`):
+
+> Your fritz session can see the job queue: SLURM 25.11.8, and you have no jobs right now. Here's the plan for this step, matching your workflow:
+>
+> 1. **Settings card:** a second session for **starting jobs** (your fritz one), and the **template folder** (`SCRIPT_FABSI`).
+> 2. **New simulation on Fritz:**
+>    - You enter a name and pick your base `.sim` on this PC.
+>    - You load `Settings` from the template or from an existing case, and edit values in a form.
+>    - **Create on Fritz** makes the folder, copies the template's scripts and macros, and uploads `Settings` and the `.sim`. It never overwrites an existing folder.
+> 3. **Start:** each not-started case gets a **Start** button, which runs `sbatch mesh.sh` through the fritz session after asking you to confirm. A case that has already started can't be started twice.
+> 4. **Live job state:** the list also shows Queued / Running and the job number, from `squeue`.
+>
+> Checking the `Settings` file format first:
+
+> The format is simple: `Group/Name : value`, one per line, 124 lines in five groups. Writing the cluster functions for creating, starting and job states:
+
+> One fix: if the folder already exists, the "already exists" message has to be reliable. I'll make the existence test its own command, so a later copy error can't be mistaken for it:
+
+> Checking what WinSCP prints when that existence test fails. This is read-only: it asks whether `SCRIPT_FABSI` exists, which it does.
+
+> Important finding: **WinSCP's `call` doesn't stop the script when a command fails.** The test reported "exists" and the next line ran anyway. With my first version, uploading `Settings` could have overwritten an existing case. So I'm splitting creation into two runs. First, one shell command creates the folder only if the name is free and reports `CREATED` or `EXISTS`. Only after a confirmed `CREATED` does a second run upload `Settings` and the `.sim`.
+
+> Testing both guard branches on Fritz. Neither can create anything:
+> - A name that **exists** (`SCRIPT_FABSI` itself) should only print `EXISTS`.
+> - A free name with a **missing template** should only print `NO-TEMPLATE`.
+
+> Both guards work and nothing was created. Now the server side: saving the second session and template folder, testing the job session, live job states, loading `Settings`, choosing the `.sim`, creating and starting.
+
+> Writing the server changes now:
+
+> Two existing tests just need the new settings fields. Next, the fake WinSCP has to answer the new commands, and then come tests for creating and starting:
+
+> Two test-side issues, not app bugs:
+> - My test kept the temporary file open, and Windows can't delete an open file. The server code closes it properly.
+> - The parsing test needs the new not-started `caseF` in its expected list.
+
+> My fix reused the variable `name`, which already held the case name, so the test passed the temp file path as the case name. Renaming it:
+
+> All 59 unit tests pass. Now the app side:
+> - **Connection settings:** the job-session dropdown and the template folder.
+> - **Case list:** live job state, plus a **Start** button (with confirmation) for cases that haven't started.
+> - **New simulation on Fritz:** a section for name, `.sim`, and the `Settings` form.
+
+> Now the browser checks for this flow, using the fake WinSCP: set the job session, Start a prepared case (confirmation auto-accepted in the test), and create a new simulation with edited `Settings` and a dummy `.sim`.
+
+> Working through three failing checks from the new browser tests. Two are real UI problems:
+> - A not-started case showed a greyed-out "Download" button, which makes no sense before a run. It now shows nothing (or **Start**).
+> - The "started: job 4242" message was wiped by the automatic refresh right after it. Messages now survive the refresh.
+
+> All pass: 105 browser checks and 59 unit tests. Restarting your server, then two real read-only checks: reading `Settings` from `SCRIPT_FABSI` through the new endpoint, and a layout screenshot of the new section on the fake server (filled with a real `Settings` file).
+
+> The form works: groups with your real 124 settings, Vehicle State and Run Settings open, and the changed velocity highlighted. One clarification to add: the Run Settings nodes and hours don't affect anything, because your team's job scripts have them fixed, so the form should say so.
+
+> Updating the docs:
+
+> Both suites pass again after the docs update. Writing the log entry and committing:
+
+### Work record
+
+- Read-only research: `CFD-Tool.zip` contents (no macros or base `.sim` shipped); `Unsimulated.class` strings (licence key, mail and home paths masked): CFD-Tool's script templates use STAR-CCM+ 2402 / Intel MPI and Run Settings; the team's real scripts (0830_mk3, identical on Fritz) use 2506-r8-clang / SLURM MPI with fixed nodes/times. Listed `SCRIPT_FABSI` on Fritz (Settings, 3 macros, 3 job scripts, no `.sim`). Found the fritz login-node session by host name (name not printed): `sbatch --version` → slurm 25.11.8, `squeue` works.
+- Verified on Fritz without creating anything: WinSCP `call` does not abort on a failing command; the guarded create command prints `HOMO-EXISTS` for an existing name and `HOMO-NO-TEMPLATE` for a missing template; the probe folder does not exist afterwards.
+- `cluster.py`: `parse_settings`, `check_settings`, `format_settings`, `settings_fetch_script`, `create_case_script` (one guarded shell command), `upload_case_script`, `submit_script`, `submit_test_script`, `jobs_script`, `parse_jobs`, `run_new_case` (create → only on `HOMO-CREATED` upload Settings and `.sim` → remove temp Settings).
+- `serve.py`: settings `submitSession` and `templateFolder`; Test connection also checks the job session; case list adds `jobs` from `squeue` (parallel to the status check), `canSubmit`, `jobsChecked`; `POST /api/cluster/settings-file`, `POST /api/cluster/browse-sim` (tkinter file dialog), `POST`/`GET /api/cluster/new-case`, `POST /api/cluster/submit` (prepared cases only, no queued job, once per server run).
+- `web/app.js` + `web/styles.css`: job-session dropdown and template folder in the settings card; job state text and **Start** button (confirmation) in the case list; no download button for not-started cases; notices survive the following refresh; **New simulation on Fritz** section (name, Settings source + Load, grouped editable Settings with changed values highlighted, `.sim` path + Browse…, Create on Fritz with confirmation and progress).
+- Tests: `tests/test_cluster.py` (fake WinSCP answers status, squeue, sbatch, create/exists, Settings download, uploads; +5 tests), `tests/test_serve.py` (+4 API tests, 2 updated), `tests/run_browser_tests.py` (dummy base `.sim` passed to the page), `tests/browser/server-mode.html` (+7 checks).
+- Real checks: user's server restarted; template Settings read through the API (124 entries in 5 groups). Not done for real: creating a case, uploading a `.sim`, starting a job.
+- Docs: `CHANGELOG.md`, `STATUS.md` (steps 3–4 section; incident resolved), `DECISIONS.md`, `docs/STAGE7_FRITZ.md` (section 7), `TASK.md`, `README.md`, `tests/README.md`, `HANDOFF_FOR_CHATGPT.md`.
+- Checks: `py -m unittest discover -s tests` 59/59 OK; `py tests/run_browser_tests.py` 105/105 passed.
+
+### Final response (verbatim)
+
+> Steps 3 and 4 are built, matching how you work: copy `SCRIPT_FABSI`, adjust, start. That completes the Fritz part (Stage 7). It's all in the **Fritz cluster** card:
+>
+> **1. One-time setup:** choose your fritz login session under **Session for starting jobs** and click **Save**. Your current session goes to NHR's jump host, which can't start jobs, so HoMo uses your fritz one for starting and for the job queue. **Test connection** now checks both sessions.
+>
+> **2. New simulation on Fritz** (bottom of the card):
+> - Enter a name.
+> - Click **Load Settings**, from the template or as a copy of an existing case. All 124 settings appear in groups; Vehicle State and Run Settings are open, and anything you change is highlighted.
+> - Pick your base `.sim` with **Browse…**.
+> - Click **Create on Fritz**. HoMo copies `SCRIPT_FABSI` into a new folder, then uploads your `Settings` and the `.sim`. Your team's job scripts stay exactly as they are, licence key included, so HoMo never needs it.
+>
+> **3. Start:** the new case appears in the list as "Not started" with a **Start** button. It asks for confirmation, then runs `sbatch mesh.sh`, and meshing, solving and post-processing follow automatically. The list then shows "Queued" or "Running 1:02:03 (job …)", and later **Ready to download**.
+>
+> **Safety:**
+> - HoMo never creates into a folder that already exists, never starts a case twice, and never deletes anything on Fritz.
+> - While testing, I found that WinSCP keeps running a script even when one of its commands fails. My first design could have overwritten an existing case because of that. I changed it, and checked on Fritz, without creating anything, that the "already exists" guard works.
+>
+> **What I haven't done for real:** creating a case, uploading a `.sim` or starting a job. Those change things on Fritz and use compute time, so the first real run is yours. A small test case would be ideal. The rest was tested with a fake WinSCP: all tests pass (59 unit tests, 105 browser checks). Committed and pushed to GitHub `master`.
+>
+> Reload http://127.0.0.1:5173 to get it. Tell me how the first real case goes, especially the `.sim` upload (how long it takes and whether the progress message is enough).

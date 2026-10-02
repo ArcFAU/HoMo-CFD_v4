@@ -1791,7 +1791,7 @@ function timeAgo(epochSeconds) {
   return `${Math.round(hours / 24)} days ago`;
 }
 
-function clusterCasesSection({ saved, onNeedsPassphrase }) {
+function clusterCasesSection({ saved, onNeedsPassphrase, templateFolder }) {
   const section = document.createElement("section");
   section.className = "cluster-cases";
   const header = document.createElement("div");
@@ -1826,9 +1826,16 @@ function clusterCasesSection({ saved, onNeedsPassphrase }) {
   table.className = "data-table cluster-table";
   tableWrap.appendChild(table);
   section.append(header, note, status, tableWrap);
+  const newCase = newCaseSection({
+    getCases: () => lastResult?.cases ?? [],
+    templateFolder: templateFolder || "SCRIPT_FABSI",
+    onCreated: () => refresh(),
+  });
+  section.appendChild(newCase);
 
   let lastResult = null;
   let pollTimer = null;
+  let notice = null;  // message to keep after the next refresh
   const showStatus = (text, kind) => {
     status.textContent = text;
     status.className = `cluster-status ${kind}`;
@@ -1838,6 +1845,29 @@ function clusterCasesSection({ saved, onNeedsPassphrase }) {
   const actionCell = (item, canDownload) => {
     const td = document.createElement("td");
     td.className = "cluster-action";
+    if (item.state === "prepared" && lastResult?.canSubmit && !item.jobs?.length && !item.submittedJob) {
+      const start = document.createElement("button");
+      start.type = "button";
+      start.className = "primary small";
+      start.textContent = "Start";
+      start.title = "Runs sbatch mesh.sh in this folder on Fritz; meshing, solving and post-processing then follow one after another.";
+      start.addEventListener("click", async () => {
+        if (!window.confirm(`Start ${item.name} on Fritz? This submits mesh.sh to SLURM and uses compute time; ` +
+          "the solver and post-processing jobs follow automatically.")) return;
+        start.disabled = true;
+        try {
+          const result = await postServerJson("cluster/submit", { case: item.name });
+          if (!result.ok) throw new Error([result.error, result.hint].filter(Boolean).join(" "));
+          notice = [`${item.name} started: job ${result.jobId}.`, "cluster-ok"];
+          refresh();
+        } catch (err) {
+          showStatus(err?.message || "Could not start the job.", "error");
+          start.disabled = false;
+        }
+      });
+      td.appendChild(start);
+      return td;
+    }
     const download = item.download;
     if (download?.state === "running") {
       const total = download.filesTotal ?? "…";
@@ -1870,7 +1900,7 @@ function clusterCasesSection({ saved, onNeedsPassphrase }) {
       return td;
     }
     if (download?.message) td.append(`${download.message} `);
-    if (!canDownload || !item.downloadable) return td;
+    if (!canDownload || !item.downloadable || (item.state === "prepared" && item.local !== "partial")) return td;
     const allowed = item.state === "ready" || item.stale || item.local === "partial";
     const button = document.createElement("button");
     button.type = "button";
@@ -1908,7 +1938,8 @@ function clusterCasesSection({ saved, onNeedsPassphrase }) {
       row.appendChild(cell("td", item.name));
       const state = cell("td", CLUSTER_STATES[item.state] ?? item.state);
       state.className = `cluster-state cluster-state-${item.state}${item.stale ? " cluster-stale" : ""}`;
-      if (item.stale) state.append(" · probably stopped (no job log update for over 12 h)");
+      if (item.stale && !item.jobs?.length) state.append(" · probably stopped (no job log update for over 12 h)");
+      state.append(jobDescription(item));
       row.appendChild(state);
       row.appendChild(cell("td", item.lastLog ? timeAgo(item.lastLog) : "—"));
       row.appendChild(cell("td", item.local === "finished" ? "In finished" : item.local === "partial" ? "Partly downloaded" : "—"));
@@ -1955,8 +1986,10 @@ function clusterCasesSection({ saved, onNeedsPassphrase }) {
         return;
       }
       lastResult = result;
+      newCase.updateSources();
       checked.textContent = `checked ${new Date(result.checkedAt * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
-      showStatus("", "");
+      showStatus(...(notice ?? ["", ""]));
+      notice = null;
       render();
       if (result.cases.some((item) => item.download?.state === "running")) pollDownloads();
     } catch (err) {
@@ -1980,6 +2013,166 @@ function clusterCasesSection({ saved, onNeedsPassphrase }) {
     }, CLUSTER_REFRESH_MS);
   };
   return section;
+}
+
+// Steps 3-4: a new simulation on Fritz from the team template (SCRIPT_FABSI by
+// default): name, Settings (from the template or an existing case, editable
+// here) and the base .sim from this computer. HoMo CFD creates the folder only
+// if the name is free, copies the template, then uploads Settings and the .sim.
+const SETTINGS_OPEN_GROUPS = new Set(["Vehicle State", "Run Settings"]);
+
+function newCaseSection({ getCases, templateFolder, onCreated }) {
+  const section = document.createElement("details");
+  section.className = "cluster-new-case";
+  const summary = document.createElement("summary");
+  summary.textContent = "New simulation on Fritz";
+  const intro = document.createElement("p");
+  intro.className = "hint";
+  intro.textContent = `Creates a new folder on Fritz as a copy of the template folder (${templateFolder}: job scripts and macros), ` +
+    "with the Settings below and your base .sim. It never changes an existing folder. Start it afterwards from the list above. " +
+    "Nodes and run times come from the template's job scripts; the Run Settings values here do not change them.";
+
+  const field = (labelText, control) => {
+    const label = document.createElement("label");
+    label.className = "cluster-field";
+    label.appendChild(Object.assign(document.createElement("span"), { className: "cluster-label", textContent: labelText }));
+    label.appendChild(control);
+    return label;
+  };
+  const name = Object.assign(document.createElement("input"), { type: "text", id: "new-case-name", className: "working-dir-input",
+    placeholder: "e.g. 1002_mk4_yaw3 (letters, numbers, _ - .)" });
+  const source = Object.assign(document.createElement("select"), { id: "new-case-source", className: "working-dir-input" });
+  const load = Object.assign(document.createElement("button"), { type: "button", className: "small-control", id: "new-case-load",
+    textContent: "Load Settings" });
+  const sourceRow = field("Settings from", source);
+  sourceRow.appendChild(load);
+  const sim = Object.assign(document.createElement("input"), { type: "text", id: "new-case-sim", className: "working-dir-input",
+    placeholder: "Base .sim on this computer, e.g. D:\\CFD\\UPSI_CFD_BASE.sim" });
+  const browse = Object.assign(document.createElement("button"), { type: "button", className: "small-control", textContent: "Browse…" });
+  const simRow = field("Base .sim", sim);
+  simRow.appendChild(browse);
+  const editor = document.createElement("div");
+  editor.className = "settings-editor";
+  editor.id = "new-case-settings";
+  const create = Object.assign(document.createElement("button"), { type: "button", className: "primary", id: "new-case-create",
+    textContent: "Create on Fritz", disabled: true });
+  const status = Object.assign(document.createElement("p"), { className: "cluster-status", hidden: true });
+  section.append(summary, intro, field("Name", name), sourceRow, editor, simRow, create, status);
+
+  const showStatus = (text, kind) => {
+    status.textContent = text;
+    status.className = `cluster-status ${kind}`;
+    status.hidden = !text;
+  };
+  let loaded = null;
+
+  section.updateSources = () => {
+    const current = source.value;
+    source.replaceChildren(new Option(`Template (${templateFolder})`, ""));
+    getCases().filter((item) => item.downloadable).forEach((item) => source.add(new Option(`Copy of ${item.name}`, item.name)));
+    source.value = [...source.options].some((option) => option.value === current) ? current : "";
+  };
+
+  const renderEditor = (pairs) => {
+    const groups = new Map();
+    pairs.forEach(([key, value]) => {
+      const [group, ...rest] = key.split("/");
+      if (!groups.has(group)) groups.set(group, []);
+      groups.get(group).push({ key, label: rest.join(" / ") || group, value });
+    });
+    editor.replaceChildren(...[...groups].map(([group, entries]) => {
+      const box = document.createElement("details");
+      box.className = "settings-group";
+      box.open = SETTINGS_OPEN_GROUPS.has(group);
+      box.appendChild(Object.assign(document.createElement("summary"), { textContent: `${group} (${entries.length})` }));
+      const grid = document.createElement("div");
+      grid.className = "settings-grid";
+      entries.forEach((entry) => {
+        const input = Object.assign(document.createElement("input"), { type: "text", value: entry.value });
+        input.dataset.key = entry.key;
+        input.dataset.original = entry.value;
+        input.setAttribute("aria-label", entry.key);
+        input.addEventListener("input", () => input.classList.toggle("changed", input.value !== input.dataset.original));
+        grid.append(Object.assign(document.createElement("span"), { textContent: entry.label, title: entry.key }), input);
+      });
+      box.appendChild(grid);
+      return box;
+    }));
+  };
+
+  load.addEventListener("click", async () => {
+    load.disabled = true;
+    showStatus("Reading Settings from Fritz…", "hint");
+    try {
+      const result = await postServerJson("cluster/settings-file", { source: source.value });
+      loaded = result.source;
+      renderEditor(result.settings);
+      create.disabled = false;
+      showStatus(`Settings loaded from ${result.source}. Changed values are highlighted.`, "hint");
+    } catch (err) {
+      showStatus(err?.message || "Could not read the Settings.", "error");
+    } finally {
+      load.disabled = false;
+    }
+  });
+
+  browse.addEventListener("click", async () => {
+    browse.disabled = true;
+    try {
+      const result = await postServerJson("cluster/browse-sim", { initial: "" });
+      if (result.path) {
+        sim.value = result.path;
+        if (result.size) showStatus(`${result.path} · ${(result.size / 1e9).toFixed(2)} GB`, "hint");
+      }
+    } catch (err) {
+      showStatus(err?.message || "Could not open the file dialog.", "error");
+    } finally {
+      browse.disabled = false;
+    }
+  });
+
+  const pollTask = async (caseName) => {
+    try {
+      const tasks = await (await fetch("/api/cluster/new-case")).json();
+      const task = tasks[caseName];
+      if (task?.state === "running") {
+        showStatus(`${caseName}: ${task.message || "working…"}`, "hint");
+        setTimeout(() => pollTask(caseName), 2000);
+        return;
+      }
+      showStatus(`${caseName}: ${task?.message ?? "finished."}`, task?.state === "done" ? "cluster-ok" : "error");
+      create.disabled = false;
+      if (task?.state === "done") onCreated();
+    } catch {
+      setTimeout(() => pollTask(caseName), 5000);
+    }
+  };
+
+  create.addEventListener("click", async () => {
+    const settings = [...editor.querySelectorAll("input[data-key]")].map((input) => [input.dataset.key, input.value]);
+    const caseName = name.value.trim();
+    const changed = editor.querySelectorAll("input.changed").length;
+    if (!window.confirm(`Create ${caseName || "(no name)"} on Fritz from ${loaded} (${changed} changed setting${changed === 1 ? "" : "s"}) ` +
+      "and upload the .sim? Nothing is started yet.")) return;
+    create.disabled = true;
+    try {
+      await postServerJson("cluster/new-case", { name: caseName, settings, simPath: sim.value });
+      pollTask(caseName);
+    } catch (err) {
+      showStatus(err?.message || "Could not create the simulation.", "error");
+      create.disabled = false;
+    }
+  });
+  return section;
+}
+
+function jobDescription(item) {
+  const job = item.jobs?.[0];
+  if (job) {
+    const state = job.state === "PENDING" ? "Queued" : job.state === "RUNNING" ? `Running ${job.elapsed}` : job.state.toLowerCase();
+    return ` · ${state} (job ${job.id}, ${job.name})`;
+  }
+  return item.submittedJob ? ` · submitted (job ${item.submittedJob})` : "";
 }
 
 // Stage 7, step 1: the WinSCP saved session used for Fritz and the remote
@@ -2065,6 +2258,26 @@ async function showClusterSettings() {
   folder.value = config.remoteFolder;
   folderField.appendChild(folder);
 
+  const submitField = document.createElement("label");
+  submitField.className = "cluster-field";
+  submitField.appendChild(Object.assign(document.createElement("span"), { className: "cluster-label", textContent: "Session for starting jobs" }));
+  const submitSession = document.createElement("select");
+  submitSession.id = "cluster-submit-session";
+  submitSession.className = "working-dir-input";
+  submitSession.add(new Option("None (starting jobs disabled)", ""));
+  sessions.forEach((name) => submitSession.add(new Option(name, name)));
+  if (config.submitSession && !sessions.includes(config.submitSession)) submitSession.add(new Option(config.submitSession, config.submitSession));
+  submitSession.value = config.submitSession || "";
+  submitSession.title = "A WinSCP session to a Fritz login node (e.g. fritz.nhr.fau.de). The jump host has no SLURM, so jobs are started and listed through this one.";
+  submitField.appendChild(submitSession);
+
+  const templateField = document.createElement("label");
+  templateField.className = "cluster-field";
+  templateField.appendChild(Object.assign(document.createElement("span"), { className: "cluster-label", textContent: "Template folder" }));
+  const template = Object.assign(document.createElement("input"), { type: "text", id: "cluster-template", className: "working-dir-input",
+    value: config.templateFolder || "SCRIPT_FABSI", title: "Folder in the remote folder that new simulations are copied from" });
+  templateField.appendChild(template);
+
   const actions = document.createElement("div");
   actions.className = "working-dir-actions";
   const test = document.createElement("button");
@@ -2097,11 +2310,12 @@ async function showClusterSettings() {
   summary.textContent = "WinSCP output";
   const output = document.createElement("pre");
   details.append(summary, output);
-  card.append(sessionField, folderField, actions, status, details);
-  const settingsControls = [session, folder, test, unlock, save];
+  card.append(sessionField, folderField, submitField, templateField, actions, status, details);
+  const settingsControls = [session, folder, submitSession, template, test, unlock, save];
   const cases = clusterCasesSection({
     saved: Boolean(config.session && config.remoteFolder),
     onNeedsPassphrase: () => unlock.classList.add("primary"),
+    templateFolder: config.templateFolder,
   });
   card.appendChild(cases);
   cases.start();
@@ -2116,7 +2330,8 @@ async function showClusterSettings() {
   const busy = (on) => settingsControls.forEach((control) => {
     control.disabled = on || (control === test && !config.winscp);
   });
-  const values = () => ({ session: session.value, remoteFolder: folder.value });
+  const values = () => ({ session: session.value, remoteFolder: folder.value, submitSession: submitSession.value,
+    templateFolder: template.value });
 
   unlock.addEventListener("click", async () => {
     busy(true);
@@ -2137,7 +2352,13 @@ async function showClusterSettings() {
     show("Connecting to Fritz… this can take up to a minute.", "hint");
     try {
       const result = await postServerJson("cluster/test", values());
-      if (result.ok) show(`Connected. Remote folder: ${result.remoteFolder}`, "cluster-ok", result.output);
+      if (result.ok && result.submit && !result.submit.ok) {
+        show(`Connected. Remote folder: ${result.remoteFolder}. But the session for starting jobs: ` +
+          [result.submit.error, result.submit.hint].filter(Boolean).join(" "), "error", result.submit.output || result.output);
+      } else if (result.ok) {
+        show(`Connected. Remote folder: ${result.remoteFolder}` + (result.submit ? ` · Jobs: ${result.submit.version}` : ""),
+          "cluster-ok", result.output);
+      }
       else {
         show([result.error, result.hint].filter(Boolean).join(" "), "error", result.output);
         if (result.needsPassphrase && !unlock.hidden) unlock.classList.add("primary");
@@ -2155,6 +2376,7 @@ async function showClusterSettings() {
       show("Saved.", "cluster-ok");
       config.session = session.value;
       config.remoteFolder = folder.value;
+      config.submitSession = submitSession.value;
       cases.refresh();
     } catch (err) {
       show(err?.message || "Could not save the cluster settings.", "error");

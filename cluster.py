@@ -385,3 +385,156 @@ def run_download(winscp, download, lines, partial_dir, finished_dir):
     except Exception as err:  # never leave a download shown as running
         download.state = "failed"
         download.message = f"Could not save the download: {err}"
+
+
+# --- Steps 3-4: new simulations from the team template, starting jobs --------
+#
+# The team prepares a case by copying the template folder on Fritz (by default
+# SCRIPT_FABSI: Settings, mesh/rans/postprocessing.java, mesh/rans/post.sh,
+# which already contain the licence key) into a new folder, adding the base
+# .sim and adjusting Settings. Jobs are started with "sbatch mesh.sh" from a
+# Fritz login node; the jump host has no SLURM, so starting and the queue use
+# a second WinSCP session ("session for starting jobs").
+
+DEFAULT_TEMPLATE = "SCRIPT_FABSI"
+JOB_PREFIX = "HOMO-JOB|"
+SUBMITTED = re.compile(r"Submitted batch job (\d+)")
+
+
+def parse_settings(text):
+    """[(key, value), ...] from a Settings file ("Group/Name : value" lines)."""
+    pairs = []
+    for line in text.splitlines():
+        if " : " in line:
+            key, value = line.split(" : ", 1)
+            pairs.append((key.strip(), value.strip()))
+    return pairs
+
+
+def check_settings(pairs):
+    """Validated [(key, value)] for writing a Settings file; raises ValueError."""
+    if not isinstance(pairs, list) or not pairs or len(pairs) > 2000:
+        raise ValueError("Settings are missing.")
+    checked = []
+    for pair in pairs:
+        if not (isinstance(pair, (list, tuple)) and len(pair) == 2 and all(isinstance(part, str) for part in pair)):
+            raise ValueError("Invalid Settings entry.")
+        key, value = pair[0].strip(), pair[1].strip()
+        if not key or " : " in key or " : " in value or re.search(r"[\x00-\x1f]", key + value):
+            raise ValueError(f"Invalid Settings entry: {key or '(empty)'}")
+        checked.append((key, value))
+    return checked
+
+
+def format_settings(pairs):
+    return "".join(f"{key} : {value}\n" for key, value in pairs)
+
+
+def settings_fetch_script(session, remote_folder, source, local_file):
+    """Download <source>/Settings (read-only on Fritz)."""
+    return ["option batch abort", "option confirm off", f'open "{session}"',
+            f'get "{remote_folder}/{source}/Settings" "{local_file}"', "exit"]
+
+
+def create_case_script(session, remote_folder, template, case):
+    """Create <case> as a copy of the template, only if the name is free.
+
+    WinSCP's "call" does not stop the script when a command fails, so the
+    check and the copy are one shell command that reports the outcome
+    (HOMO-CREATED / HOMO-EXISTS / HOMO-NO-TEMPLATE). Uploads run separately,
+    and only after HOMO-CREATED, so an existing case is never overwritten.
+    """
+    return [
+        "option batch abort", "option confirm off", f'open "{session}"', f'cd "{remote_folder}"',
+        f'call if [ -e "{case}" ]; then echo HOMO-EXISTS; elif [ ! -d "{template}" ]; then echo HOMO-NO-TEMPLATE; '
+        f'else mkdir "{case}" && cp -rp "{template}"/. "{case}"/ && echo HOMO-CREATED; fi',
+        "exit",
+    ]
+
+
+def upload_case_script(session, remote_folder, case, settings_file, sim_file):
+    """Upload the edited Settings (replacing the template's copy) and the base .sim."""
+    return [
+        "option batch abort", "option confirm off", f'open "{session}"',
+        f'put "{settings_file}" "{remote_folder}/{case}/Settings"',
+        f'put "{sim_file}" "{remote_folder}/{case}/"',
+        "exit",
+    ]
+
+
+def submit_script(session, remote_folder, case):
+    """Start the job chain: mesh.sh submits rans.sh, which submits post.sh."""
+    return ["option batch abort", "option confirm off", f'open "{session}"',
+            f'call cd "{remote_folder}/{case}" && sbatch mesh.sh', "exit"]
+
+
+def submit_test_script(session, remote_folder):
+    """Read-only check that the session can use SLURM."""
+    lines = ["option batch abort", "option confirm off", f'open "{session}"']
+    if remote_folder:
+        lines.append(f'cd "{remote_folder}"')
+    return lines + ["call sbatch --version", "exit"]
+
+
+def jobs_script(session):
+    """Your queued and running jobs with their working folders (read-only)."""
+    return ["option batch abort", "option confirm off", f'open "{session}"',
+            f'call squeue -u $USER -h -o "{JOB_PREFIX}%i|%j|%T|%M|%Z"', "exit"]
+
+
+def parse_jobs(output):
+    """{case folder name: [{id, name, state, elapsed}]} from squeue output."""
+    jobs = {}
+    for line in output.splitlines():
+        if not line.startswith(JOB_PREFIX):
+            continue
+        parts = line[len(JOB_PREFIX):].split("|", 4)
+        if len(parts) != 5:
+            continue
+        job_id, name, state, elapsed, workdir = parts
+        folder = workdir.rstrip("/").rsplit("/", 1)[-1]
+        jobs.setdefault(folder, []).append({"id": job_id, "name": name, "state": state, "elapsed": elapsed})
+    return jobs
+
+
+def run_new_case(winscp, task, session, remote_folder, template, case, settings_file, sim_file):
+    """Background task: create the case on Fritz, upload Settings and the
+    .sim, then remove the temporary Settings file."""
+    try:
+        task.message = "Creating the folder from the template…"
+        code, output = winscp.run(create_case_script(session, remote_folder, template, case))
+        task.log = output.splitlines()[-60:]
+        created = [line.strip() for line in output.splitlines() if line.strip().startswith("HOMO-")]
+        if "HOMO-EXISTS" in created:
+            task.state = "failed"
+            task.message = f"A folder named {case} already exists on Fritz; nothing was changed."
+            return
+        if "HOMO-NO-TEMPLATE" in created:
+            task.state = "failed"
+            task.message = f"The template folder {template} was not found on Fritz; nothing was changed."
+            return
+        if code != 0 or "HOMO-CREATED" not in created:
+            task.state = "failed"
+            task.message = " ".join(filter(None, ["Could not create the folder.", hint_for(output)]))
+            return
+        task.message = "Uploading Settings and the .sim file…"
+        code = winscp.stream(upload_case_script(session, remote_folder, case, settings_file, sim_file),
+                             task.on_line, lambda process: setattr(task, "process", process))
+        if task.cancelled:
+            task.state = "cancelled"
+            task.message = "Cancelled during the upload. The folder exists on Fritz but is incomplete; do not start it."
+        elif code == 0:
+            task.state = "done"
+            task.message = "Created on Fritz. Start it from the list when you are ready."
+        else:
+            task.state = "failed"
+            task.message = " ".join(filter(None, ["The upload stopped; the folder on Fritz is incomplete.",
+                                                  hint_for("\n".join(task.log))]))
+    except Exception as err:  # never leave a task shown as running
+        task.state = "failed"
+        task.message = f"Could not create the case: {err}"
+    finally:
+        try:
+            os.unlink(settings_file)
+        except OSError:
+            pass

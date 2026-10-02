@@ -1,6 +1,6 @@
 # Stage 7 — Fritz cluster integration (design draft)
 
-Status: **design decided 2026-10-02 (sections 4–5); steps 1 (connection + Test connection) and 2 (monitor + download) built, see `cluster.py` and section 6.** Written 2026-10-02 from a
+Status: **design decided 2026-10-02 (sections 4–5); steps 1 (connection + Test connection), 2 (monitor + download) and 3–4 (new simulation from the team template + Start) built, see `cluster.py` and sections 6–7.** Written 2026-10-02 from a
 read-only study of CFD-Tool (class constants and `javap` disassembly; the
 `p.ppk` key was never opened) and the `mesh.sh` / `rans.sh` / `post.sh` job
 scripts in a downloaded result folder (licence key masked, not copied).
@@ -184,3 +184,15 @@ folders and job logs.
   the Fritz frontend is another option. To be decided before step 4.
 - Downloads skip `*.sim~`, `*.sh`, `*.java`, `ABORT*`, and `*.sim` unless
   requested; 0830_mk3 was 2,219 files / 1.8 GB without `.sim`.
+
+## 7. Steps 3–4 as built (2026-10-02)
+
+- New simulations follow the team's workflow: copy the template folder on
+  Fritz (`SCRIPT_FABSI`, configurable), upload the edited Settings and the base
+  `.sim`. The job scripts stay exactly as in the template (they already hold
+  the licence key), so the licence-key question (Q6) no longer applies.
+- WinSCP `call` keeps going after a failed command, so the existence check and
+  the copy are one shell command that reports its outcome, and uploads run in a
+  separate WinSCP run only after the folder was created.
+- Jobs start with `sbatch mesh.sh` through a second WinSCP session to a Fritz
+  login node; the same session lists your jobs (`squeue`) for the case list.

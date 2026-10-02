@@ -26,7 +26,7 @@ import tempfile
 import threading
 import time
 from pathlib import Path
-from urllib.parse import unquote, urlsplit
+from urllib.parse import quote, unquote, urlsplit
 
 HERE = Path(__file__).resolve().parent
 PROJECT = HERE.parent
@@ -182,6 +182,8 @@ def main():
     os.environ["APPDATA"] = str(temp / "appdata")  # isolate HoMo/CFD-Tool settings
     serve = load_serve()
     working_dir = fixture.build(temp)
+    base_sim = temp / "base.sim"  # stands in for a base .sim on this computer
+    base_sim.write_bytes(b"not a real simulation")
     handler = make_handler(serve, working_dir)
     server = serve.Server(("127.0.0.1", 0), handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
@@ -190,7 +192,8 @@ def main():
 
     pages = [
         ("first-start", lambda: handler.working_dir.set(None, None), f"/test/first-start.html?dir={working_dir}"),
-        ("server-mode", lambda: handler.working_dir.set(working_dir, "test"), "/test/server-mode.html"),
+        ("server-mode", lambda: handler.working_dir.set(working_dir, "test"),
+         f"/test/server-mode.html?sim={quote(str(base_sim))}"),
         ("picker-mode", lambda: None, "/test/picker-mode.html"),
     ]
     failures = 0

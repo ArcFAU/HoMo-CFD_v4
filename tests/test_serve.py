@@ -187,6 +187,9 @@ class ClusterApiTests(ApiTests):
             download.cancel()
         serve.Handler.downloads.clear()
         serve.Handler.remote_cases = set()
+        serve.Handler.remote_info = {}
+        serve.Handler.submitted.clear()
+        serve.Handler.creating.clear()
         serve.Handler.winscp = self.saved_winscp
         super().tearDown()
 
@@ -198,14 +201,16 @@ class ClusterApiTests(ApiTests):
         status, data = self.request("GET", "/api/cluster")
         self.assertEqual(status, 200)
         self.assertEqual(json.loads(data), {"winscp": str(Path("C:/fake/WinSCP.com")), "sessions": ["Fritz", "Other"],
-                                            "pageant": {"found": True, "running": False}, "session": "", "remoteFolder": ""})
+                                            "pageant": {"found": True, "running": False}, "session": "", "remoteFolder": "",
+                                            "submitSession": "", "templateFolder": "SCRIPT_FABSI"})
 
     def test_save_keeps_working_dir(self):
         serve.write_settings({"workingDir": str(self.working_dir)})
         status, data = self.post("/api/cluster", {"session": "Fritz", "remoteFolder": "/home/vault/g/u/Pipeline"})
         self.assertEqual((status, data["session"], data["remoteFolder"]), (200, "Fritz", "/home/vault/g/u/Pipeline"))
         saved = serve.read_settings()
-        self.assertEqual(saved["cluster"], {"session": "Fritz", "remoteFolder": "/home/vault/g/u/Pipeline"})
+        self.assertEqual(saved["cluster"], {"session": "Fritz", "remoteFolder": "/home/vault/g/u/Pipeline",
+                                            "submitSession": "", "templateFolder": "SCRIPT_FABSI"})
         self.assertEqual(saved["workingDir"], str(self.working_dir))
 
     def test_invalid_input_is_rejected(self):
@@ -301,6 +306,66 @@ class ClusterApiTests(ApiTests):
         self.assertEqual(self.wait_for_download("caseC"), "cancelled")
         self.assertTrue((self.working_dir / "inProgress" / "caseC").exists())
         self.assertEqual(self.post("/api/cluster/download/cancel", {"case": "caseC"})[0], 400)
+
+    def save_with_jobs(self):
+        serve.write_settings({"cluster": {"session": "Fritz", "remoteFolder": "/home/vault/g/u",
+                                          "submitSession": "Other", "templateFolder": "SCRIPT_FABSI"}})
+
+    def test_job_session_test_and_live_jobs(self):
+        status, data = self.post("/api/cluster/test", {"session": "Fritz", "submitSession": "Other"})
+        self.assertEqual((data["ok"], data["submit"]), (True, {"ok": True, "version": "slurm 25.11.8"}))
+        self.save_with_jobs()
+        status, data = self.post("/api/cluster/cases", {})
+        by_name = {case["name"]: case for case in data["cases"]}
+        self.assertTrue(data["canSubmit"] and data["jobsChecked"])
+        self.assertEqual(by_name["caseD"]["jobs"][0]["state"], "RUNNING")
+        self.assertEqual(by_name["caseF"]["state"], "prepared")
+
+    def test_settings_file_from_template(self):
+        self.save_with_jobs()
+        status, data = self.post("/api/cluster/settings-file", {})
+        self.assertEqual((status, data["source"]), (200, "SCRIPT_FABSI"))
+        self.assertEqual(data["settings"], [["Vehicle State/Velocity", "40.0"], ["Run Settings/Mesh Nodes", "2"]])
+        self.assertEqual(self.post("/api/cluster/settings-file", {"source": "notListed"})[0], 400)
+
+    def wait_for_task(self, case):
+        for _ in range(200):
+            state = json.loads(self.request("GET", "/api/cluster/new-case")[1]).get(case, {}).get("state")
+            if state != "running":
+                return state
+            threading.Event().wait(0.05)
+        return "running"
+
+    def test_new_case_and_start(self):
+        self.save_with_jobs()
+        sim = self.temp / "base.sim"
+        sim.write_bytes(b"sim")
+        self.post("/api/cluster/cases", {})
+        settings = [["Vehicle State/Velocity", "60.0"]]
+        for body, expected in (({"name": "caseA", "settings": settings, "simPath": str(sim)}, 409),
+                               ({"name": "new1", "settings": settings, "simPath": str(self.temp / "missing.sim")}, 400),
+                               ({"name": "new1", "settings": settings, "simPath": "relative.sim"}, 400),
+                               ({"name": "../x", "settings": settings, "simPath": str(sim)}, 400),
+                               ({"name": "new1", "settings": [["a", "x\ny"]], "simPath": str(sim)}, 400)):
+            with self.subTest(body=body):
+                self.assertEqual(self.post("/api/cluster/new-case", body)[0], expected)
+        status, data = self.post("/api/cluster/new-case", {"name": "new1", "settings": settings, "simPath": str(sim)})
+        self.assertEqual((status, data["state"]), (200, "running"))
+        self.assertEqual(self.wait_for_task("new1"), "done")
+        self.assertEqual(self.fake.uploads[-1], [("Vehicle State/Velocity : 60.0\n", "/home/vault/g/u/new1/Settings"),
+                                                 (str(sim), "/home/vault/g/u/new1/")])
+        # Start: only prepared cases from the last list, and only once.
+        self.assertEqual(self.post("/api/cluster/submit", {"case": "caseD"})[0], 409)
+        self.assertEqual(self.post("/api/cluster/submit", {"case": "notListed"})[0], 400)
+        status, data = self.post("/api/cluster/submit", {"case": "caseF"})
+        self.assertEqual((status, data), (200, {"ok": True, "jobId": "4242"}))
+        self.assertIn('open "Other"', self.fake.scripts[-1], "started with the job session")
+        self.assertEqual(self.post("/api/cluster/submit", {"case": "caseF"})[0], 409)
+
+    def test_submit_needs_job_session(self):
+        self.save_cluster()
+        self.post("/api/cluster/cases", {})
+        self.assertEqual(self.post("/api/cluster/submit", {"case": "caseF"})[0], 400)
 
     def test_working_dir_without_finished_cannot_download(self):
         self.save_cluster()

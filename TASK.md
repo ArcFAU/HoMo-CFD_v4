@@ -37,7 +37,9 @@ card. First real test reached Fritz but the key has a passphrase → added
 
 **Step 2 built (2026-10-02):** Simulations on Fritz list (state from job files,
 stale detection) and downloads via inProgress → finished. Waiting for the user's
-first real download and an answer about six remote folders that disappeared
-at 13:58 (see `STATUS.md`). Next: step 3 (job scripts), then step 4 (submit,
-needs a SLURM login node).
+first real download (the six vanished folders were the user's own cleanup). 
+**Steps 3–4 built (2026-10-02):** New simulation on Fritz (copy of
+`SCRIPT_FABSI`, Settings form, `.sim` upload) and Start (`sbatch mesh.sh` via
+the fritz login-node session), live job states. Waiting for the user to choose
+the job session and try a real new simulation. Stage 7 is then complete.
 Next: step 2, monitor and download for cases in `inProgress`.

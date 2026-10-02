@@ -30,6 +30,7 @@ import mimetypes
 import os
 import atexit
 import shutil
+import tempfile
 import threading
 import time
 import webbrowser
@@ -167,6 +168,26 @@ def browse_for_folder(initial):
     return chosen or None
 
 
+def browse_for_sim(initial):
+    """Native file dialog for the base .sim of a new simulation."""
+    import tkinter
+    from tkinter import filedialog
+
+    root = tkinter.Tk()
+    root.withdraw()
+    root.attributes("-topmost", True)
+    try:
+        chosen = filedialog.askopenfilename(
+            parent=root,
+            title="Choose the base .sim file",
+            initialdir=initial or str(Path.home()),
+            filetypes=[("STAR-CCM+ simulation", "*.sim"), ("All files", "*.*")],
+        )
+    finally:
+        root.destroy()
+    return chosen or None
+
+
 def visible(entry):
     # Hidden folders/files (.git, .vscode, ...) never hold results.
     return not entry.name.startswith(".")
@@ -225,6 +246,9 @@ class Handler(SimpleHTTPRequestHandler):
     status_lock = threading.Lock()
     download_lock = threading.Lock()
     downloads = {}          # case name → cluster.Download, for this server run
+    creating = {}           # case name → cluster.Download used as a progress record
+    submitted = {}          # case name → SLURM job id, for this server run
+    remote_info = {}        # case name → case from the last status check
     remote_cases = set()    # case names from the last status check
 
     def __init__(self, *args, **kwargs):
@@ -256,6 +280,7 @@ class Handler(SimpleHTTPRequestHandler):
             "/api/file": self.api_file,
             "/api/cluster": self.api_cluster,
             "/api/cluster/downloads": self.api_cluster_downloads,
+            "/api/cluster/new-case": self.api_new_case_tasks,
         }
         route = routes.get(url.path)
         if route is None:
@@ -280,6 +305,10 @@ class Handler(SimpleHTTPRequestHandler):
             "/api/cluster/cases": self.api_cluster_cases,
             "/api/cluster/download": self.api_cluster_download,
             "/api/cluster/download/cancel": self.api_cluster_cancel,
+            "/api/cluster/settings-file": self.api_settings_file,
+            "/api/cluster/browse-sim": self.api_browse_sim,
+            "/api/cluster/new-case": self.api_new_case,
+            "/api/cluster/submit": self.api_submit,
         }
         route = routes.get(urlsplit(self.path).path)
         if route is None:
@@ -334,7 +363,9 @@ class Handler(SimpleHTTPRequestHandler):
     def cluster_settings(self):
         saved = read_settings().get("cluster")
         saved = saved if isinstance(saved, dict) else {}
-        return {"session": saved.get("session") or "", "remoteFolder": saved.get("remoteFolder") or ""}
+        return {"session": saved.get("session") or "", "remoteFolder": saved.get("remoteFolder") or "",
+                "submitSession": saved.get("submitSession") or "",
+                "templateFolder": saved.get("templateFolder") or cluster.DEFAULT_TEMPLATE}
 
     def api_cluster(self, _path):
         executable = self.winscp.executable()
@@ -356,8 +387,14 @@ class Handler(SimpleHTTPRequestHandler):
         checked = self.checked_cluster_body(body)
         if checked is None:
             return
+        try:
+            submit = cluster.check_session(body["submitSession"]) if body.get("submitSession") else ""
+            template = cluster.check_case_name(body["templateFolder"]) if body.get("templateFolder") else cluster.DEFAULT_TEMPLATE
+        except ValueError as err:
+            return self.send_json({"error": str(err)}, HTTPStatus.BAD_REQUEST)
         settings = read_settings()
-        settings["cluster"] = {"session": checked[0], "remoteFolder": checked[1]}
+        settings["cluster"] = {"session": checked[0], "remoteFolder": checked[1],
+                               "submitSession": submit, "templateFolder": template}
         write_settings(settings)
         self.api_cluster("")
 
@@ -372,9 +409,24 @@ class Handler(SimpleHTTPRequestHandler):
             return self.send_json({"error": "A connection test is already running."}, HTTPStatus.CONFLICT)
         try:
             result = cluster.test_connection(self.winscp, *checked)
+            if result["ok"] and body.get("submitSession"):
+                result["submit"] = self.test_submit_session(body["submitSession"], checked[1])
         finally:
             self.cluster_lock.release()
         self.send_json(result)
+
+    def test_submit_session(self, session, remote_folder):
+        """Read-only: can the job session use SLURM (sbatch --version)?"""
+        try:
+            session = cluster.check_session(session)
+        except ValueError as err:
+            return {"ok": False, "error": str(err)}
+        code, output = self.winscp.run(cluster.submit_test_script(session, remote_folder))
+        version = next((line.strip() for line in output.splitlines() if line.strip().startswith("slurm ")), "")
+        if code == 0 and version:
+            return {"ok": True, "version": version}
+        return {"ok": False, "error": "This session cannot start jobs (no SLURM there).",
+                "hint": cluster.hint_for(output), "output": output.strip()[-cluster.MAX_OUTPUT:]}
 
     def api_start_pageant(self, body):
         """Unlock the session's key in Pageant; Pageant asks for the passphrase."""
@@ -403,7 +455,16 @@ class Handler(SimpleHTTPRequestHandler):
         if not self.status_lock.acquire(blocking=False):
             return self.send_json({"error": "A status check is already running."}, HTTPStatus.CONFLICT)
         try:
+            jobs = {}
+            if saved["submitSession"]:
+                def read_jobs():
+                    job_code, job_output = self.winscp.run(cluster.jobs_script(saved["submitSession"]))
+                    jobs["result"] = cluster.parse_jobs(job_output) if job_code == 0 else None
+                job_thread = threading.Thread(target=read_jobs, daemon=True)
+                job_thread.start()
             code, output = self.winscp.run(cluster.status_script(saved["session"], saved["remoteFolder"]))
+            if saved["submitSession"]:
+                job_thread.join(cluster.TIMEOUT_SECONDS + 5)
         finally:
             self.status_lock.release()
         if code != 0:
@@ -411,6 +472,11 @@ class Handler(SimpleHTTPRequestHandler):
                                    "needsPassphrase": "passphrase" in output.lower(), "output": output.strip()[-cluster.MAX_OUTPUT:]})
         cases = cluster.parse_cases(output)
         Handler.remote_cases = {case["name"] for case in cases}
+        Handler.remote_info = {case["name"]: case for case in cases}
+        queue = jobs.get("result")
+        for case in cases:
+            case["jobs"] = (queue or {}).get(case["name"], [])
+            case["submittedJob"] = self.submitted.get(case["name"])
         folders = self.working_dir.cfd_folders()
         for case in cases:
             case["local"] = None
@@ -426,7 +492,9 @@ class Handler(SimpleHTTPRequestHandler):
                 case["local"] = "partial"
             download = self.downloads.get(case["name"])
             case["download"] = download.describe() if download else None
-        self.send_json({"ok": True, "cases": cases, "checkedAt": time.time(), "canDownload": folders is not None})
+        self.send_json({"ok": True, "cases": cases, "checkedAt": time.time(), "canDownload": folders is not None,
+                        "canSubmit": bool(saved["submitSession"]), "jobsChecked": queue is not None,
+                        "templateFolder": saved["templateFolder"]})
 
     def api_cluster_downloads(self, _path):
         self.send_json({case: download.describe() for case, download in self.downloads.items()})
@@ -455,6 +523,105 @@ class Handler(SimpleHTTPRequestHandler):
         lines = cluster.download_script(saved["session"], saved["remoteFolder"], case, str(partial), download.include_sim)
         threading.Thread(target=cluster.run_download, args=(self.winscp, download, lines, partial, finished), daemon=True).start()
         self.send_json(download.describe())
+
+    def api_settings_file(self, body):
+        """Settings of the template folder or an existing case on Fritz, as pairs."""
+        saved = self.cluster_settings()
+        try:
+            source = cluster.check_case_name(body.get("source") or saved["templateFolder"])
+        except ValueError as err:
+            return self.send_json({"error": str(err)}, HTTPStatus.BAD_REQUEST)
+        if not saved["session"] or not saved["remoteFolder"]:
+            return self.send_json({"error": "Save your WinSCP session and remote folder first."}, HTTPStatus.BAD_REQUEST)
+        if source != saved["templateFolder"] and source not in Handler.remote_cases:
+            return self.send_json({"error": "That case is not in the last list from Fritz; refresh first."}, HTTPStatus.BAD_REQUEST)
+        handle, local = tempfile.mkstemp(prefix="homo-cfd-settings-")
+        os.close(handle)
+        try:
+            code, output = self.winscp.run(cluster.settings_fetch_script(saved["session"], saved["remoteFolder"], source, local))
+            text = Path(local).read_text(encoding="utf-8", errors="replace") if code == 0 else ""
+        finally:
+            os.unlink(local)
+        pairs = cluster.parse_settings(text)
+        if not pairs:
+            return self.send_json({"error": f"Could not read {source}/Settings on Fritz.", "hint": cluster.hint_for(output)},
+                                  HTTPStatus.BAD_GATEWAY)
+        self.send_json({"source": source, "settings": pairs})
+
+    def api_browse_sim(self, body):
+        if not tkinter_available():
+            return self.send_json({"error": "File dialog unavailable; type the path instead."}, HTTPStatus.NOT_IMPLEMENTED)
+        if not self.browse_lock.acquire(blocking=False):
+            return self.send_json({"error": "A file dialog is already open."}, HTTPStatus.CONFLICT)
+        try:
+            chosen = browse_for_sim(body.get("initial") if isinstance(body.get("initial"), str) else None)
+        finally:
+            self.browse_lock.release()
+        if not chosen:
+            return self.send_json({"cancelled": True})
+        path = Path(chosen)
+        self.send_json({"path": str(path), "size": path.stat().st_size if path.is_file() else None})
+
+    def api_new_case_tasks(self, _path):
+        self.send_json({case: task.describe() for case, task in self.creating.items()})
+
+    def api_new_case(self, body):
+        """Create a case on Fritz from the template, with edited Settings and a .sim."""
+        saved = self.cluster_settings()
+        try:
+            case = cluster.check_case_name(body.get("name"))
+            pairs = cluster.check_settings(body.get("settings"))
+        except ValueError as err:
+            return self.send_json({"error": str(err)}, HTTPStatus.BAD_REQUEST)
+        sim = Path(body["simPath"].strip().strip('"')) if isinstance(body.get("simPath"), str) and body["simPath"].strip() else None
+        if sim is None or not sim.is_absolute() or not sim.is_file() or sim.suffix.lower() != ".sim" or cluster.UNSAFE.search(str(sim)):
+            return self.send_json({"error": "Choose the base .sim file on this computer."}, HTTPStatus.BAD_REQUEST)
+        if not saved["session"] or not saved["remoteFolder"]:
+            return self.send_json({"error": "Save your WinSCP session and remote folder first."}, HTTPStatus.BAD_REQUEST)
+        if case in Handler.remote_cases or case == saved["templateFolder"]:
+            return self.send_json({"error": f"{case} already exists on Fritz."}, HTTPStatus.CONFLICT)
+        with self.download_lock:
+            if any(task.state == "running" for task in self.creating.values()):
+                return self.send_json({"error": "Another new simulation is being created; wait for it."}, HTTPStatus.CONFLICT)
+            task = cluster.Download(case)
+            task.bytes_total = sim.stat().st_size
+            self.creating[case] = task
+        handle, settings_file = tempfile.mkstemp(prefix="homo-cfd-settings-")
+        with os.fdopen(handle, "w", encoding="utf-8", newline="\n") as file:
+            file.write(cluster.format_settings(pairs))
+        threading.Thread(target=cluster.run_new_case, daemon=True, args=(
+            self.winscp, task, saved["session"], saved["remoteFolder"], saved["templateFolder"], case, settings_file, str(sim))).start()
+        self.send_json(task.describe())
+
+    def api_submit(self, body):
+        """Start a prepared case: sbatch mesh.sh with the job session. Never twice."""
+        saved = self.cluster_settings()
+        try:
+            case = cluster.check_case_name(body.get("case"))
+        except ValueError as err:
+            return self.send_json({"error": str(err)}, HTTPStatus.BAD_REQUEST)
+        if not saved["submitSession"]:
+            return self.send_json({"error": "Choose the session for starting jobs (your Fritz login node) and save."}, HTTPStatus.BAD_REQUEST)
+        info = Handler.remote_info.get(case)
+        if info is None:
+            return self.send_json({"error": "That case is not in the last list from Fritz; refresh first."}, HTTPStatus.BAD_REQUEST)
+        if info["state"] != "prepared" or info.get("jobs") or case in self.submitted:
+            return self.send_json({"error": f"{case} has already been started."}, HTTPStatus.CONFLICT)
+        task = self.creating.get(case)
+        if task is not None and task.state != "done":
+            return self.send_json({"error": f"{case} was not created completely; it cannot be started."}, HTTPStatus.CONFLICT)
+        with self.download_lock:
+            if case in self.submitted:
+                return self.send_json({"error": f"{case} has already been started."}, HTTPStatus.CONFLICT)
+            self.submitted[case] = None
+        code, output = self.winscp.run(cluster.submit_script(saved["submitSession"], saved["remoteFolder"], case))
+        match = cluster.SUBMITTED.search(output)
+        if code == 0 and match:
+            self.submitted[case] = match.group(1)
+            return self.send_json({"ok": True, "jobId": match.group(1)})
+        del self.submitted[case]
+        self.send_json({"ok": False, "error": "Fritz did not accept the job.", "hint": cluster.hint_for(output),
+                        "output": output.strip()[-cluster.MAX_OUTPUT:]})
 
     def api_cluster_cancel(self, body):
         download = self.downloads.get(body.get("case")) if isinstance(body.get("case"), str) else None
