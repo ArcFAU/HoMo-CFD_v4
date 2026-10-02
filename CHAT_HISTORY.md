@@ -4547,3 +4547,63 @@ The background watcher of the post job (job 4285206 in `exp`) finished; no new u
 > I checked it with your real data in a normal and a short window. All tests pass (71 unit tests, 136 browser checks), the portable zip and README are updated, and the changes are on GitHub `master`. If you'd like the buttons arranged differently (stacked, or with icons), tell me.
 >
 > The 3D export test on Fritz is still running; I'll report when it's done.
+
+## 2026-10-02 — Rezip for teammates; project folder cleanup
+
+### User message (verbatim)
+
+> okay, rezip it for others and then clean up our folder as well.
+
+### Clarification (question tool; the user's answer verbatim)
+
+- What should happen to CFD-Tool.zip and RANS.html in the project folder? (Move to Downloads / Delete both / Keep them) → "Delete both"
+
+### Contributor messages (verbatim)
+
+> First a look at what's in the project folder, including the files Git ignores, before deleting anything:
+
+> Before deleting anything, I'm checking three things: what `.cursor` contains, whether anything uses the logo copy in the top folder, and which of these files Git tracks:
+
+> What I found:
+> - **Generated clutter, safe to delete:** three `__pycache__` folders, and the unpacked build folder `dist\HoMo-CFD` (it gets recreated by every rebuild; the zip and the Python download cache stay).
+> - **A duplicate:** `High-Voltage_white.png` in the top folder. The app only uses the copy in `web\`; one note claims otherwise and is outdated, so I'll fix it.
+> - **To keep:** the project notes and `.cursor` (a contributor rule for the AI editor Cursor).
+> - **My own scratch files:** about 400 MB of temporary data (downloaded test exports, test copies). I'll clear them too, except the two small scripts still watching the Fritz job.
+>
+> Rebuilding the zip first, then cleaning up:
+
+> The zip is rebuilt; the build folder, caches and duplicate logo are gone. Now my scratch folder: deleting the large data and old drafts, keeping the small scripts the job watcher uses:
+
+> The scratch folder is down from about 400 MB to 0.6 MB. Fixing the outdated logo note:
+
+> Both suites pass. Two files in the folder are **yours**, not ours, so I won't delete them without asking:
+> - **`CFD-Tool.zip`** (49 MB): the old CFD-Tool, used as a reference early on. It may contain a key file (`p.ppk`) that I never opened.
+> - **`RANS.html`** (8 MB): the simulation report you added today.
+>
+> Neither is needed by HoMo, and Git ignores both.
+
+> Both deleted. Updating the notes that still mention them:
+
+> Writing the log entry and committing; checking on the Fritz job as well:
+
+### Work record
+
+- Rebuilt `dist/HoMo-CFD-portable.zip` (12.5 MB; bundled Python check passed).
+- Deleted: `dist/HoMo-CFD/` (unpacked build), `__pycache__/`, `tests/__pycache__/`, `tools/__pycache__/`, the unused root `High-Voltage_white.png` (git rm; the app uses `web/High-Voltage_white.png`), and at the user's request `CFD-Tool.zip` and `RANS.html` (both untracked). Kept: project notes, `.cursor/rules/chat-history.mdc`, `dist/HoMo-CFD-portable.zip`, `dist/cache/`.
+- Scratch folder (outside the project): temporary data removed (≈400 MB → 0.6 MB); the job watcher's scripts kept.
+- `STATUS.md`: logo note corrected; cleanup recorded.
+- Checks: `py -m unittest discover -s tests` 71/71 OK; `py tests/run_browser_tests.py` 136/136 passed (caches removed again afterwards).
+
+### Final response (verbatim)
+
+> Both done.
+>
+> **Zip for others:** `dist\HoMo-CFD-portable.zip` (12.5 MB) is rebuilt with today's version, including the new sidebar. That's the file to share.
+>
+> **Folder cleaned up:**
+> - Deleted, as you chose: `CFD-Tool.zip` (49 MB) and `RANS.html` (8 MB). What we learned from `RANS.html` is recorded in the project notes.
+> - Deleted: the unpacked build folder `dist\HoMo-CFD` (the zip is all you need), Python's cache folders, and an unused duplicate of the team logo.
+> - Kept: the app, its tests and tools, the STAR-CCM+ macros, the project notes and history, the zip, and the cached Python download (so rebuilding the zip needs no internet).
+> - Also cleared about 400 MB of my own temporary files outside the project.
+>
+> Python's cache folders (`__pycache__`) come back whenever HoMo runs; that's normal and Git ignores them. All tests pass (71 unit tests, 136 browser checks), and the changes are on GitHub `master`. The 3D export test on Fritz is still running; I'll report when it's done.
