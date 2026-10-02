@@ -165,6 +165,18 @@ runTests(async () => {
     `${doc3d.getElementById("legend-min").textContent} … ${doc3d.getElementById("legend-max").textContent}`);
   const nanMesh = win3d.eval("(() => { const parts=[{id:1,name:'t',points:new Float32Array([0,0,0, 1,0,0, 0,1,0, 1,1,0]),blocks:[{type:'tria3',count:2,width:3,conn:new Uint32Array([0,1,2, 1,3,2]),cp:new Float32Array([1,NaN])}]}]; const m=toMesh(parts); return [...m.cp].map(String).join(','); })()");
   check("3d: NaN cells don't poison shared points", nanMesh === "1,1,1,NaN", nanMesh);
+  // STAR-CCM+ leaves small split-off wall pieces out of the field files; those cells get no value (grey).
+  const omitted = win3d.eval(`(() => {
+    const text = (s) => { const b = new Uint8Array(80); for (let i = 0; i < s.length; i++) b[i] = s.charCodeAt(i); return b; };
+    const chunks = [text("Cp"), text("part"), new Int32Array([1]), text("tria3"), new Float32Array([0.5])];
+    const bytes = new Uint8Array(chunks.reduce((n, c) => n + c.byteLength, 0)); let at = 0;
+    for (const c of chunks) { bytes.set(new Uint8Array(c.buffer, c.byteOffset, c.byteLength), at); at += c.byteLength; }
+    const tri = () => ({ type: "tria3", count: 1, width: 3, conn: new Uint32Array([0, 1, 2]) });
+    const parts = [{ id: 1, name: "Frontwing", points: new Float32Array([0,0,0, 1,0,0, 0,1,0]), blocks: [tri()] },
+                   { id: 2, name: "Frontwing 2", points: new Float32Array([0,0,1, 1,0,1, 0,1,1]), blocks: [tri()] }];
+    readCp(bytes.buffer, parts); const m = toMesh(parts);
+    return [...m.cp].map(String).join(",") + " | " + m.min + ".." + m.max; })()`);
+  check("3d: parts left out of a field file load without values", omitted === "0.5,0.5,0.5,NaN,NaN,NaN | 0.5..0.5", omitted);
 
   // Camera: turntable around +Z, true (unmirrored) views, presets, axes widget, keys, shading, zoom at the pointer.
   const near = (a, b) => Math.abs(a - b) < 1e-6;

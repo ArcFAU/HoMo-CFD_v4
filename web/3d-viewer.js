@@ -40,9 +40,15 @@ function readGeometry(buffer) {
   }
   if(!parts.length)throw Error("No geometry parts found.");return parts;
 }
-function readCp(buffer,parts){const v=new DataView(buffer);let o=80;const i32=()=>{if(o+4>v.byteLength)throw Error("PressureCoefficient file ended early.");const n=v.getInt32(o,true);o+=4;return n;};
-  for(const p of parts){if(record(v,o).toLowerCase()!=="part")throw Error(`Expected Cp for part ${p.id}.`);o+=80;if(i32()!==p.id)throw Error(`Cp part does not match geometry part ${p.id}.`);
-    for(const b of p.blocks){if(record(v,o).toLowerCase()!==b.type)throw Error(`Cp element group does not match ${b.type} for ${p.name}.`);o+=80;if(o+4*b.count>v.byteLength)throw Error("Not enough Cp cell values.");b.cp=new Float32Array(b.count);for(let c=0;c<b.count;c++)b.cp[c]=v.getFloat32(o+4*c,true);o+=4*b.count;}}
+// Per-element values by part id. EnSight lets a field file leave parts (or element groups) out,
+// e.g. STAR-CCM+ for small wall pieces split off at interfaces: those cells stay NaN and show grey.
+function readCp(buffer,parts){const v=new DataView(buffer);let o=80;const i32=()=>{if(o+4>v.byteLength)throw Error("The field file ended early.");const n=v.getInt32(o,true);o+=4;return n;};
+  const byId=new Map(parts.map(p=>[p.id,p]));for(const p of parts)for(const b of p.blocks)b.cp=null;
+  while(o+80<=v.byteLength){const word=record(v,o).toLowerCase();o+=80;if(!word)continue;if(word!=="part")throw Error(`Expected a part record in the field file; found ${word}.`);
+    const id=i32(),p=byId.get(id);if(!p)throw Error(`The field file has values for part ${id}, which is not in the geometry.`);
+    while(o+80<=v.byteLength){const type=record(v,o).toLowerCase();if(type==="part")break;o+=80;const b=p.blocks.find(block=>block.type===type&&!block.cp);if(!b)throw Error(`Field values for ${type} cells do not match part ${p.name}.`);
+      if(o+4*b.count>v.byteLength)throw Error("Not enough cell values in the field file.");b.cp=new Float32Array(b.count);for(let c=0;c<b.count;c++)b.cp[c]=v.getFloat32(o+4*c,true);o+=4*b.count;}}
+  for(const p of parts)for(const b of p.blocks)if(!b.cp)b.cp=new Float32Array(b.count).fill(NaN);
 }
 function toMesh(parts){let base=0,triangles=0,min=Infinity,max=-Infinity;const offsets=[];
   for(const p of parts){offsets.push(base);base+=p.points.length/3;

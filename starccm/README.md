@@ -1,8 +1,12 @@
 # STAR-CCM+ macros for HoMo CFD
 
-Two macros for the template folder on Fritz (e.g. `SCRIPT_RANS`). Both compile
-against STAR-CCM+ 2506 (20.04), checked on 2026-10-02; they have not run in
-STAR-CCM+ yet.
+Two macros for the template folder on Fritz (e.g. `SCRIPT_RANS`), for
+STAR-CCM+ 2506 (20.04). Tested on Fritz on 2026-10-02: a post job on
+`0830_mk2.2_10degree` (57 min) wrote `3D-data` with the full car (74 MB
+geometry + 6 MB per field), which opens in HoMo CFD's 3D viewer.
+
+The case folder needs its `Settings`: `postprocessing.java` reads it first and
+stops without it.
 
 ## postprocessing.java
 
@@ -27,8 +31,11 @@ next to the `.sim`. HoMo CFD shows such a folder in the results tree as
   (`floor`, `ground`, `road`, `walls`, `wall`, `tunnel`, `symmetry`, `sym`,
   `top`, `side`), and so are interfaces (`internal…`, names with `[`). Edit
   `SKIPPED` at the top of the macro if your domain uses other names.
-- Fields the simulation does not have are left out; problems are written to
-  the log and never stop the post-processing.
+- Fields the simulation does not have are left out (e.g. `CpZCpX` in
+  `0830_mk2.2_10degree`); problems are written to the log and never stop the
+  post-processing.
+- STAR-CCM+ may add a few tiny pieces of the walls (named like `rim 3`) without
+  values; the viewer shows them grey.
 
 ### Try it once by hand
 

@@ -3942,3 +3942,65 @@ Messages that quoted the user's cluster user name or host are shown with those m
 - The user added `Settings` to `exp` and resubmitted `post.sh` themselves (job 4285206). Read-only checks through the fritz session: job RUNNING (17:51 elapsed at 17:54); `exp` has the x and y section folders so far, no `3D-data` yet; the new log has no exception and no "Job finished" yet.
 - Background watcher (scratchpad `wait_post.py`): `squeue` every 5 minutes, then `check_exp.py` (folders, `3D-data` listing, export/exception lines of the newest post log; licence-key lines filtered). Result pending.
 - No code changes.
+
+## 2026-10-02 — 3D export test result on Fritz; viewer fix for field files that leave parts out
+
+### Trigger
+
+The background watcher of the post job (job 4285206 in `exp`) finished; no new user message. Follows the entry "Post-processing test rerun; what next".
+
+### Contributor messages (verbatim)
+
+> The 3D export worked on Fritz. The post job finished after 57 minutes, and `exp/3D-data` now holds the case file, a 74 MB geometry and four fields: PressureCoefficient, TotalPressureCoefficient, CpX and CpZ. This simulation has no CpZCpX function, so the macro left it out, as designed.
+>
+> One thing to check: the log says **566 surfaces**, while your hand export had 10 parts. The geometry size is about the same (74 MB vs 72 MB), so it's probably the same car split into many boundary pieces. That could make the viewer's part list very long. I'll download `3D-data` (about 98 MB, read-only on Fritz) into my scratch folder to check the parts and open it in the viewer:
+
+> Only 18 parts, not 566: STAR-CCM+ evidently counted boundaries differently in its log message. Some names appear twice, though, so I'm looking at the full list:
+
+> That's the same car as your hand export: the same 10 main parts with matching sizes and cell counts. The 8 extra parts ("Frontwing 2", "rim 3" and so on) are tiny pieces of 8–834 cells. Most likely STAR-CCM+ split off small bits of those walls, for example where they touch an interface. They don't hurt.
+>
+> Opening it in the 3D viewer for a screenshot. I'm using a temporary HoMo on another port that points at the downloaded data, with a separate settings folder, so your own HoMo and settings stay untouched:
+
+> The viewer got stuck at "Reading CpX values…", so something went wrong. My script returned an empty object, which usually means an error was thrown. Rerunning it so it reports the actual error message:
+
+> The viewer stops at part 11 ("Remaining 2", the first of the small extra parts): "Expected Cp for part 11". The field files seem to be laid out differently from what the viewer expects for those pieces. Comparing the part and element records in the geometry and the CpX file:
+
+> The geometry looks fine. The interesting part of the CpX file got cut off in my output, so I'm printing it one part per line:
+
+> Found it. The geometry has 18 parts, but the field files only contain values for the first 10, the real car parts. STAR-CCM+ wrote no values for the 8 tiny extra pieces.
+>
+> The EnSight format allows a field file to leave parts out, so this is valid data. The bug is in the viewer: it expects values for every part in order. I'll make it read the field files by part number and show cells without values in grey, as it already does for missing values.
+
+> Opening the real car in the viewer again:
+
+> Now it works: the whole car loads (5.6 million triangles, 18 parts), colored by PressureCoefficient, and both views are correct. The 8 tiny pieces without values are grey but too small to notice.
+>
+> Adding a browser check that a field file which leaves parts out still loads, with those cells grey (no value):
+
+> All 122 browser checks and the unit tests pass. Next I'm rebuilding the portable zip (the viewer changed) and recording the successful Fritz test in the docs:
+
+> The docs are updated and the portable zip is rebuilt. Writing the log entry:
+
+### Work record
+
+- Watcher result: job 4285206 left the queue at about 18:33 (57 min 24 s). `exp` now has 3D, 3D-data, PressureDistributions and all section folders. Log lines: `export3D: no field function CpZCpX, left out`; `export3D: 566 surfaces with 4 fields written to …/exp/3D-data/UPSI_CFD_BASE_0830_mk2.2_10degree.case`; `Job finished at Fri Oct 2 18:33:31 CEST 2026`.
+- Downloaded `exp/3D-data` read-only into the scratchpad (geometry 74,043,408 bytes; CpX, CpZ, PressureCoefficient, TotalPressureCoefficient 5,995,372 bytes each). Geometry: 18 parts (10 car parts as in the hand export + 8 pieces of 8–834 cells); field files: values only for parts 1–10.
+- `web/3d-viewer.js` `readCp`: reads part records by id; parts or element groups left out of a field file get NaN (grey); unknown parts or mismatched element types still raise clear errors. Verified with a temporary `serve.py` on port 5296 (`--working-dir` = scratchpad copy, separate `APPDATA`): 5,604,362 triangles, PressureCoefficient −7.64…3.96, front-left and rear-left screenshots correct.
+- Tests: `tests/browser/picker-mode.html` +1 check (field file without one part).
+- Docs: `CHANGELOG.md`, `STATUS.md`, `starccm/README.md` (tested on Fritz; `Settings` needed), `tests/README.md`. Portable zip rebuilt.
+- Checks: `py -m unittest discover -s tests` 70/70 OK; `py tests/run_browser_tests.py` 122/122 passed.
+
+### Final response (verbatim)
+
+> **The automatic 3D export works on Fritz.** Your test job (57 min) wrote `exp/3D-data` with the whole car, about 100 MB. I opened it in HoMo's 3D viewer: all parts (front wing, nose and monocoque, undertray, rear wing, wheels, suspension, driver), colored by PressureCoefficient, about 5.6 million triangles.
+>
+> **One problem on HoMo's side, now fixed:** besides the 10 car parts, STAR-CCM+ wrote 8 tiny extra pieces (such as "rim 3", 8–834 cells each) without values. That's allowed in the EnSight format, but the viewer stopped loading on them. It now reads the values per part and shows those pieces grey; they're too small to notice. Your HoMo picks this up after a page reload; all tests pass (70 unit tests, 122 browser checks), and the portable zip is rebuilt.
+>
+> Also good to know: this simulation has no CpZCpX field, so the export left it out and wrote the other four.
+>
+> **To see it in your own HoMo:** `exp` now shows as **Ready to download** in the Fritz list. Download it, and `3D-data · 3D viewer` appears in the results tree.
+>
+> **What's next:**
+> 1. **Template:** say "upload it" and I'll put `export3D.java` and the new `postprocessing.java` into `SCRIPT_RANS` (old macro kept as `postprocessing.java.bak`). After that, every new simulation gets 3D data automatically.
+> 2. **Spot failed post-processing in HoMo** (from the first test): should I build that?
+> 3. Delete `starccm\post.o4285168` (it contains your licence key) and, if you like, the test folder `exp` on Fritz when you're done with it.
