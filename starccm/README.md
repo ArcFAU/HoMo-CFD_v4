@@ -1,5 +1,21 @@
 # STAR-CCM+ macros for HoMo CFD
 
+Two macros for the template folder on Fritz (e.g. `SCRIPT_RANS`). Both compile
+against STAR-CCM+ 2506 (20.04), checked on 2026-10-02; they have not run in
+STAR-CCM+ yet.
+
+## postprocessing.java
+
+The team's post-processing macro (section images, 3D scene pictures, pressure
+distributions, plots), taken from `SCRIPT_RANS` on 2026-10-02, with two
+changes:
+
+- After the 3D scene pictures it plays `export3D.java` from the case folder
+  (method `export3DData()`). If that file is missing, nothing happens; if the
+  export fails, one line goes to the log and the rest of the post-processing
+  runs as before.
+- An unused field with a personal Fritz path (`workingDir`) was removed.
+
 ## export3D.java: 3D data for the 3D viewer
 
 Exports the car's surfaces with per-cell fields (PressureCoefficient,
@@ -13,8 +29,6 @@ next to the `.sim`. HoMo CFD shows such a folder in the results tree as
   `SKIPPED` at the top of the macro if your domain uses other names.
 - Fields the simulation does not have are left out; problems are written to
   the log and never stop the post-processing.
-- Checked by compiling against STAR-CCM+ 2506 (20.04) on 2026-10-02. It has not
-  run in STAR-CCM+ yet.
 
 ### Try it once by hand
 
@@ -22,35 +36,20 @@ Open a finished case's `.sim` in STAR-CCM+, then **File → Macro → Play Macro
 and choose `export3D.java`. A `3D-data` folder appears next to the `.sim`; open
 it in HoMo CFD (results tree, or **Open 3D Cp viewer**).
 
-### Run it automatically after every simulation
+## Use them for every new simulation
 
-1. Copy `export3D.java` into the template folder on Fritz (e.g. `SCRIPT_RANS`),
-   so every new case gets it.
-2. In the template's `postprocessing.java`, inside `if(postprocessing.contains("3"))`,
-   after the loop that calls `exportThree(three);`, add:
+Copy both files into the template folder on Fritz, replacing the template's
+`postprocessing.java` (keep the old one, e.g. as `postprocessing.java.bak`).
+**New simulation on Fritz** in HoMo CFD copies them into every new case. Cases
+that already exist keep their old macro.
 
-   ```java
-               // Surfaces with Cp fields for HoMo CFD's 3D viewer (3D-data/), see export3D.java.
-               export3DData();
-   ```
+If your template's `postprocessing.java` has changed since 2026-10-02, add the
+two changes by hand instead: the call
 
-   and add this method to the class (for example before `exportThree`):
+```java
+            // Surfaces with Cp fields for HoMo CFD's 3D viewer (3D-data/), see export3D.java.
+            export3DData();
+```
 
-   ```java
-       // Plays export3D.java from the case folder when it is there. Any problem is only
-       // logged, so the rest of the post-processing always runs.
-       private void export3DData()
-       {
-           File macro = new File(directory, "export3D.java");
-           if (!macro.isFile()) {
-               return;
-           }
-           try {
-               new StarScript(getActiveRootObject(), macro).play();
-           } catch (Throwable e) {
-               simulation_0.println("3D export skipped: " + e);
-           }
-       }
-   ```
-
-Cases without `export3D.java` in their folder simply skip the export.
+after the loop that calls `exportThree(three);`, and the method
+`export3DData()` from this folder's `postprocessing.java`.

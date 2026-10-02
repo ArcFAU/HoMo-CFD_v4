@@ -3794,3 +3794,57 @@ Messages that quoted the user's cluster user name or host are shown with those m
 > 2. **Add it to the template:** if the test works, I can upload `export3D.java` and the updated `postprocessing.java` into `SCRIPT_RANS` on Fritz, keeping your current one as `postprocessing.java.bak`. Just say "upload it". Or copy the two files yourself with WinSCP.
 >
 > Each case will then download about 100 MB more. All tests pass (70 unit tests, 121 browser checks), the portable zip is rebuilt, and the changes are on GitHub `master`. I restarted your HoMo server.
+
+## 2026-10-02 — Updated postprocessing.java in the repo
+
+### User message (verbatim)
+
+> can you change postprocessing.java in the repo
+
+### Contributor messages (verbatim)
+
+> The HoMo repo doesn't contain `postprocessing.java` yet. I kept it out because it has another person's Fritz path in it. Before adding it to `starccm/`, I'm checking whether that path is actually used, and whether the GitHub repo is private:
+
+> The path is declared but never used anywhere in the macro (the same goes for `dirPath`). So I can remove that one line without changing what the macro does, and the account ID stays off GitHub. Checking the repo's visibility another way, since the GitHub CLI isn't installed:
+
+> The repo is private (GitHub returns "not found" without login). I'll still leave out that unused personal path, in case the repo is ever shared.
+>
+> Adding the updated `postprocessing.java` to `starccm/`: your `SCRIPT_RANS` version plus the 3D export call, minus that one unused line. First a check for anything else personal in it:
+
+> Only that one line was personal, and it's gone. Compiling the repo's two macros against STAR-CCM+ 2506 again, then comparing with the template version to confirm the 3D export call is the only other change:
+
+> Both compile, and the only differences from your template are the removed unused line and the 3D export call. Now the README: deploying becomes "copy both files into the template", with no manual editing.
+
+> Updating the remaining docs to point to the repo copy instead of the temporary `dist` copy:
+
+> There's also an untracked `postprocessing.java` in the project's top folder that I didn't create. You may have put it there for me to change. Checking what it is:
+
+> That file is identical to `SCRIPT_RANS/postprocessing.java` on Fritz, so you probably just copied it into the project. It's the same macro I've just added, with the changes, as `starccm/postprocessing.java`, next to `export3D.java` and the README.
+>
+> To avoid two copies drifting apart, I'm removing the unchanged one from the top folder. That also keeps the line with the other person's Fritz path out of the commit. The original is unchanged in `SCRIPT_RANS` on Fritz.
+
+> Both suites pass (70 unit tests, 121 browser checks). Writing the log entry:
+
+### Work record
+
+- New `starccm/postprocessing.java`: the `SCRIPT_RANS` macro of 2026-10-02 plus `export3DData()` (call after the 3D scene loop; plays `export3D.java` via `StarScript`, catch-all) and without the unused field `workingDir` (another user's Fritz path; `dirPath` is also unused but holds nothing personal, so it stays). No licence key, mail or other paths in the file. Diff against the template: exactly those changes. Recompiled `starccm/export3D.java` + `starccm/postprocessing.java` with STAR-CCM+ 20.04's javac: OK.
+- An untracked top-level `postprocessing.java` (identical to `SCRIPT_RANS/postprocessing.java`, so probably copied in by the user) was removed in favour of `starccm/postprocessing.java`; the original stays unchanged on Fritz. The temporary `dist/starccm-template/` was removed.
+- GitHub repo `ArcFAU/HoMo-CFD_v4` is private (anonymous request → 404).
+- Docs: `starccm/README.md` (both macros; copy both into the template; manual steps only if the template's macro changed), `CHANGELOG.md`, `STATUS.md`, `README.md`.
+- Checks: `py -m unittest discover -s tests` 70/70 OK; `py tests/run_browser_tests.py` 121/121 passed. Nothing uploaded to Fritz.
+
+### Final response (verbatim)
+
+> Done. The repo now has the updated macro as `starccm/postprocessing.java`, next to `export3D.java`. Nothing on Fritz has changed.
+>
+> **Compared with your `SCRIPT_RANS` version, it has exactly two changes:**
+> - **The 3D export:** after the 3D scene pictures, it runs `export3D.java` from the case folder. If that file is missing, nothing happens. If the export fails, one line goes into the log and the rest of the post-processing runs as before.
+> - **One unused line removed:** `workingDir = "/home/vault/iwst/…"`, a personal Fritz path of someone else that the macro never uses. Removing it doesn't change what the macro does. Your GitHub repo is private, but this way that account ID stays out even if you share the repo later.
+>
+> Both macros compile against STAR-CCM+ 2506. They haven't run in STAR-CCM+ yet.
+>
+> You had also put a copy of `postprocessing.java` in the project's top folder. It was identical to the one in `SCRIPT_RANS`, so I removed it to avoid two versions drifting apart; the original is unchanged on Fritz.
+>
+> **To use it:** copy `starccm\export3D.java` and `starccm\postprocessing.java` into `SCRIPT_RANS` on Fritz (keep the old macro as `postprocessing.java.bak`). Every new simulation created from HoMo then gets the 3D export. I can do the upload for you: just say "upload it". Testing `export3D.java` by hand on `0823_upsi` first (Play Macro in STAR-CCM+) is still a good idea.
+>
+> Both test suites pass (70 unit tests, 121 browser checks), and the changes are on GitHub `master`.
