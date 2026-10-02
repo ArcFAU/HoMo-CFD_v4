@@ -79,6 +79,27 @@ runTests(async () => {
   check("two cases side by side", stage.classList.contains("compare-count-2") && Math.abs(viewer.querySelectorAll(".compare-image-panel")[0].getBoundingClientRect().top - viewer.querySelectorAll(".compare-image-panel")[1].getBoundingClientRect().top) < 2, stage.className);
   for (let step = 0; step < 5; step++) { key(win, "ArrowRight"); await idle(win); }
   check("arrow keys step the focused case", captionIndex(viewer, 1) === 6, viewer.querySelectorAll(".compare-image-caption")[1]?.textContent);
+  // Stepping must not flash: same panel, image swapped in already sized, zoomed position kept.
+  const panelBefore = viewer.querySelectorAll(".compare-image-panel")[1];
+  const stepStage = viewer.querySelectorAll(".compare-image-stage")[1];
+  key(win, "+"); key(win, "+"); await idle(win); await sleep(100);
+  stepStage.scrollLeft = 40; stepStage.scrollTop = 30; await sleep(100);
+  const panBefore = `${stepStage.scrollLeft},${stepStage.scrollTop}`;
+  const imageBefore = stepStage.querySelector("img");
+  const unsized = [];
+  const watcher = new win.MutationObserver(() => {
+    const shown = viewer.querySelectorAll(".compare-image-stage")[1]?.querySelector("img");
+    if (shown && !shown.style.width) unsized.push(shown.alt);
+  });
+  watcher.observe(viewer.getElementById("image-stage"), { childList: true, subtree: true });
+  key(win, "ArrowRight"); await idle(win);
+  watcher.disconnect();
+  check("stepping swaps the image inside the same panel", viewer.querySelectorAll(".compare-image-panel")[1] === panelBefore &&
+    stepStage.isConnected && stepStage.querySelector("img") !== imageBefore && captionIndex(viewer, 1) === 7, String(captionIndex(viewer, 1)));
+  check("the next image is sized before it is shown", unsized.length === 0 && stepStage.querySelector("img")?.style.width !== "", unsized.join(", "));
+  check("stepping keeps the zoomed position", stepStage.scrollLeft > 0 && `${stepStage.scrollLeft},${stepStage.scrollTop}` === panBefore,
+    `${panBefore} → ${stepStage.scrollLeft},${stepStage.scrollTop}`);
+  key(win, "0"); await idle(win);
   await addCase("caseA");
   await addCase("caseB");
   const heights = [...viewer.querySelectorAll(".compare-image-panel")].map((panel) => Math.round(panel.getBoundingClientRect().height));

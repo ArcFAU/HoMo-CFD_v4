@@ -106,6 +106,14 @@ runTests(async () => {
   check("gallery: zoomed top-left corner reachable", imageBox.left >= stageBox.left - 1 && imageBox.top >= stageBox.top - 1, `${imageBox.left},${imageBox.top} vs ${stageBox.left},${stageBox.top}`);
   stage.scrollLeft = stage.scrollWidth;
   check("gallery: zoomed right edge reachable", Math.abs(image.getBoundingClientRect().right - (stage.getBoundingClientRect().left + stage.clientWidth)) < 3);
+  const galleryBox = stage.querySelector(".compare-zoom-frame");
+  stage.scrollLeft = 30; stage.scrollTop = 20;
+  key(win, "ArrowRight");
+  check("gallery: the current image stays until the next one is decoded", stage.querySelector("img") === image);
+  await waitFor(() => stage.querySelector("img") !== image, 5000);
+  check("gallery: stepping swaps in place, sized, position kept", stage.querySelector(".compare-zoom-frame") === galleryBox &&
+    stage.querySelector("img").style.width !== "" && stage.scrollLeft === 30 && stage.scrollTop === 20,
+    `${stage.scrollLeft},${stage.scrollTop} ${stage.querySelector("img").style.width}`);
 
   // ---- nested simulations
   resetFrames();

@@ -3221,3 +3221,52 @@ Messages that quoted the user's cluster user name or host are shown with those m
 > All tests pass (50 unit tests, 93 browser checks). Committed and pushed to GitHub `master`.
 >
 > Still open from before: did you delete the six case folders on Fritz, or should we look into what removed them?
+
+## 2026-10-02 — Fix image flicker when stepping through frames
+
+### User message (verbatim)
+
+> also the images are flickering everytime i try to run through them
+
+### Contributor messages (verbatim)
+
+> Looking at how the viewer swaps images when you step through them:
+
+> Found the cause. On every step the viewer **rebuilds every panel from scratch**. It reinserts the image with its size reset, so for one frame the image appears at its raw size before being refitted. New panels also start scrolled to the top-left, so a zoomed view jumps. In the single-folder/gallery view, the new image is shown before it has loaded, which also flashes.
+>
+> The fix: when stepping, swap only the image inside the existing panel and size it *before* the browser draws it, keeping the zoom position. In the gallery, the old image stays up until the next one is ready. Checking how the gallery loads its images:
+
+> The gallery creates a fresh, not-yet-loaded image on every step. I'll make it decode the next image first and keep up to two neighbours ready in each direction, as the comparison view already does. Writing both fixes:
+
+> Now the full rebuild sizes images right away instead of resetting them, and arrow-key stepping uses the in-place swap:
+
+> Adding checks: stepping must keep the same panel, swap in a pre-sized image and keep the zoomed position. Finding where the existing tests step through frames:
+
+> That failure is the test, not the viewer. At this zoom the image doesn't overflow vertically, so `scrollTop` could never be 30 (the browser keeps it at 0). Comparing with the position actually set before the step instead:
+
+> Everything passes: 98 browser checks and 50 unit tests. To be sure the new checks really detect the flicker, I'll run them once against the **old** viewer code. They should fail there.
+
+> Against the old code, four of the new checks fail, as they should. The fifth ("sized before it is shown") passed there only because it looked at the old, detached panel. I'll make it look at the live panel and run the suite once more on the new code:
+
+### Work record
+
+- Cause: arrow-key stepping called `renderFrame()`, which rebuilt every comparison panel; the reused `<img>` had its width/height reset to `""` and was refitted one animation frame later by the ResizeObserver (a flash at natural size), and the new stages started at scroll 0 (zoomed views jumped). The single/gallery view created a new `<img>` per step and showed it before it loaded.
+- `web/image-viewer.js`: `updateComparisonImages()` swaps each panel's decoded image in place (falls back to a full render if panels don't match); `swapImage()` replaces the image, fits it synchronously with `fitZoomedImage` and restores the scroll position; full renders no longer reset image sizes or reassign `src`, and fit every stage immediately after insertion. Single/gallery view: `showSingleFrame()` with `decodedSingleImage()` (decode before swap, ±2 neighbours decoded ahead, stale requests dropped by a token).
+- Tests: `tests/browser/server-mode.html` +3 checks (same panel after a step, new image sized before shown via MutationObserver on the live panel, zoomed position kept); `tests/browser/picker-mode.html` +2 (gallery keeps the current image until the next is decoded; swaps in place, sized, position kept). Verified the checks fail against the previous `image-viewer.js` (4 failures), then restored the new code.
+- Docs: `CHANGELOG.md`, `STATUS.md`.
+- Checks: `py -m unittest discover -s tests` 50/50 OK; `py tests/run_browser_tests.py` 98/98 passed.
+
+### Final response (verbatim)
+
+> Fixed. The flicker came from the viewer rebuilding every panel on each arrow-key step. For a split second each image appeared at its raw size before being fitted again, and a zoomed view jumped back to the top-left corner.
+>
+> Now:
+>
+> - **Comparison window:** stepping only swaps the picture inside the existing panel. The next image is already loaded and sized before it appears, and your zoom and pan position stay where they are.
+> - **Single folder / scene gallery:** the current image stays on screen until the next one is ready, and the neighbouring images load in advance.
+>
+> I added checks for exactly this. They fail on the old code and pass on the new one.
+>
+> Close and reopen any open viewer windows to get the fix. All tests pass (50 unit tests, 98 browser checks). Committed and pushed to GitHub `master`.
+>
+> If you still see flicker anywhere, tell me which window (comparison or gallery) and whether you're holding the arrow key or tapping it.

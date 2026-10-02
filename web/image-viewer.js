@@ -129,17 +129,75 @@ function renderFrame() {
     caption.textContent = "";
     return;
   }
-  const image = document.createElement("img");
-  image.alt = images[frameIndex].name;
-  image.draggable = false;
-  image.addEventListener("load", () => fitZoomedImage(stage), { once: true });
-  image.src = images[frameIndex].url;
-  const frameBox = document.createElement("div");
-  frameBox.className = "compare-zoom-frame";
-  frameBox.appendChild(image);
-  stage.replaceChildren(frameBox);
-  fitZoomedImage(stage);
-  caption.textContent = `${images[frameIndex].name} · ${frameIndex + 1} / ${images.length}`;
+  showSingleFrame();
+}
+
+// Single folder / scene gallery: the current image stays on screen until the
+// next one is decoded, then it is swapped in already sized, so stepping does
+// not flash. Neighbouring images are decoded ahead.
+let singleFrameToken = 0;
+
+function decodedSingleImage(entry) {
+  if (!entry.decoded) {
+    const image = new Image();
+    image.decoding = "async";
+    image.draggable = false;
+    image.alt = entry.name;
+    image.src = entry.url;
+    entry.decoded = image.decode().then(() => image, () => image);
+  }
+  return entry.decoded;
+}
+
+async function showSingleFrame() {
+  const token = ++singleFrameToken;
+  const entry = images[frameIndex];
+  const image = await decodedSingleImage(entry);
+  if (token !== singleFrameToken) return;
+  let frameBox = stage.querySelector(".compare-zoom-frame");
+  if (!frameBox) {
+    frameBox = document.createElement("div");
+    frameBox.className = "compare-zoom-frame";
+    stage.replaceChildren(frameBox);
+  }
+  swapImage(stage, frameBox, image);
+  caption.textContent = `${entry.name} · ${frameIndex + 1} / ${images.length}`;
+  images.forEach((other, index) => {
+    if (Math.abs(index - frameIndex) <= RETAINED_FRAME_RADIUS) decodedSingleImage(other);
+    else other.decoded = null;
+  });
+}
+
+// Puts a decoded image into a zoom frame, sized before the browser paints and
+// keeping the pan position.
+function swapImage(imageStage, frameBox, image) {
+  if (frameBox.firstElementChild === image) return;
+  const { scrollLeft, scrollTop } = imageStage;
+  frameBox.replaceChildren(image);
+  fitZoomedImage(imageStage);
+  imageStage.scrollLeft = scrollLeft;
+  imageStage.scrollTop = scrollTop;
+}
+
+// Comparison window: stepping frames swaps the images inside the existing
+// panels instead of rebuilding them. Falls back to a full render when the
+// panels don't match (case added/removed, image still loading).
+function updateComparisonImages() {
+  const stages = [...stage.querySelectorAll(".compare-image-stage")];
+  const ready = stages.length === compareCases.length && compareCases.every((item, index) =>
+    item?.images[item.frameIndex]?.image && stages[index].querySelector(".compare-zoom-frame"));
+  if (!ready) {
+    renderFrame();
+    return;
+  }
+  compareCases.forEach((item, index) => {
+    const frame = item.images[item.frameIndex];
+    frame.image.alt = `${item.name} ${item.field} ${item.axis.toUpperCase()} ${frame.name}`;
+    frame.image.draggable = false;
+    swapImage(stages[index], stages[index].querySelector(".compare-zoom-frame"), frame.image);
+    const panelCaption = stages[index].closest(".compare-image-panel")?.querySelector(".compare-image-caption");
+    if (panelCaption) panelCaption.textContent = `${frame.name} · ${item.frameIndex + 1} / ${item.images.length}`;
+  });
 }
 
 function focusCase(index) {
@@ -251,12 +309,9 @@ function renderComparisonFrame() {
     enableDragPan(imageStage, index);
     if (frame?.image) {
       const image = frame.image;
-      image.src = frame.url;
       image.alt = `${item.name} ${item.field} ${item.axis.toUpperCase()} ${frame.name}`;
       image.draggable = false;
       image.style.transform = "none";
-      image.style.width = "";
-      image.style.height = "";
       imageStage.dataset.caseIndex = String(index);
       const frameBox = document.createElement("div");
       frameBox.className = "compare-zoom-frame";
@@ -286,7 +341,12 @@ function renderComparisonFrame() {
   // size and the window scrolls instead of shrinking the images.
   stage.classList.remove("compare-count-1", "compare-count-2", "compare-count-3", "compare-count-4");
   stage.classList.add(`compare-count-${Math.min(4, Math.max(1, panels.length))}`);
-  stage.querySelectorAll(".compare-image-stage").forEach((imageStage) => imageStageObserver.observe(imageStage));
+  // Size the images now, before the first paint, so they don't flash at their
+  // natural size; the observer keeps them fitted when the window resizes.
+  stage.querySelectorAll(".compare-image-stage").forEach((imageStage) => {
+    fitZoomedImage(imageStage);
+    imageStageObserver.observe(imageStage);
+  });
   caption.textContent = syncImages
     ? "Sync images is on: left/right arrow keys step every panel by frame index."
     : "Click an image panel, then use left/right arrow keys to step that simulation.";
@@ -708,7 +768,7 @@ document.addEventListener("keydown", (event) => {
     compareCases.forEach((compareCase) => {
       if (compareCase) preloadNearbyFrames(compareCase, compareCase.frameIndex);
     });
-    renderFrame();
+    updateComparisonImages();
   });
 });
 
