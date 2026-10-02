@@ -4921,3 +4921,80 @@ The background watcher of the post job (job 4285206 in `exp`) finished; no new u
 > AI assistants listed: ChatGPT (ideas and requirements), Codex, Cursor and GitHub Copilot (coding), and Claude Code (coding and testing). I took these from the project history.
 >
 > The zip is rebuilt (`dist\HoMo-CFD-portable.zip`, 58 files) and ready to share. All tests pass (83 unit tests, 140 browser checks), and the changes are on GitHub `master`. For a future version, change the version line at the top of `ABOUT.txt` and rebuild the zip.
+
+## 2026-10-02 — Project moved to D:\HoMo-CFD; 3.4 GB of old Codex snapshots removed
+
+### User messages (verbatim)
+
+> since i don't have much space in Disk C, i'll remove things in Disk D.
+
+> i meant move thing in Disk D
+
+### Clarifications (question tool; the user's answers verbatim)
+
+- May I delete the two old Codex snapshot references (refs/codex/...) and clean up Git, shrinking the project from 3.5 GB to about 30 MB? → "Yes, delete them (Recommended)"
+- Where on D should HoMo CFD go? → "D:\HoMo-CFD (Recommended)"
+
+### Contributor messages (verbatim)
+
+> Deleting things on D won't free space on C, so I take it you mean **moving** things from C to D. Before you do, here's how much space HoMo uses on C. First I'm clearing my own temporary files, because the test downloads from earlier came back (about 175 MB):
+
+> The safety check stopped that removal because it used a shell variable; nothing was deleted. I'm rerunning it with the folders spelled out in full, which is the safe form it asks for:
+
+> My temporary files are cleared (170 MB → 1 MB). But the project folder itself is **3.5 GB**, far more than it should be. Finding out what's taking the space:
+
+> The space is in Git's history: 3.4 GB under `.git`, while the files themselves take only a few MB. Something big must have been committed at some point and removed later; Git keeps every old version. Finding out what it is:
+
+> Understood, moving to D. That fits well: the project folder can live on D completely.
+>
+> First, though, an important finding from the size check. The 3.4 GB in Git's history comes from things committed early on: the `0830_mk3` result folder (section images and 3D files), **`CFD-Tool.zip`** and `RANS.html`. Since the repository is pushed to GitHub, they may be stored there too, including `CFD-Tool.zip`, which may contain the key file `p.ppk`. Checking when they were committed and whether GitHub has them:
+
+> Not in any normal commit, so something else must reference those files. Searching all references (branches, tags, stash) for the commit that holds `CFD-Tool.zip`:
+
+> Those files come from two references left by **Codex** (`refs/codex/turn-diffs/…`). They're snapshots Codex took of the whole folder during an earlier session, including the result files and `CFD-Tool.zip`. Checking whether any of it reached GitHub, which only has `master` and `night-2026-10-02`:
+
+> Good news first: **nothing of this reached GitHub.** The GitHub branches and your local `baseline` branch contain none of these files. Only the two local Codex snapshot references hold them, and they account for almost all of the 3.4 GB.
+>
+> So there are two steps, which together free about 3.5 GB on C:
+> 1. **Remove the two old Codex snapshots** and let Git clean up. The folder shrinks from 3.5 GB to about 30 MB. The snapshots only served Codex's undo in an old session, and your code and history are unaffected.
+> 2. **Move HoMo to D.** VS Code has the folder open, so moving it directly may fail. I'd copy it to D, check that everything works there (Git, tests, HoMo, desktop shortcut), and you delete the old copy on C after closing VS Code.
+
+> Removing the two Codex snapshot references and letting Git clean up:
+
+> Git storage went from 3.4 GB to **0.7 MB**, and the whole project is now **26 MB**. Branches, history and the working files are intact.
+>
+> Next, the copy to `D:\HoMo-CFD`. Checking that the target doesn't exist yet, then copying everything, including the Git history:
+
+> The copy on D is complete: 26 MB, Git clean, same latest commit, same GitHub connection. Running both test suites from `D:\HoMo-CFD` to confirm everything works from there:
+
+> Everything passes from D (83 unit tests, 140 browser checks). Switching your running HoMo to the D copy, and re-pointing the desktop shortcut by running D's shortcut script:
+
+> HoMo now runs from `D:\HoMo-CFD`, with your working directory `D:\CFD_tool` unchanged, and the desktop shortcut starts it from D.
+>
+> From here on, **D is the real project folder**, so the log entry and the commit go there:
+
+### Work record
+
+- Scratch folder: temporary test data removed (≈170 MB → 1 MB; the first attempt was blocked by a safety check because of a shell variable and redone with full paths).
+- Size check: project 3.5 GB, of which `.git` 3.4 GB. The large objects (`0830_mk3/` results incl. 72 MB geometry and section PNGs, `CFD-Tool.zip`, `RANS.html`) were reachable only from two local Codex refs (`refs/codex/turn-diffs/captures/…`, `refs/codex/turn-diffs/checkpoints/…`); not from `master`, `night-2026-10-02`, `baseline-2026-10-02` or `origin/*` (checked with `git rev-list --objects`). Nothing of it is on GitHub.
+- With the user's approval: deleted both Codex refs, `git reflog expire --expire=now --all`, `git gc --prune=now`. `.git` 3.4 GB → 0.7 MB; project 26 MB.
+- Copied the project to `D:\HoMo-CFD` (Git clean, same HEAD, same remote). Both suites pass there: 83/83 unit, 140/140 browser.
+- The user's HoMo (port 5173) now runs window-less from `D:\HoMo-CFD`; the desktop shortcut was re-made by `D:\HoMo-CFD\Create desktop shortcut.bat` (start-in and icon on D). Settings in `%APPDATA%\HoMo-CFD` (17 KB) and the working directory `D:\CFD_tool` are unchanged.
+- Left to the user: close VS Code, delete `C:\Users\Archit\Downloads\HoMo-CFD`, open `D:\HoMo-CFD` in VS Code. This entry was written and committed in `D:\HoMo-CFD`.
+
+### Final response (verbatim)
+
+> HoMo CFD now lives on **D:\HoMo-CFD**, and it's much smaller too.
+>
+> **What happened:**
+> - The project folder on C was **3.5 GB**, almost all of it two old Codex snapshots inside Git, which contained the results folder, `CFD-Tool.zip` and `RANS.html`. **None of it was ever on GitHub.** With your OK I removed the snapshots: the project is now **26 MB**.
+> - I copied it to `D:\HoMo-CFD`. Git, history and the GitHub connection come along, and all tests pass there.
+> - Your HoMo now runs from D, and the **HoMo CFD** desktop shortcut starts it from there. Your settings and the working directory `D:\CFD_tool` are unchanged.
+> - I also cleared about 170 MB of my own temporary files.
+>
+> **Left for you (2 minutes):**
+> 1. Close VS Code.
+> 2. Delete `C:\Users\Archit\Downloads\HoMo-CFD` (the old copy, now 26 MB; nothing uses it any more).
+> 3. Open `D:\HoMo-CFD` in VS Code (File → Open Folder) and continue from there.
+>
+> When you work with me again in `D:\HoMo-CFD`, everything we did is in the project notes (`CHAT_HISTORY.md`, `STATUS.md`), so nothing is lost. Python itself and HoMo's small settings file (17 KB) stay on C; that's normal.
