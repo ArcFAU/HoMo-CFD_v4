@@ -34,7 +34,9 @@ BROWSER_DIR = HERE / "browser"
 TIMEOUT_SECONDS = 240
 
 sys.path.insert(0, str(HERE))
+sys.path.insert(0, str(PROJECT))
 import fixture  # noqa: E402
+from test_cluster import FakeWinScp  # noqa: E402
 
 
 def load_serve():
@@ -91,6 +93,8 @@ def make_handler(serve, working_dir):
         return node, None, None
 
     class TestHandler(serve.Handler):
+        # Never the user's real WinSCP sessions or Fritz.
+        winscp = FakeWinScp(0, "Session started.\n/home/vault/g/u/Pipeline\n", sessions=["Fritz", "Other"])
         results = []
         result_ready = threading.Event()
 

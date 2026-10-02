@@ -19,7 +19,9 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
+sys.path.insert(0, str(HERE.parent))
 import fixture  # noqa: E402
+from test_cluster import FakeWinScp  # noqa: E402
 
 spec = importlib.util.spec_from_file_location("serve", HERE.parent / "serve.py")
 serve = importlib.util.module_from_spec(spec)
@@ -168,6 +170,65 @@ class ApiTests(ServeTestCase):
         status, data = self.request("GET", "/")
         self.assertEqual(status, 200)
         self.assertIn(b"server-fs.js", data)
+
+
+
+class ClusterApiTests(ApiTests):
+    """/api/cluster with a fake WinSCP: the real sessions and Fritz are never used."""
+
+    def setUp(self):
+        super().setUp()
+        self.saved_winscp = serve.Handler.winscp
+        self.fake = FakeWinScp(0, "Session started.\n/home/vault/g/u/Pipeline\n", sessions=["Fritz", "Other"])
+        serve.Handler.winscp = self.fake
+
+    def tearDown(self):
+        serve.Handler.winscp = self.saved_winscp
+        super().tearDown()
+
+    def post(self, path, value, content_type="application/json"):
+        status, data = self.request("POST", path, json.dumps(value), {"Content-Type": content_type})
+        return status, json.loads(data) if data.startswith(b"{") else data
+
+    def test_settings_start_empty(self):
+        status, data = self.request("GET", "/api/cluster")
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(data), {"winscp": str(Path("C:/fake/WinSCP.com")), "sessions": ["Fritz", "Other"],
+                                            "session": "", "remoteFolder": ""})
+
+    def test_save_keeps_working_dir(self):
+        serve.write_settings({"workingDir": str(self.working_dir)})
+        status, data = self.post("/api/cluster", {"session": "Fritz", "remoteFolder": "/home/vault/g/u/Pipeline"})
+        self.assertEqual((status, data["session"], data["remoteFolder"]), (200, "Fritz", "/home/vault/g/u/Pipeline"))
+        saved = serve.read_settings()
+        self.assertEqual(saved["cluster"], {"session": "Fritz", "remoteFolder": "/home/vault/g/u/Pipeline"})
+        self.assertEqual(saved["workingDir"], str(self.working_dir))
+
+    def test_invalid_input_is_rejected(self):
+        for body in ({"session": ""}, {"session": 'a"b'}, {"session": "Fritz", "remoteFolder": "Pipeline"}):
+            with self.subTest(body=body):
+                self.assertEqual(self.post("/api/cluster", body)[0], 400)
+                self.assertEqual(self.post("/api/cluster/test", body)[0], 400)
+        self.assertEqual(self.post("/api/cluster/test", {"session": "Fritz"}, "text/plain")[0], 415)
+        self.assertEqual(self.fake.scripts, [])
+        self.assertNotIn("cluster", serve.read_settings())
+
+    def test_connection_test(self):
+        status, data = self.post("/api/cluster/test", {"session": "Fritz", "remoteFolder": "/home/vault/g/u/Pipeline"})
+        self.assertEqual((status, data["ok"], data["remoteFolder"]), (200, True, "/home/vault/g/u/Pipeline"))
+        self.assertIn('open "Fritz"', self.fake.scripts[0])
+        self.assertNotIn("cluster", serve.read_settings(), "testing does not save")
+
+    def test_without_winscp(self):
+        self.fake.installed = False
+        status, data = self.post("/api/cluster/test", {"session": "Fritz"})
+        self.assertEqual((status, data["ok"]), (200, False))
+        self.assertIn("not installed", data["error"])
+        self.assertEqual(self.fake.scripts, [])
+
+    def test_foreign_host_is_rejected(self):
+        status, _ = self.request("GET", "/api/cluster", headers={"Host": "evil.example"})
+        self.assertEqual(status, 403)
 
 
 if __name__ == "__main__":

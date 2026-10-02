@@ -1,6 +1,6 @@
 # Stage 7 — Fritz cluster integration (design draft)
 
-Status: **design decided 2026-10-02 (section 4–5), nothing implemented yet.** Written 2026-10-02 from a
+Status: **design decided 2026-10-02 (sections 4–5); step 1 (connection settings + Test connection) built, see `cluster.py`.** Written 2026-10-02 from a
 read-only study of CFD-Tool (class constants and `javap` disassembly; the
 `p.ppk` key was never opened) and the `mesh.sh` / `rans.sh` / `post.sh` job
 scripts in a downloaded result folder (licence key masked, not copied).

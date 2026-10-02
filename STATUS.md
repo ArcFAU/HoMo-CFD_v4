@@ -50,6 +50,13 @@ Last updated: 2026-10-02
 - Planning files from the ChatGPT pipeline: `DECISIONS.md`, `TASK.md`, `CHANGELOG.md`.
 - Scale check: 120 simulations (junctions to the 7 real ones in `D:\CFD_tool\finished`, about 200,000 files) load in about 4 s (server scan about 1.2 s, 15.8 MB listing, browser indexing about 0.6 s, coefficient files about 0.3 s). Was 5.7 s before indexing read each folder once and used one shared `Intl.Collator`. A multi-threaded server scan was slower (2.4 s) and was not adopted.
 
+## Stage 7 step 1: Fritz connection (2026-10-02)
+
+- `cluster.py` (stdlib): finds `WinSCP.com`, lists WinSCP saved-session names from the registry (`Default Settings` excluded), checks inputs (no quotes or control characters; remote folder must start with `/` or `~`), and runs WinSCP scripts with `/nointeractiveinput` and a temporary `/script=` file (90 s timeout, deleted afterwards). The test script is `open` + optional `cd` + `pwd` + `exit`: read-only.
+- `serve.py`: `GET /api/cluster` → `{winscp, sessions, session, remoteFolder}`; `POST /api/cluster` saves `{session, remoteFolder}` under `cluster` in `settings.json` (keeps `workingDir`); `POST /api/cluster/test` runs the test (one at a time) and returns `{ok, remoteFolder | error, hint, output}`. Same local-host and JSON-only protections as the other API calls. Tests swap `Handler.winscp` for a fake.
+- App: **Fritz cluster** sidebar button (server mode only) opens a card with WinSCP status, session dropdown (text field when no sessions are found), remote folder, **Test connection**, **Save**, and the WinSCP output in a collapsible box. Known WinSCP failures get a plain hint (host key not cached, login refused, passphrase/password needed, folder missing, no such session, network).
+- Checked on this PC without contacting Fritz: real `WinSCP.com` found and runs a script (exit 0; errors give 1); 2 saved sessions found (names not read). The user's real **Test connection** is pending.
+
 ## Open items
 
 - Stage 7 (Fritz): design draft in `docs/STAGE7_FRITZ.md`, based on how CFD-Tool uploads with WinSCP + PuTTY key, runs `Pipeline/launchV3.sh`, polls `plots/DONE`, and moves cases inProgress → finished. Decided 2026-10-02 (doc sections 4–5): WinSCP saved sessions, own Fritz account per user, submit with `sbatch mesh.sh` (no `launchV3.sh` found), HoMo CFD writes the job scripts and `post.sh` ends with `plots/POST_DONE`, download after post-processing, never delete on Fritz, licence key per user in local settings. Build order: connection + test, monitor/download, job scripts, submit.
@@ -58,6 +65,7 @@ Last updated: 2026-10-02
 - Pop-ups must be allowed for http://127.0.0.1:5173. With `serve.py` any modern browser works; only the fallback without `serve.py` (Open folder) needs Chrome or Edge.
 - Later 3D viewer improvements: add an orientation axis widget and additional angled view presets. These are deferred; the user has confirmed the signed-axis view fix works.
 - Later 3D viewer improvement: part-level show/hide controls. Deferred because the user considers the full-car rendering sufficient for now.
+- Note 2026-10-02: the saved working directory on the user's PC is `D:\CFD_tool\finished` (probably from trying **Browse…**). For Stage 7 it should be `D:\CFD_tool`, the folder that also holds `inProgress`.
 - User check 2026-10-02: `Start HoMo CFD.bat` opens the browser and everything looks good. **Working directory → Browse…** was not mentioned separately; confirm when convenient.
 - Later improvement (distribution, decided 2026-10-02): for now teammates install Python 3 themselves. Later, bundle a portable Python with HoMo CFD so it is unzip-and-run like CFD-Tool, which shipped its own Java runtime.
 - Stage 5: sign convention confirmed by the team (negative CzA = downforce, negative CxA = drag, CzA Front is a fraction); Downforce [N] / Drag [N] columns added (the interim −CzA / −CxA columns were removed at the user's request); L/D added on request (a Balance [% front] column was removed again at the user's request). Further derived metrics (component forces, balance from components) only on request.

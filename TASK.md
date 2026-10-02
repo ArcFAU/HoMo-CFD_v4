@@ -28,6 +28,9 @@ authentication approach before any implementation starts.
 no `launchV3.sh` (submit with `sbatch mesh.sh`), download after
 post-processing, no remote delete, HoMo CFD writes the job scripts, licence
 key per user in local settings by default. Final design and build order in
-`docs/STAGE7_FRITZ.md` section 5. Next task: build step 1 (connection
-settings + Test connection) once the user says go. Nothing contacts the
-cluster yet.
+`docs/STAGE7_FRITZ.md` section 5.
+
+**Step 1 built (2026-10-02):** `cluster.py` + `/api/cluster` (GET settings and
+WinSCP session names, POST save, POST `cluster/test`) and the **Fritz cluster**
+card. Waiting for the user's real **Test connection** with their Fritz session.
+Next: step 2, monitor and download for cases in `inProgress`.

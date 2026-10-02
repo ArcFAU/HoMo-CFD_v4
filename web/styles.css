@@ -1441,6 +1441,17 @@ select {
 .working-dir-input {
   flex: 1;
   min-width: 260px;
+  background: #0c1219;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font: inherit;
+}
+
+/* .summary sets display: flex, which would override the hidden attribute. */
+.summary[hidden] {
+  display: none;
 }
 
 /* Columns computed by HoMo CFD (forces, L/D). */
@@ -1479,4 +1490,38 @@ select {
 
 .force-setting input:invalid {
   outline: 2px solid #ff8d8d;
+}
+
+/* Fritz cluster settings (Stage 7). */
+.cluster-field {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 12px 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.cluster-label {
+  width: 120px;
+}
+
+.cluster-field .working-dir-input {
+  flex: 0 1 520px;
+}
+
+.cluster-status.cluster-ok {
+  color: #65b891;
+}
+
+.cluster-output pre {
+  max-height: 260px;
+  overflow: auto;
+  padding: 8px;
+  background: #0c1219;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  font-size: 12px;
+  white-space: pre-wrap;
 }

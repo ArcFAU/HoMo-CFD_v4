@@ -23,6 +23,7 @@ runTests(async () => {
   resetFrames();
   let app = await openApp("single"); let doc = app.contentDocument;
   check("single: coefficient row named after the root folder", rowNames(doc)[0] === "single", rowNames(doc).join(","));
+  check("no Fritz cluster button without serve.py", doc.getElementById("cluster-settings")?.hidden === true);
   doc.querySelector('.tree-entry.image-folder[data-path="Cp_x-Section"]').click();
   check("single: top-level section opens the comparison viewer", await waitFor(() => opened[0]?.contentDocument?.querySelector(".compare-image-panel img")));
   let viewer = opened[0]?.contentDocument;

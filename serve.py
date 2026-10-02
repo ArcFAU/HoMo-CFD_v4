@@ -18,6 +18,9 @@ Where the working directory comes from, first match wins:
 
 Results are read from <working dir>\\finished when that folder exists,
 otherwise from the working directory itself.
+
+Fritz cluster access (Stage 7) goes through the user's WinSCP saved session;
+see cluster.py. It runs only when the user clicks a button in the app.
 """
 
 import argparse
@@ -32,6 +35,8 @@ from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlsplit
+
+import cluster
 
 HERE = Path(__file__).resolve().parent
 WEB = HERE / "web"
@@ -205,6 +210,8 @@ class Server(ThreadingHTTPServer):
 class Handler(SimpleHTTPRequestHandler):
     working_dir = WorkingDirectory()
     browse_lock = threading.Lock()
+    winscp = cluster.WinScp()
+    cluster_lock = threading.Lock()
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(WEB), **kwargs)
@@ -233,6 +240,7 @@ class Handler(SimpleHTTPRequestHandler):
             "/api/tree": self.api_tree,
             "/api/list": self.api_list,
             "/api/file": self.api_file,
+            "/api/cluster": self.api_cluster,
         }
         route = routes.get(url.path)
         if route is None:
@@ -251,6 +259,8 @@ class Handler(SimpleHTTPRequestHandler):
         routes = {
             "/api/working-dir": self.api_set_working_dir,
             "/api/working-dir/browse": self.api_browse_working_dir,
+            "/api/cluster": self.api_save_cluster,
+            "/api/cluster/test": self.api_test_cluster,
         }
         route = routes.get(urlsplit(self.path).path)
         if route is None:
@@ -299,6 +309,52 @@ class Handler(SimpleHTTPRequestHandler):
         if not chosen:
             return self.send_json({"cancelled": True, **self.working_dir.describe()})
         self.save_working_dir(chosen)
+
+    # --- Fritz cluster (WinSCP) ----------------------------------------
+
+    def cluster_settings(self):
+        saved = read_settings().get("cluster")
+        saved = saved if isinstance(saved, dict) else {}
+        return {"session": saved.get("session") or "", "remoteFolder": saved.get("remoteFolder") or ""}
+
+    def api_cluster(self, _path):
+        executable = self.winscp.executable()
+        self.send_json({
+            "winscp": str(executable) if executable else None,
+            "sessions": self.winscp.sessions(),
+            **self.cluster_settings(),
+        })
+
+    def checked_cluster_body(self, body):
+        try:
+            return cluster.check_session(body.get("session")), cluster.check_remote_folder(body.get("remoteFolder"))
+        except ValueError as err:
+            self.send_json({"error": str(err)}, HTTPStatus.BAD_REQUEST)
+            return None
+
+    def api_save_cluster(self, body):
+        checked = self.checked_cluster_body(body)
+        if checked is None:
+            return
+        settings = read_settings()
+        settings["cluster"] = {"session": checked[0], "remoteFolder": checked[1]}
+        write_settings(settings)
+        self.api_cluster("")
+
+    def api_test_cluster(self, body):
+        checked = self.checked_cluster_body(body)
+        if checked is None:
+            return
+        if self.winscp.executable() is None:
+            return self.send_json({"ok": False, "error": "WinSCP is not installed (WinSCP.com not found).",
+                                   "hint": "Install WinSCP, as for CFD-Tool, then test again."})
+        if not self.cluster_lock.acquire(blocking=False):
+            return self.send_json({"error": "A connection test is already running."}, HTTPStatus.CONFLICT)
+        try:
+            result = cluster.test_connection(self.winscp, *checked)
+        finally:
+            self.cluster_lock.release()
+        self.send_json(result)
 
     # --- results API ---------------------------------------------------
 

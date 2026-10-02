@@ -2884,3 +2884,93 @@ MEMORY.md:77-79|note=[grounded the next improvements in the existing CFD image a
 > Steps 1–2 only read from Fritz.
 >
 > Nothing touches the cluster yet. Shall I start building step 1? Testing it will need you to click **Test connection** once with your Fritz session.
+
+## 2026-10-02 — Stage 7 step 1: Fritz connection settings and Test connection
+
+### User message (verbatim)
+
+> do it
+
+(Go-ahead to build Stage 7 step 1.)
+
+### Contributor messages (verbatim)
+
+> Starting step 1. First, how the working-directory chooser and test server are built, so the cluster settings follow the same pattern:
+
+> I'll put the WinSCP code in its own module, `cluster.py`, so `serve.py` stays readable. Now the UI side and the test server:
+
+> I'll make the WinSCP part swappable so the tests can use a fake WinSCP and never touch your real sessions or the cluster. Reading the rest of the test runner:
+
+> Writing `cluster.py`: finding WinSCP, listing saved session names, checking inputs, and running a read-only "connect and print folder" script:
+
+> Now wiring it into `serve.py`:
+
+> Now the screen in the app: a **Fritz cluster** button in the sidebar (only when started through `serve.py`) that opens a settings card.
+
+> Adding the styles:
+
+> Now the tests. Reading how `test_serve.py` talks to the server:
+
+> Writing the unit tests. They use a fake WinSCP, so they never read your real sessions or contact Fritz:
+
+> The shell turned an escaped newline into a real one. Fixing it directly:
+
+> The fake WinSCP batch file split its argument at `=`. Echoing all arguments at once instead:
+
+> All 35 unit tests pass (20 new). Now the browser tests: the test server gets the fake WinSCP, and the server-mode page goes through the card.
+
+> Same newline problem in the test runner. Fixing it:
+
+> All 83 browser checks pass, 6 of them new. Checking the layout on a temporary second server that uses the fake WinSCP, so your real session names aren't read:
+
+> The click came too early: the results table finished loading afterwards and replaced the card. Taking the shot again, clicking after the table is loaded:
+
+> Works. Two display problems to fix: the table toolbar should hide behind the card (its CSS `display: flex` overrides `hidden`; the working-directory card has the same problem), and the inputs should be dark like the rest. I'll also look at the race where a load finishing late replaces the card:
+
+> Taking both screenshots again: one clicking as early as possible (the race), one after loading:
+
+> The card now stays when clicked during the coefficient loading. The button can also be clicked while folders are still being indexed, so checking that phase:
+
+> The poll never caught the short indexing moment, so nothing was clicked and that run tells us nothing. The guard is the same simple check as the one just verified. Rerunning both suites:
+
+> The card looks right now. One last local check: run the real `WinSCP.com` with a script that only says `exit`. That confirms the program and its options work on your PC without connecting anywhere.
+
+> The real WinSCP runs the script and reports errors properly. Now restarting your HoMo server so it uses the new code:
+
+> Your server is running the new code. It found WinSCP and 2 saved sessions; I didn't read their names. One thing I noticed: your saved working directory is now `D:\CFD_tool\finished`, probably from trying **Browse…**. For the cluster steps it should be `D:\CFD_tool`, the folder that also contains `inProgress`. I'll mention that in the summary. Updating the docs:
+
+> Writing the log entry, then committing:
+
+### Work record
+
+- New `cluster.py` (stdlib): `WinScp` (find `WinSCP.com`; saved-session names from `HKCU\Software\Martin Prikryl\WinSCP 2\Sessions`, URL-decoded, `Default Settings` excluded; `run()` writes a temporary script, runs `WinSCP.com /nointeractiveinput /script=…` without a console window, 90 s timeout, deletes the script), `check_session`, `check_remote_folder`, read-only `test_script` (`option batch abort`, `option confirm off`, `open "<session>"`, optional `cd`, `pwd`, `exit`), `hint_for` (plain-language hints for common WinSCP failures), `test_connection`.
+- `serve.py`: imports `cluster`; `Handler.winscp` and `cluster_lock`; `GET /api/cluster`, `POST /api/cluster` (saves under `cluster` in settings.json, keeps `workingDir`), `POST /api/cluster/test` (validates, one at a time, reports "not installed" without running anything).
+- `web/index.html` + `web/app.js`: hidden **Fritz cluster** sidebar button, shown only with `serve.py`; `showClusterSettings()` card (WinSCP status, session dropdown or text field, remote folder, Test connection, Save, status line, collapsible WinSCP output). Fixes found while checking it: `.summary[hidden]` now really hides the table toolbar (also behind the working-directory card); `showClusterSettings`, `showWorkingDirectoryChooser` and `loadResultsRoot` use `renderToken` so a late table render no longer replaces an open card.
+- `web/styles.css`: cluster card styles; `.working-dir-input` dark theme.
+- Tests: new `tests/test_cluster.py` (input checks, read-only script, hints, real `run()` with a fake `.cmd`); `tests/test_serve.py` `ClusterApiTests` (fake WinSCP: empty settings, save keeps workingDir, invalid input 400/415, test result, WinSCP missing, foreign host 403); `tests/run_browser_tests.py` uses a fake WinSCP; `server-mode.html` +5 checks (button shown, sessions offered, test result, relative folder refused, saved), `picker-mode.html` +1 (no button without serve.py).
+- Checked without contacting Fritz: layout on a temporary second server with a fake WinSCP (screenshots); real `WinSCP.com` ran an `exit`-only script (exit 0; invalid option gives 1); the user's server restarted on port 5173 with the new code; `/api/cluster` found WinSCP and 2 saved sessions (names not read).
+- Noted: the user's saved working directory is `D:\CFD_tool\finished`; for Stage 7 it should be `D:\CFD_tool`.
+- Docs: `CHANGELOG.md`, `TASK.md`, `STATUS.md`, `DECISIONS.md`, `docs/STAGE7_FRITZ.md`, `README.md`, `tests/README.md`, `HANDOFF_FOR_CHATGPT.md`.
+- Checks: `py -m unittest discover -s tests` 35/35 OK; `py tests/run_browser_tests.py` 83/83 passed.
+
+### Final response (verbatim)
+
+> Step 1 is built. In the sidebar there's now a **Fritz cluster** button, under **Open 3D Cp viewer**. It opens a card where you:
+>
+> 1. Pick your **WinSCP session** from a dropdown. HoMo found 2 saved sessions on your PC; I didn't look at their names.
+> 2. Optionally enter the **Remote folder** on Fritz where simulations should go, e.g. your `Pipeline` folder.
+> 3. Click **Test connection**. HoMo logs in through WinSCP, changes to that folder and shows where it is, e.g. "Connected. Remote folder: /home/…/Pipeline". Nothing is uploaded, started or deleted.
+> 4. Click **Save**. Only the session's name and the folder are stored, on your PC; your login stays in WinSCP.
+>
+> If it fails, you'll get a plain explanation. For example, if WinSCP hasn't accepted Fritz's host key yet: log in once with WinSCP itself, then test again. The full WinSCP output is in a box you can open below the message.
+>
+> Your HoMo server is already running the new version. Reload http://127.0.0.1:5173 and **please try Test connection with your Fritz session.** That's the first time HoMo actually talks to the cluster, and I can't do it for you.
+>
+> Two more things:
+>
+> - **Working directory:** yours is set to `D:\CFD_tool\finished`, probably from trying **Browse…**. The results look the same, but for the next Stage 7 steps HoMo needs `D:\CFD_tool`, the folder that also contains `inProgress`. Please set it back via **Working directory**.
+> - **Small fixes along the way:** the table toolbar now really hides behind the working-directory and cluster cards, a table that finishes loading late no longer replaces a card you just opened, and the input boxes on those cards are dark like the rest of the app.
+>
+> All tests pass (35 unit tests, 83 browser checks). They use a fake WinSCP, so they never touch your real sessions. Committed and pushed to GitHub `master`.
+>
+> Next is step 2: watching running cases and downloading them once post-processing is done. That only reads from Fritz.

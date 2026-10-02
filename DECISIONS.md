@@ -66,6 +66,16 @@ change with speed; the hover note says so.
 The force columns are computed when the table is drawn, not stored with the
 cached CSV rows, so changing the speed or density only redraws the table.
 
+## 2026-10-02 — Cluster code in `cluster.py`, WinSCP swappable for tests
+
+WinSCP handling lives in `cluster.py` so `serve.py` stays about serving files
+and settings. `Handler.winscp` is a `cluster.WinScp` object that the tests
+replace with a fake, so no test reads the user's real sessions or contacts
+Fritz. Scripts go through a temporary file (`/script=`) rather than
+`/command` arguments, which avoids Windows command-line quoting problems.
+**Why `/nointeractiveinput` and `option batch abort`:** WinSCP must never
+wait for a password, passphrase or host-key prompt that nobody can see.
+
 ## 2026-10-02 — Stage 7: WinSCP, no remote delete, HoMo writes job scripts
 
 User answers: WinSCP (as CFD-Tool), own Fritz account per user, never delete

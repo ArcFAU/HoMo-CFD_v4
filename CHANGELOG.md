@@ -6,6 +6,7 @@ User-visible changes, newest first. Detailed reasoning lives in
 ## 2026-10-02
 
 ### Added
+- **Fritz cluster** settings (Stage 7, step 1; sidebar, with `serve.py` only): choose your WinSCP saved session and the remote folder, **Test connection** (logs in and shows the folder; nothing is uploaded, started or deleted), **Save** (per user in `%APPDATA%\HoMo-CFD\settings.json`; no passwords or keys).
 - **Downforce [N]** and **Drag [N]** columns right after Iteration: F = ½ · ρ · v² · (−CzA or −CxA) at a speed (km/h) and air density set in the table toolbar (defaults 60 km/h and 1.18415 kg/m³, remembered per browser). Positive = downforce / drag, in values and Δ-vs-reference views; the monitor chart starts on Downforce [N]. CzA and CxA (downforce and drag coefficients × reference area) stay as exported. (Interim sign-flipped −CzA / −CxA columns were added and removed the same day.)
 - **L/D** (= CzA ÷ CxA) column after the forces, with hover note and Δ support. (A Balance [% front] column was added and removed the same day; CzA Front stays as exported.)
 - **Working directory** like CFD-Tool: chosen once per user (Browse… or paste a path), saved in `%APPDATA%\HoMo-CFD\settings.json`; CFD-Tool's saved working directory is reused automatically; results come from its `finished` folder.
@@ -17,6 +18,7 @@ User-visible changes, newest first. Detailed reasoning lives in
 - Tests: `tests/test_serve.py` and the headless browser suite `tests/run_browser_tests.py` on generated data.
 
 ### Changed
+- The table toolbar is hidden behind the working-directory and cluster cards, a table that finishes loading no longer replaces an open card, and the cards' inputs use the dark theme.
 - Faster start-up with many simulations: 120 simulations load in about 4 s (was 5.7 s).
 
 ### Fixed

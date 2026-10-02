@@ -1620,6 +1620,7 @@ async function openComparisonWindow(nodes, initialSectionPath = "") {
 }
 
 async function loadResultsRoot(handle) {
+  const token = ++browserState.renderToken;
   browserState.pressureRequestToken++;
   el.reconnect.hidden = true;
   el.panels.classList.remove("pressure-workspace-layout", "pressure-workspace-with-images");
@@ -1633,6 +1634,8 @@ async function loadResultsRoot(handle) {
   browserState.selectedFolder = null;
   browserState.selectedFile = null;
   renderFilesystemTree();
+  // A settings card opened while indexing keeps the main panel.
+  if (token !== browserState.renderToken) return;
   await selectFolder(browserState.root);
 }
 
@@ -1686,6 +1689,7 @@ function offerReconnect(handle) {
 // Like CFD-Tool, the working directory is chosen once per user and saved
 // by serve.py (outside the app folder). Results come from its finished/.
 function showWorkingDirectoryChooser(config, message = "") {
+  browserState.renderToken++;
   browserState.pressureRequestToken++;
   el.panels.classList.remove("pressure-workspace-layout", "pressure-workspace-with-images");
   el.panels.closest(".app")?.classList.remove("pressure-fullscreen");
@@ -1767,8 +1771,145 @@ function showWorkingDirectoryChooser(config, message = "") {
   el.panels.replaceChildren(card);
 }
 
+// Stage 7, step 1: the WinSCP saved session used for Fritz and the remote
+// folder. HoMo CFD stores only these two names; the login (host, user, key)
+// stays in WinSCP. Testing only logs in and prints the folder.
+async function showClusterSettings() {
+  // Cancel pending table and pressure renders so they don't replace this card.
+  browserState.renderToken++;
+  browserState.pressureRequestToken++;
+  el.panels.classList.remove("pressure-workspace-layout", "pressure-workspace-with-images");
+  el.panels.closest(".app")?.classList.remove("pressure-fullscreen");
+  el.summary.hidden = true;
+
+  const card = document.createElement("section");
+  card.className = "working-dir-card cluster-card";
+  const title = document.createElement("h1");
+  title.textContent = "Fritz cluster";
+  const intro = document.createElement("p");
+  intro.textContent = "HoMo CFD connects to Fritz through WinSCP, like CFD-Tool. Choose the WinSCP saved session you use for Fritz: " +
+    "it holds your host, user name and key, and HoMo CFD only remembers the session's name. Both settings are saved for your user " +
+    "account on this computer. Testing only logs in and shows the folder; nothing is uploaded, started or deleted.";
+  card.append(title, intro);
+  el.panels.replaceChildren(card);
+
+  let config;
+  try {
+    const response = await fetch("/api/cluster");
+    config = await response.json();
+    if (!response.ok) throw new Error(config?.error || `Server request failed (${response.status})`);
+  } catch (err) {
+    card.appendChild(Object.assign(document.createElement("p"), { className: "error", textContent: err?.message || "Could not read the cluster settings." }));
+    return;
+  }
+
+  const winscp = document.createElement("p");
+  winscp.className = config.winscp ? "hint" : "error";
+  winscp.textContent = config.winscp
+    ? `WinSCP: ${config.winscp}`
+    : "WinSCP is not installed (WinSCP.com not found). Install WinSCP, as for CFD-Tool, then reopen this page.";
+  card.appendChild(winscp);
+
+  const sessionField = document.createElement("label");
+  sessionField.className = "cluster-field";
+  sessionField.appendChild(Object.assign(document.createElement("span"), { className: "cluster-label", textContent: "WinSCP session" }));
+  let session;
+  const sessions = [...config.sessions];
+  if (config.session && !sessions.includes(config.session)) sessions.unshift(config.session);
+  if (sessions.length) {
+    session = document.createElement("select");
+    session.add(new Option("Choose a session…", ""));
+    sessions.forEach((name) => session.add(new Option(name, name)));
+    session.value = config.session || (sessions.length === 1 ? sessions[0] : "");
+  } else {
+    session = document.createElement("input");
+    session.type = "text";
+    session.placeholder = "No saved sessions found: create one in WinSCP, or type its name";
+    session.value = config.session;
+  }
+  session.id = "cluster-session";
+  session.className = "working-dir-input";
+  sessionField.appendChild(session);
+
+  const folderField = document.createElement("label");
+  folderField.className = "cluster-field";
+  folderField.appendChild(Object.assign(document.createElement("span"), { className: "cluster-label", textContent: "Remote folder" }));
+  const folder = document.createElement("input");
+  folder.type = "text";
+  folder.id = "cluster-folder";
+  folder.className = "working-dir-input";
+  folder.placeholder = "e.g. /home/vault/<group>/<user>/Pipeline (optional for the test)";
+  folder.value = config.remoteFolder;
+  folderField.appendChild(folder);
+
+  const actions = document.createElement("div");
+  actions.className = "working-dir-actions";
+  const test = document.createElement("button");
+  test.type = "button";
+  test.className = "primary";
+  test.id = "cluster-test";
+  test.textContent = "Test connection";
+  test.disabled = !config.winscp;
+  const save = document.createElement("button");
+  save.type = "button";
+  save.className = "small-control";
+  save.id = "cluster-save";
+  save.textContent = "Save";
+  actions.append(test, save);
+
+  const status = document.createElement("p");
+  status.className = "cluster-status";
+  status.hidden = true;
+  const details = document.createElement("details");
+  details.className = "cluster-output";
+  details.hidden = true;
+  const summary = document.createElement("summary");
+  summary.textContent = "WinSCP output";
+  const output = document.createElement("pre");
+  details.append(summary, output);
+  card.append(sessionField, folderField, actions, status, details);
+
+  const show = (text, kind, log = "") => {
+    status.textContent = text;
+    status.className = `cluster-status ${kind}`;
+    status.hidden = false;
+    output.textContent = log;
+    details.hidden = !log;
+  };
+  const busy = (on) => card.querySelectorAll("button, input, select").forEach((control) => {
+    control.disabled = on || (control === test && !config.winscp);
+  });
+  const values = () => ({ session: session.value, remoteFolder: folder.value });
+
+  test.addEventListener("click", async () => {
+    busy(true);
+    show("Connecting to Fritz… this can take up to a minute.", "hint");
+    try {
+      const result = await postServerJson("cluster/test", values());
+      if (result.ok) show(`Connected. Remote folder: ${result.remoteFolder}`, "cluster-ok", result.output);
+      else show([result.error, result.hint].filter(Boolean).join(" "), "error", result.output);
+    } catch (err) {
+      show(err?.message || "The connection test failed.", "error");
+    } finally {
+      busy(false);
+    }
+  });
+  save.addEventListener("click", async () => {
+    busy(true);
+    try {
+      await postServerJson("cluster", values());
+      show("Saved.", "cluster-ok");
+    } catch (err) {
+      show(err?.message || "Could not save the cluster settings.", "error");
+    } finally {
+      busy(false);
+    }
+  });
+}
+
 async function startFilesystemWorkspace() {
   const openResults = document.getElementById("open-results");
+  const clusterButton = document.getElementById("cluster-settings");
   // Attached before the server check so an early click isn't lost.
   const serverConfig = getServerConfig();
   openResults.addEventListener("click", async () => {
@@ -1776,6 +1917,7 @@ async function startFilesystemWorkspace() {
     if (config) showWorkingDirectoryChooser(config);
     else chooseResultsRoot();
   });
+  clusterButton.addEventListener("click", () => showClusterSettings());
   document.getElementById("open-3d-viewer").addEventListener("click", () => {
     const popup = window.open("./3d-viewer.html", "homo-cfd-3d", `popup,width=${screen.availWidth},height=${screen.availHeight},left=0,top=0`);
     if (!popup) showError("The 3D viewer window was blocked. Allow pop-ups for this local app and try again.");
@@ -1794,6 +1936,7 @@ async function startFilesystemWorkspace() {
     const config = await serverConfig;
     if (config) {
       openResults.textContent = "Working directory";
+      clusterButton.hidden = false;
       openResults.title = config.workingDir ? `${config.workingDir} — click to change` : "Choose the folder that holds your results";
       if (!config.resultsRoot) {
         showWorkingDirectoryChooser(config);

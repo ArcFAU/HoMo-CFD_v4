@@ -107,5 +107,28 @@ runTests(async () => {
   const viewer3d = opened[2]?.contentDocument;
   check("3D viewer loads the EnSight case from the tree", /Frontwing · 4 triangles/.test(viewer3d?.getElementById("case-name")?.textContent ?? ""),
     viewer3d?.getElementById("error")?.hidden === false ? viewer3d.getElementById("error").textContent : viewer3d?.getElementById("case-name")?.textContent);
+  // Stage 7 step 1: Fritz cluster settings (fake WinSCP on the test server).
+  const clusterButton = doc.getElementById("cluster-settings");
+  check("Fritz cluster button shown with serve.py", clusterButton && !clusterButton.hidden);
+  clusterButton.click();
+  await waitFor(() => doc.getElementById("cluster-session"), 10000);
+  const sessionSelect = doc.getElementById("cluster-session");
+  check("WinSCP sessions are offered", [...sessionSelect.options].map((option) => option.value).join(",") === ",Fritz,Other",
+    [...sessionSelect.options].map((option) => option.value).join(","));
+  sessionSelect.value = "Fritz";
+  doc.getElementById("cluster-folder").value = "/home/vault/g/u/Pipeline";
+  doc.getElementById("cluster-test").click();
+  await waitFor(() => /Connected/.test(doc.querySelector(".cluster-status")?.textContent ?? ""), 10000);
+  check("Test connection reports the remote folder", doc.querySelector(".cluster-status")?.textContent === "Connected. Remote folder: /home/vault/g/u/Pipeline",
+    doc.querySelector(".cluster-status")?.textContent);
+  doc.getElementById("cluster-folder").value = "Pipeline";
+  doc.getElementById("cluster-save").click();
+  await waitFor(() => doc.querySelector(".cluster-status.error"), 10000);
+  check("relative remote folder is refused", /must be a path/.test(doc.querySelector(".cluster-status")?.textContent ?? ""), doc.querySelector(".cluster-status")?.textContent);
+  doc.getElementById("cluster-folder").value = "/home/vault/g/u/Pipeline";
+  doc.getElementById("cluster-save").click();
+  await waitFor(() => doc.querySelector(".cluster-status")?.textContent === "Saved.", 10000);
+  const savedCluster = await (await fetch("/api/cluster")).json();
+  check("cluster settings are saved", savedCluster.session === "Fritz" && savedCluster.remoteFolder === "/home/vault/g/u/Pipeline", JSON.stringify(savedCluster));
 });
 </script></body></html>
