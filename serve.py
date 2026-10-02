@@ -261,6 +261,7 @@ class Handler(SimpleHTTPRequestHandler):
             "/api/working-dir/browse": self.api_browse_working_dir,
             "/api/cluster": self.api_save_cluster,
             "/api/cluster/test": self.api_test_cluster,
+            "/api/cluster/pageant": self.api_start_pageant,
         }
         route = routes.get(urlsplit(self.path).path)
         if route is None:
@@ -322,6 +323,7 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_json({
             "winscp": str(executable) if executable else None,
             "sessions": self.winscp.sessions(),
+            "pageant": {"found": self.winscp.pageant() is not None, "running": self.winscp.pageant_running()},
             **self.cluster_settings(),
         })
 
@@ -355,6 +357,21 @@ class Handler(SimpleHTTPRequestHandler):
         finally:
             self.cluster_lock.release()
         self.send_json(result)
+
+    def api_start_pageant(self, body):
+        """Unlock the session's key in Pageant; Pageant asks for the passphrase."""
+        try:
+            session = cluster.check_session(body.get("session"))
+        except ValueError as err:
+            return self.send_json({"error": str(err)}, HTTPStatus.BAD_REQUEST)
+        if self.winscp.pageant() is None:
+            return self.send_json({"error": "Pageant was not found. Install PuTTY (it includes Pageant)."}, HTTPStatus.NOT_FOUND)
+        key_file = self.winscp.session_key_file(session)
+        if key_file is None:
+            return self.send_json({"error": "This WinSCP session has no private key file set (or the file was moved). "
+                                            "Set it in WinSCP: Edit session → Advanced → SSH → Authentication."}, HTTPStatus.BAD_REQUEST)
+        self.winscp.start_pageant(key_file)
+        self.send_json({"started": True})
 
     # --- results API ---------------------------------------------------
 

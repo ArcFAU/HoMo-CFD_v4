@@ -2974,3 +2974,69 @@ MEMORY.md:77-79|note=[grounded the next improvements in the existing CFD image a
 > All tests pass (35 unit tests, 83 browser checks). They use a fake WinSCP, so they never touch your real sessions. Committed and pushed to GitHub `master`.
 >
 > Next is step 2: watching running cases and downloading them once post-processing is done. That only reads from Fritz.
+
+## 2026-10-02 — First real Test connection: key passphrase → Pageant
+
+### User message (verbatim, identifiers masked)
+
+The user pasted the WinSCP output of their first **Test connection**. Per the no-secrets rule, the cluster user name, host, host-key fingerprint, key file path and key name are replaced by `<…>`; everything else is verbatim:
+
+> batch           abort
+> confirm         off
+> In scripting you should not rely on saved sites, use this command instead:
+> open sftp://<user>:***@<host>/ -hostkey="<host key>" -privatekey="<key file>"
+> Searching for host...
+> Connecting to host...
+> Authenticating...
+> Using username "<user>".
+> Authenticating with public key "<key name>".
+> Passphrase for key '<key name>': Credentials were not specified.
+> Authentication log (see session log for details):
+> Using username "<user>".
+> Authenticating with public key "<key name>".
+>
+>
+> Authentication failed.
+
+### Contributor messages (verbatim)
+
+> The test reached Fritz, but the login stopped at one step: your key file is protected by a **passphrase**, and HoMo deliberately never types passwords. Two things to fix: the hint you got was the generic "login refused" one, and there should be an easy way through. The standard way is **Pageant**, PuTTY's key agent. You unlock the key once in Pageant's own window, and WinSCP then uses it automatically, so HoMo never sees the passphrase. Checking what's available on your PC (names and paths are not printed):
+
+> Pageant is installed (both with PuTTY and with WinSCP) but not running, and both of your WinSCP sessions point to a key file. So HoMo can offer an **Unlock key with Pageant** button. It starts Pageant with that session's key file, and Pageant asks for the passphrase in its own window. Building it:
+
+> Now the card: a Pageant status line and the **Unlock key with Pageant** button.
+
+> All pass: 36 unit tests and 85 browser checks. Checking the real lookups on your PC without starting Pageant (booleans only):
+
+> Real lookups work: Pageant was found, and both sessions point to a key file. I skipped the third check (that file didn't exist), but the unit tests already cover your exact error text. Restarting your server with the new code:
+
+> Updating the docs and the log. The log records your pasted output with the user name, host, host key and key path masked, following the project's no-secrets rule.
+
+### Work record
+
+- Diagnosis: Fritz was reached; authentication stopped at the key passphrase because `/nointeractiveinput` (correctly) prevents hidden prompts. The shown hint was the generic "refused the login" one.
+- `cluster.py`: passphrase hint first (points to the new button); `test_connection` returns `needsPassphrase`; `WinScp.registry_sessions()` (decoded name → registry key), `session_key_file()` (session's `PublicKeyFile`, must exist), `pageant()` (PuTTY's or WinSCP's bundled `pageant.exe`), `pageant_running()` (`tasklist`), `start_pageant()` (detached `pageant.exe <key file>`; Pageant asks for the passphrase itself).
+- `serve.py`: `GET /api/cluster` adds `pageant {found, running}`; new `POST /api/cluster/pageant {session}` (400 when the session has no key file, 404 without Pageant).
+- `web/app.js`: Pageant status line and **Unlock key with Pageant** button on the Fritz cluster card; after a passphrase failure the button is highlighted; after unlocking, the card says Pageant is asking in its own window and to test again.
+- Tests: fake WinSCP gains Pageant/key-file methods; unit test for the passphrase output; API test for `/api/cluster/pageant`; browser +2 checks (Pageant status, unlock).
+- Checked on this PC (booleans only): Pageant found, not running; both sessions have an existing key file. Server on 5173 restarted with the new code.
+- Docs: `CHANGELOG.md`, `STATUS.md`, `DECISIONS.md` (Pageant decision), `README.md`, `TASK.md`, `tests/README.md`.
+- Checks: `py -m unittest discover -s tests` 36/36 OK; `py tests/run_browser_tests.py` 85/85 passed.
+
+### Final response (verbatim)
+
+> Good news first: HoMo reached Fritz and WinSCP found your session. The login stopped because your key file is **protected by a passphrase**. HoMo runs WinSCP so that it never waits for a hidden password prompt, so it couldn't go further. (The hint you got said "login refused", which was misleading; that's fixed.)
+>
+> The fix is **Pageant**, PuTTY's key agent; you already have it. I added an **Unlock key with Pageant** button to the Fritz cluster card:
+>
+> 1. Reload http://127.0.0.1:5173 and open **Fritz cluster**.
+> 2. Click **Unlock key with Pageant**. Pageant opens a small window asking for your key's passphrase; it may appear behind the browser. Type it there. HoMo never sees it.
+> 3. Click **Test connection** again. It should now say "Connected. Remote folder: …".
+>
+> Pageant keeps the key unlocked until you close it or restart Windows; after that, click the button once again. This also matters for step 2, where HoMo checks your running cases regularly.
+>
+> Also: the "should not rely on saved sites" line in the output is just a general WinSCP tip and can be ignored.
+>
+> All tests pass (36 unit tests, 85 browser checks). Committed and pushed to GitHub `master`; your server is already running the new version.
+>
+> One privacy note: the output you pasted contains your Fritz user name and key path. That's fine here, but I masked them in the project log so they don't end up on GitHub.

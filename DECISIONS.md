@@ -66,6 +66,16 @@ change with speed; the hover note says so.
 The force columns are computed when the table is drawn, not stored with the
 cached CSV rows, so changing the speed or density only redraws the table.
 
+## 2026-10-02 — Passphrase-protected keys go through Pageant
+
+The user's Fritz key has a passphrase. HoMo CFD does not ask for it or pass
+it to WinSCP (that would put a secret in HoMo CFD's requests and temporary
+script files). Instead **Unlock key with Pageant** starts PuTTY's Pageant with
+the key file set in the WinSCP session; Pageant asks for the passphrase in its
+own window and WinSCP uses Pageant automatically. This also suits step 2,
+where HoMo CFD checks running cases repeatedly. Pageant forgets the key when
+it is closed or Windows restarts, so it is unlocked once per session.
+
 ## 2026-10-02 — Cluster code in `cluster.py`, WinSCP swappable for tests
 
 WinSCP handling lives in `cluster.py` so `serve.py` stays about serving files

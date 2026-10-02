@@ -1809,6 +1809,18 @@ async function showClusterSettings() {
     ? `WinSCP: ${config.winscp}`
     : "WinSCP is not installed (WinSCP.com not found). Install WinSCP, as for CFD-Tool, then reopen this page.";
   card.appendChild(winscp);
+  const pageantStatus = document.createElement("p");
+  pageantStatus.className = "hint";
+  pageantStatus.id = "pageant-status";
+  const describePageant = (running) => {
+    pageantStatus.textContent = !config.pageant?.found
+      ? "Pageant (PuTTY's key agent) was not found. It is only needed if your key has a passphrase; install PuTTY to get it."
+      : running
+        ? "Pageant is running. Keys unlocked in it are used automatically."
+        : "Pageant is not running. If your key has a passphrase, unlock it with Pageant before testing.";
+  };
+  describePageant(config.pageant?.running);
+  card.appendChild(pageantStatus);
 
   const sessionField = document.createElement("label");
   sessionField.className = "cluster-field";
@@ -1855,7 +1867,14 @@ async function showClusterSettings() {
   save.className = "small-control";
   save.id = "cluster-save";
   save.textContent = "Save";
-  actions.append(test, save);
+  const unlock = document.createElement("button");
+  unlock.type = "button";
+  unlock.className = "small-control";
+  unlock.id = "cluster-unlock";
+  unlock.textContent = "Unlock key with Pageant";
+  unlock.title = "Starts Pageant with this session's key file. Pageant asks for the passphrase in its own window; HoMo CFD never sees it.";
+  unlock.hidden = !config.pageant?.found;
+  actions.append(test, unlock, save);
 
   const status = document.createElement("p");
   status.className = "cluster-status";
@@ -1881,13 +1900,30 @@ async function showClusterSettings() {
   });
   const values = () => ({ session: session.value, remoteFolder: folder.value });
 
+  unlock.addEventListener("click", async () => {
+    busy(true);
+    try {
+      await postServerJson("cluster/pageant", { session: session.value });
+      describePageant(true);
+      show("Pageant is asking for your key's passphrase in its own window (it may be behind the browser). " +
+        "After entering it there, click Test connection again.", "hint");
+    } catch (err) {
+      show(err?.message || "Could not start Pageant.", "error");
+    } finally {
+      busy(false);
+    }
+  });
+
   test.addEventListener("click", async () => {
     busy(true);
     show("Connecting to Fritz… this can take up to a minute.", "hint");
     try {
       const result = await postServerJson("cluster/test", values());
       if (result.ok) show(`Connected. Remote folder: ${result.remoteFolder}`, "cluster-ok", result.output);
-      else show([result.error, result.hint].filter(Boolean).join(" "), "error", result.output);
+      else {
+        show([result.error, result.hint].filter(Boolean).join(" "), "error", result.output);
+        if (result.needsPassphrase && !unlock.hidden) unlock.classList.add("primary");
+      }
     } catch (err) {
       show(err?.message || "The connection test failed.", "error");
     } finally {

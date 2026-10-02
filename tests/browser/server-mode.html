@@ -128,6 +128,11 @@ runTests(async () => {
   doc.getElementById("cluster-folder").value = "/home/vault/g/u/Pipeline";
   doc.getElementById("cluster-save").click();
   await waitFor(() => doc.querySelector(".cluster-status")?.textContent === "Saved.", 10000);
+  check("Pageant status shown", /Pageant is not running/.test(doc.getElementById("pageant-status")?.textContent ?? ""), doc.getElementById("pageant-status")?.textContent);
+  doc.getElementById("cluster-unlock").click();
+  await waitFor(() => /asking for your key/.test(doc.querySelector(".cluster-status")?.textContent ?? ""), 10000);
+  check("Unlock key with Pageant hands the key to Pageant", /Pageant is running/.test(doc.getElementById("pageant-status")?.textContent ?? "") &&
+    (await (await fetch("/api/cluster")).json()).pageant.running, doc.querySelector(".cluster-status")?.textContent);
   const savedCluster = await (await fetch("/api/cluster")).json();
   check("cluster settings are saved", savedCluster.session === "Fritz" && savedCluster.remoteFolder === "/home/vault/g/u/Pipeline", JSON.stringify(savedCluster));
 });

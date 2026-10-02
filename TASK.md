@@ -32,5 +32,6 @@ key per user in local settings by default. Final design and build order in
 
 **Step 1 built (2026-10-02):** `cluster.py` + `/api/cluster` (GET settings and
 WinSCP session names, POST save, POST `cluster/test`) and the **Fritz cluster**
-card. Waiting for the user's real **Test connection** with their Fritz session.
+card. First real test reached Fritz but the key has a passphrase → added
+**Unlock key with Pageant**. Waiting for the user's test after unlocking.
 Next: step 2, monitor and download for cases in `inProgress`.

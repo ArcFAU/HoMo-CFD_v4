@@ -194,7 +194,7 @@ class ClusterApiTests(ApiTests):
         status, data = self.request("GET", "/api/cluster")
         self.assertEqual(status, 200)
         self.assertEqual(json.loads(data), {"winscp": str(Path("C:/fake/WinSCP.com")), "sessions": ["Fritz", "Other"],
-                                            "session": "", "remoteFolder": ""})
+                                            "pageant": {"found": True, "running": False}, "session": "", "remoteFolder": ""})
 
     def test_save_keeps_working_dir(self):
         serve.write_settings({"workingDir": str(self.working_dir)})
@@ -218,6 +218,18 @@ class ClusterApiTests(ApiTests):
         self.assertEqual((status, data["ok"], data["remoteFolder"]), (200, True, "/home/vault/g/u/Pipeline"))
         self.assertIn('open "Fritz"', self.fake.scripts[0])
         self.assertNotIn("cluster", serve.read_settings(), "testing does not save")
+
+    def test_unlock_key_with_pageant(self):
+        status, data = self.post("/api/cluster/pageant", {"session": "Fritz"})
+        self.assertEqual((status, data), (200, {"started": True}))
+        self.assertEqual(self.fake.pageant_keys, [Path("C:/keys/fritz.ppk")])
+        status, data = self.post("/api/cluster/pageant", {"session": "Other"})
+        self.assertEqual(status, 400)
+        self.assertIn("no private key file", data["error"])
+        self.assertEqual(self.post("/api/cluster/pageant", {"session": ""})[0], 400)
+        self.assertEqual(len(self.fake.pageant_keys), 1)
+        status, data = self.request("GET", "/api/cluster")
+        self.assertTrue(json.loads(data)["pageant"]["running"])
 
     def test_without_winscp(self):
         self.fake.installed = False

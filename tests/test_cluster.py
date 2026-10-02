@@ -17,15 +17,32 @@ import cluster  # noqa: E402
 class FakeWinScp(cluster.WinScp):
     """Records the script instead of running WinSCP."""
 
-    def __init__(self, code=0, output="", sessions=("Fritz",), installed=True):
+    def __init__(self, code=0, output="", sessions=("Fritz",), installed=True, key_files=None):
         self.code, self.output, self.session_names, self.installed = code, output, list(sessions), installed
+        self.key_files = {"Fritz": Path("C:/keys/fritz.ppk")} if key_files is None else key_files
         self.scripts = []
+        self.pageant_keys = []
 
     def executable(self):
         return Path("C:/fake/WinSCP.com") if self.installed else None
 
     def sessions(self):
         return self.session_names
+
+    def registry_sessions(self):
+        return {name: name for name in self.session_names}
+
+    def session_key_file(self, session):
+        return self.key_files.get(session)
+
+    def pageant(self):
+        return Path("C:/fake/pageant.exe") if self.installed else None
+
+    def pageant_running(self):
+        return bool(self.pageant_keys)
+
+    def start_pageant(self, key_file):
+        self.pageant_keys.append(key_file)
 
     def run(self, lines):
         self.scripts.append(lines)
@@ -69,6 +86,8 @@ class ScriptTests(unittest.TestCase):
 
     def test_connection_failure_gives_hint(self):
         cases = {
+            "Authenticating with public key \"rsa-key\".\nPassphrase for key 'rsa-key': Credentials were not specified.\n"
+            "Authentication failed.": "Unlock key with Pageant",
             "The server's host key was not found in the cache.": "host key",
             "Authentication failed.": "refused the login",
             'Error changing directory to "/nope".': "remote folder",
@@ -80,6 +99,7 @@ class ScriptTests(unittest.TestCase):
                 result = cluster.test_connection(FakeWinScp(1, output), "Fritz")
                 self.assertFalse(result["ok"])
                 self.assertIn(expected, result["hint"])
+                self.assertEqual(result["needsPassphrase"], "Passphrase" in output)
 
 
 @unittest.skipUnless(os.name == "nt", "runs a .cmd file")
