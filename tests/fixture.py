@@ -46,7 +46,7 @@ COEFFICIENT_HEADERS = [
 ]
 
 # Final-iteration values: CzA (total) and CxA (total) are negative, as in the
-# team's convention where negative means downforce/drag.
+# team's convention where negative means downforce/drag (coefficient × area).
 FINAL_VALUES = {
     "caseA": [1000, 0.45, -3.2, -1.1, -1.4, -0.9, 0.1, 0.1, -1.25, -0.3, -0.2, -0.5, -0.15, -0.1],
     "caseB": [1000, 0.48, -3.5, -1.2, -1.5, -1.0, 0.1, 0.1, -1.4, -0.35, -0.2, -0.55, -0.2, -0.1],

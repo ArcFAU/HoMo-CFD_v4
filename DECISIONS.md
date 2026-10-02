@@ -38,11 +38,13 @@ folder every time"); works in any browser, including VS Code's Simple Browser.
 **Why:** the user chose to keep the current plan and do later improvements
 after the main phases.
 
-## 2026-10-02 — Downforce and Drag from CzA and CxA
+## 2026-10-02 — Sign-flipped −CzA and −CxA columns
 
 The team confirmed negative CzA is downforce and negative CxA is drag.
-HoMo CFD shows `Downforce (−CzA)` and `Drag (−CxA)` next to the exported
-monitors, which stay unchanged. `CzA Front (percentage)` is a fraction and is
+CzA and CxA are the downforce and drag **coefficients × reference area**, not
+forces (correction from the user, same day; the columns were first labelled
+`Downforce (−CzA)` / `Drag (−CxA)`). HoMo CFD shows `−CzA (downforce)` and
+`−CxA (drag)` next to the exported monitors, which stay unchanged. `CzA Front (percentage)` is a fraction and is
 displayed as exported.
 **Why:** the user asked to keep the raw values and also show downforce and drag.
 

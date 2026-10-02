@@ -6,7 +6,7 @@ User-visible changes, newest first. Detailed reasoning lives in
 ## 2026-10-02
 
 ### Added
-- **Downforce (−CzA)** and **Drag (−CxA)** columns next to the exported monitors, in values and Δ-vs-reference views; the monitor chart starts on Downforce.
+- **−CzA (downforce)** and **−CxA (drag)** columns next to the exported monitors, in values and Δ-vs-reference views; the monitor chart starts on −CzA. CzA and CxA are the downforce and drag coefficients × reference area, not forces.
 - **Working directory** like CFD-Tool: chosen once per user (Browse… or paste a path), saved in `%APPDATA%\HoMo-CFD\settings.json`; CFD-Tool's saved working directory is reused automatically; results come from its `finished` folder.
 - `serve.py` indexes the results folder: no browser folder picker or permission prompts, works offline in any browser.
 - `Start HoMo CFD.bat` double-click launcher.

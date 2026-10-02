@@ -1443,7 +1443,7 @@ select {
   min-width: 260px;
 }
 
-/* Downforce / Drag columns computed by HoMo CFD from CzA / CxA. */
+/* −CzA / −CxA columns computed by HoMo CFD from CzA / CxA. */
 .data-table th.derived-column {
   color: var(--accent);
   cursor: help;

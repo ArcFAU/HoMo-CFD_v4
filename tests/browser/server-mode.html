@@ -17,22 +17,22 @@ runTests(async () => {
   check("tree root is the finished folder", doc.querySelector(".tree-root")?.textContent.startsWith("finished"), doc.querySelector(".tree-root")?.textContent);
   check("no error or reconnect shown", doc.getElementById("error").hidden && doc.getElementById("reconnect-results").hidden, doc.getElementById("error").textContent);
 
-  // Stage 5: Downforce = -CzA and Drag = -CxA, right after Iteration.
+  // Stage 5: -CzA (downforce) and -CxA (drag), right after Iteration.
   const headers = headerCells(doc);
-  check("Downforce and Drag follow Iteration", headers.slice(1, 4).join("|") === "Iteration|Downforce (−CzA)|Drag (−CxA)", headers.slice(0, 5).join("|"));
-  check("Downforce = -CzA", cellFor(doc, "caseA", "Downforce (−CzA)") === "3.200" && cellFor(doc, "caseA", "CzA") === "-3.200",
-    `${cellFor(doc, "caseA", "Downforce (−CzA)")} / CzA ${cellFor(doc, "caseA", "CzA")}`);
-  check("Drag = -CxA", cellFor(doc, "caseB", "Drag (−CxA)") === "1.400" && cellFor(doc, "caseB", "CxA") === "-1.400",
-    `${cellFor(doc, "caseB", "Drag (−CxA)")} / CxA ${cellFor(doc, "caseB", "CxA")}`);
+  check("-CzA and -CxA follow Iteration", headers.slice(1, 4).join("|") === "Iteration|−CzA (downforce)|−CxA (drag)", headers.slice(0, 5).join("|"));
+  check("-CzA column = -CzA", cellFor(doc, "caseA", "−CzA (downforce)") === "3.200" && cellFor(doc, "caseA", "CzA") === "-3.200",
+    `${cellFor(doc, "caseA", "−CzA (downforce)")} / CzA ${cellFor(doc, "caseA", "CzA")}`);
+  check("-CxA column = -CxA", cellFor(doc, "caseB", "−CxA (drag)") === "1.400" && cellFor(doc, "caseB", "CxA") === "-1.400",
+    `${cellFor(doc, "caseB", "−CxA (drag)")} / CxA ${cellFor(doc, "caseB", "CxA")}`);
   check("CzA Front stays a fraction", cellFor(doc, "caseA", "CzA Front(%)") === "0.450", cellFor(doc, "caseA", "CzA Front(%)"));
-  check("computed columns explained on hover", /−CzA \(negative CzA is downforce\)/.test(doc.querySelector(".data-table th.derived-column")?.title ?? ""), doc.querySelector(".data-table th.derived-column")?.title);
-  check("monitor chart defaults to Downforce", doc.querySelector(".monitor-chart-controls select")?.value === "Downforce (−CzA)", doc.querySelector(".monitor-chart-controls select")?.value);
+  check("computed columns explained on hover", /downforce coefficient × reference area.*Not a force/.test(doc.querySelector(".data-table th.derived-column")?.title ?? ""), doc.querySelector(".data-table th.derived-column")?.title);
+  check("monitor chart defaults to -CzA", doc.querySelector(".monitor-chart-controls select")?.value === "−CzA (downforce)", doc.querySelector(".monitor-chart-controls select")?.value);
   [...doc.querySelectorAll(".table-mode-switch button")].find((button) => button.textContent === "Δ vs reference").click();
-  await waitFor(() => headerCells(doc).includes("Δ Downforce (−CzA)"));
-  check("Δ Downforce positive = more downforce", cellFor(doc, "caseB", "Δ Downforce (−CzA)") === "0.300" && cellFor(doc, "caseA", "Δ Downforce (−CzA)") === "0.000",
-    `caseB ${cellFor(doc, "caseB", "Δ Downforce (−CzA)")}, caseA ${cellFor(doc, "caseA", "Δ Downforce (−CzA)")}`);
-  check("Δ Drag positive = more drag", cellFor(doc, "caseB", "Δ Drag (−CxA)") === "0.150", cellFor(doc, "caseB", "Δ Drag (−CxA)"));
-  check("Δ note explains the signs", /positive Δ Downforce means more downforce/.test(doc.querySelector(".comparison-note")?.textContent ?? ""), doc.querySelector(".comparison-note")?.textContent);
+  await waitFor(() => headerCells(doc).includes("Δ −CzA (downforce)"));
+  check("Δ -CzA positive = more downforce", cellFor(doc, "caseB", "Δ −CzA (downforce)") === "0.300" && cellFor(doc, "caseA", "Δ −CzA (downforce)") === "0.000",
+    `caseB ${cellFor(doc, "caseB", "Δ −CzA (downforce)")}, caseA ${cellFor(doc, "caseA", "Δ −CzA (downforce)")}`);
+  check("Δ -CxA positive = more drag", cellFor(doc, "caseB", "Δ −CxA (drag)") === "0.150", cellFor(doc, "caseB", "Δ −CxA (drag)"));
+  check("Δ note explains the signs", /coefficients × reference area.*positive Δ there means more downforce/.test(doc.querySelector(".comparison-note")?.textContent ?? ""), doc.querySelector(".comparison-note")?.textContent);
   [...doc.querySelectorAll(".table-mode-switch button")].find((button) => button.textContent === "Values").click();
 
   // Comparison window: 1 → 4 panels, minimum readable panel height, zoom keys.

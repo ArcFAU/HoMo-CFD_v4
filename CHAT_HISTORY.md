@@ -2554,3 +2554,34 @@ MEMORY.md:77-79|note=[grounded the next improvements in the existing CFD image a
 > - Answer the Stage 7 questions.
 >
 > Your HoMo CFD server is running with the latest code at http://127.0.0.1:5173. I removed the temporary test links that pointed at your real results; your data is untouched.
+
+## 2026-10-02 — Correction: CzA and CxA are coefficients × reference area
+
+### User message (verbatim)
+
+> one correction, CzA and CxA are downforce and drag coeeficients with reference area.
+
+### Contributor messages (verbatim)
+
+> Wording updated everywhere. Running both test suites:
+
+### Work record
+
+- The computed columns were labelled `Downforce (−CzA)` / `Drag (−CxA)`, which read like forces. Renamed to `−CzA (downforce)` and `−CxA (drag)`; hover notes and the Δ note now say they are the downforce/drag coefficients × reference area with the sign flipped, not forces. Values and column positions are unchanged; the monitor chart still starts on −CzA.
+- Files: `web/app.js`, `web/styles.css` (comment), `tests/browser/server-mode.html`, `tests/fixture.py` (comment), `tests/README.md`, `CHANGELOG.md`, `DECISIONS.md` (entry amended with a note on the correction), `SHARED_CONTEXT.md`, `STATUS.md`, `HANDOFF_FOR_CHATGPT.md`.
+- Side effect: a custom name, hidden state or order set under **Customize columns** for the old Downforce/Drag columns does not carry over to the renamed columns (they existed for one night only).
+- Checks: `py -m unittest discover -s tests` 15/15 OK; `py tests/run_browser_tests.py` 67/67 passed.
+
+### Final response (verbatim)
+
+> Thanks, corrected. The columns were labelled "Downforce" and "Drag", which sounds like forces in newtons. They're now:
+>
+> - **−CzA (downforce)** and **−CxA (drag)**, still right after Iteration.
+> - The hover note says: downforce (or drag) coefficient × reference area, sign flipped so downforce/drag is positive, not a force.
+> - The Δ-vs-reference note says the same. A positive Δ still means more downforce or more drag.
+>
+> The numbers themselves didn't change. I updated the project notes (`DECISIONS.md`, `SHARED_CONTEXT.md`, `STATUS.md`, `CHANGELOG.md`, the ChatGPT handoff) so nobody calls them forces again.
+>
+> Both test suites pass (15 unit tests, 67 browser checks). Committed and pushed to GitHub `master`. Reload the page at http://127.0.0.1:5173 to see the new labels.
+>
+> One small side effect: if you renamed, hid or reordered the old Downforce/Drag columns under **Customize columns**, set that again for the renamed ones.

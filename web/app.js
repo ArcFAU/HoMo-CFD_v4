@@ -981,19 +981,20 @@ async function renderCsvPage() {
   renderCsvTables(coefficientRows.filter(Boolean));
 }
 
-// Confirmed by the team (2026-10-02): negative CzA is downforce and negative
-// CxA is drag. Downforce and Drag are shown as positive numbers next to the
-// unchanged exported monitors; CzA Front stays a fraction as exported.
+// Confirmed by the team (2026-10-02): CzA and CxA are the downforce and drag
+// coefficients times the reference area (not forces); negative means
+// downforce / drag. The sign-flipped values are shown next to the unchanged
+// exported monitors; CzA Front stays a fraction as exported.
 const DERIVED_AERO_COLUMNS = [
-  { header: "Downforce (−CzA)", source: "CzA", note: "Downforce = −CzA (negative CzA is downforce); higher means more downforce." },
-  { header: "Drag (−CxA)", source: "CxA", note: "Drag = −CxA (negative CxA is drag); higher means more drag." },
+  { header: "−CzA (downforce)", source: "CzA", note: "−CzA: downforce coefficient × reference area, sign flipped so downforce is positive (negative CzA is downforce). Not a force. Higher means more downforce." },
+  { header: "−CxA (drag)", source: "CxA", note: "−CxA: drag coefficient × reference area, sign flipped so drag is positive (negative CxA is drag). Not a force. Higher means more drag." },
 ];
 
 function derivedAeroColumn(header) {
   return DERIVED_AERO_COLUMNS.find((column) => column.header === header);
 }
 
-// Inserts Downforce/Drag right after Iteration, computed from the total CzA
+// Inserts −CzA / −CxA right after Iteration, computed from the total CzA
 // and CxA monitors of the final row.
 function withDerivedAeroColumns(headers, row) {
   const outHeaders = [...headers];
@@ -1104,8 +1105,8 @@ function renderCsvTables(coefficientRows) {
   if (browserState.coefficientView === "delta") {
     const note = document.createElement("p");
     note.className = "comparison-note";
-    note.textContent = "Δ = this simulation minus the reference. Downforce = −CzA and Drag = −CxA, so a positive Δ Downforce means more downforce " +
-      "and a positive Δ Drag means more drag. Other columns are the exported monitors, unchanged.";
+    note.textContent = "Δ = this simulation minus the reference. −CzA and −CxA are the downforce and drag coefficients × reference area " +
+      "with the sign flipped, so a positive Δ there means more downforce or more drag. Other columns are the exported monitors, unchanged.";
     collective.appendChild(note);
   }
 
