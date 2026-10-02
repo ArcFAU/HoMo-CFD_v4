@@ -3848,3 +3848,51 @@ Messages that quoted the user's cluster user name or host are shown with those m
 > **To use it:** copy `starccm\export3D.java` and `starccm\postprocessing.java` into `SCRIPT_RANS` on Fritz (keep the old macro as `postprocessing.java.bak`). Every new simulation created from HoMo then gets the 3D export. I can do the upload for you: just say "upload it". Testing `export3D.java` by hand on `0823_upsi` first (Play Macro in STAR-CCM+) is still a good idea.
 >
 > Both test suites pass (70 unit tests, 121 browser checks), and the changes are on GitHub `master`.
+
+## 2026-10-02 — First test of the new post-processing on Fritz (log review)
+
+### User message (verbatim)
+
+> look at log file in starccm foldeer
+
+### Contributor messages (verbatim)
+
+> Looking at the log you put in `starccm`. First its size and the parts that matter: the 3D export lines, errors and the end of the job.
+
+> The post-processing stopped with `FileNotFoundException: …/exp/Settings`: the macro couldn't find a `Settings` file in the case folder `exp`. Reading the rest of the log around it, with any licence-key text masked:
+
+> Two findings, and the first one is urgent.
+>
+> **1. This log contains your STAR-CCM+ licence key in plain text.** The start command `starccm+ … -podkey …` is printed in full, and the file sits in the repo folder, not yet committed. A normal commit of everything would put the key on GitHub. I'm adding a rule so Git ignores these job logs:
+
+> The log can no longer be committed. Next, which macro ran: the compiler warning names line 464 (`XYPlot plot = …`). I'm checking which version has that line there, which tells whether Fritz compiled the new macro:
+
+> Line 464 exists only in the new macro (the old one has it at line 448). So **Fritz's STAR-CCM+ loaded and compiled the new `postprocessing.java` without errors**, including the 3D export call. That's the first real-world check.
+>
+> The run itself stopped right at the start, before any export, because the case folder `exp` has no `Settings` file. The macro reads `Settings` first to know which scenes and sections to make, and the old version would have failed the same way. Checking what's in `exp` (read-only listing through your fritz session):
+
+> That confirms it: `exp` has the `.sim`, `post.sh`, `export3D.java` and the new `postprocessing.java`, but **no `Settings`**. The best `Settings` for this `.sim` would come from its original case. Checking read-only whether `0830_mk2.2` still has one:
+
+> Still checking whether `0830_mk2.2` on Fritz has a `Settings` file. WinSCP's `ls` takes only one pattern, so I'm listing the whole folder instead:
+
+> `0830_mk2.2` still has its `Settings`, from the run that made this `.sim`. Writing the log entry:
+
+### Work record
+
+- Reviewed `starccm/post.o4285168` (job 4285168, `post` on fritz, folder `exp`, 1 min 14 s): STAR-CCM+ 2506 loaded `UPSI_CFD_BASE_0830_mk2.2_10degree.sim`, played `exp/postprocessing.java` (the new version: its deprecation warning is at line 464, which only the new macro has; the old one has it at 448), then `java.lang.RuntimeException: java.io.FileNotFoundException: …/exp/Settings` at the start of `execute()`. Nothing was exported; "Job finished at …" was still printed.
+- The log prints the STAR-CCM+ licence key (`-podkey …` in the start command). It was never committed; `.gitignore` now ignores SLURM job logs (`*.o[0-9]*`). The key, user name and log contents were not copied into any file.
+- Read-only listings through the fritz session (with `open_command`): `exp` holds the `.sim` (10.3 GB), `STARTED`, `post.o4285168`, `post.sh`, `export3D.java`, `postprocessing.java`, no `Settings`; `0830_mk2.2` holds `Settings` (5068 bytes) and the original run's files.
+- Observation for HoMo: a post job whose macro fails still ends with "Job finished at", so HoMo would show such a case as "Ready to download".
+- No code changes; `.gitignore` only. Tests not rerun (no code changed).
+
+### Final response (verbatim)
+
+> **Most important: that log file contains your STAR-CCM+ licence key in plain text.** `post.sh` prints its full start command, `-podkey` included. Every `mesh.o…`, `rans.o…` and `post.o…` log does the same, so don't share these logs. The file is still only on your PC. I've made Git ignore all job logs, so it can't end up on GitHub. You can delete `starccm\post.o4285168` now; I've taken what I need from it.
+>
+> **What the log shows**
+> - **Good news:** STAR-CCM+ on Fritz loaded and compiled the **new** `postprocessing.java`, 3D export call included, without errors. The compiler warning points at line 464, which only the new version has.
+> - **Why nothing came out:** the test folder `exp` has no `Settings` file. The macro reads `Settings` first, to know which scenes and sections to make, so it stopped at once (`FileNotFoundException: …/exp/Settings`). It never got as far as the images or the 3D export, and the old macro would have stopped the same way.
+>
+> **To finish the test:** copy `Settings` from `0830_mk2.2` (the case this `.sim` comes from) into `exp`, then submit `post.sh` again. I can do both through your fritz session if you say "go ahead". It's the same kind of post job as before, about 1.5 hours at most.
+>
+> **One more thing the log revealed:** even though the macro failed, the job still printed "Job finished at…". HoMo uses that line, so it would show a failed post-processing as **Ready to download**. I can make HoMo spot a failed macro in the post log and show "Post-processing failed" instead. Should I?

@@ -44,3 +44,5 @@ dist/
 
 # --- Logs ---
 *.log
+# --- SLURM job logs (mesh.o*, rans.o*, post.o*): they print the STAR-CCM+ licence key ---
+*.o[0-9]*
