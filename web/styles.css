@@ -1443,8 +1443,40 @@ select {
   min-width: 260px;
 }
 
-/* −CzA / −CxA columns computed by HoMo CFD from CzA / CxA. */
+/* −CzA / −CxA and Downforce / Drag [N] columns computed by HoMo CFD. */
 .data-table th.derived-column {
   color: var(--accent);
   cursor: help;
+}
+
+/* Speed and density for the Downforce [N] / Drag [N] columns. */
+.force-settings {
+  flex: none;
+  display: flex;
+  gap: 10px;
+  cursor: help;
+}
+
+.force-setting {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.force-setting input {
+  width: 76px;
+  background: #0c1219;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 5px 6px;
+  font: inherit;
+  font-size: 12px;
+}
+
+.force-setting input:invalid {
+  outline: 2px solid #ff8d8d;
 }

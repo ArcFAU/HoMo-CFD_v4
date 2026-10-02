@@ -3,6 +3,7 @@
 // The normal setup: serve.py with a working directory. Results load without
 // a picker; viewers, pressure plots, 3D viewer and Stage 5 columns work.
 const headerCells = (doc) => [...doc.querySelectorAll(".data-table thead th")].map((th) => th.textContent);
+const dynamicPressure = (kmh, density = 1.18415) => 0.5 * density * (kmh / 3.6) ** 2;
 const cellFor = (doc, rowName, header) => {
   const index = headerCells(doc).indexOf(header);
   const row = [...doc.querySelectorAll(".data-table tbody tr")].find((tr) => tr.cells[0].textContent === rowName);
@@ -33,7 +34,29 @@ runTests(async () => {
     `caseB ${cellFor(doc, "caseB", "Δ −CzA (downforce)")}, caseA ${cellFor(doc, "caseA", "Δ −CzA (downforce)")}`);
   check("Δ -CxA positive = more drag", cellFor(doc, "caseB", "Δ −CxA (drag)") === "0.150", cellFor(doc, "caseB", "Δ −CxA (drag)"));
   check("Δ note explains the signs", /coefficients × reference area.*positive Δ there means more downforce/.test(doc.querySelector(".comparison-note")?.textContent ?? ""), doc.querySelector(".comparison-note")?.textContent);
+  check("Δ Downforce [N] = Δ(-CzA) × q", cellFor(doc, "caseB", "Δ Downforce [N]") === (0.3 * dynamicPressure(60)).toFixed(1), cellFor(doc, "caseB", "Δ Downforce [N]"));
   [...doc.querySelectorAll(".table-mode-switch button")].find((button) => button.textContent === "Values").click();
+  await waitFor(() => headerCells(doc).includes("Downforce [N]"));
+
+  // Forces: F = ½ · ρ · v² · (−CzA), default 60 km/h and ρ = 1.18415 kg/m³.
+  check("force columns follow -CzA / -CxA", headerCells(doc).slice(2, 6).join("|") === "−CzA (downforce)|−CxA (drag)|Downforce [N]|Drag [N]", headerCells(doc).slice(0, 7).join("|"));
+  check("Downforce [N] at 60 km/h", cellFor(doc, "caseA", "Downforce [N]") === (3.2 * dynamicPressure(60)).toFixed(1), cellFor(doc, "caseA", "Downforce [N]"));
+  check("Drag [N] at 60 km/h", cellFor(doc, "caseB", "Drag [N]") === (1.4 * dynamicPressure(60)).toFixed(1), cellFor(doc, "caseB", "Drag [N]"));
+  check("force note shows speed, density and q", /v = 60 km\/h.*ρ = 1\.18415 kg\/m³.*164\.5 Pa/.test([...doc.querySelectorAll(".data-table th.derived-column")].find((th) => th.textContent === "Downforce [N]")?.title ?? ""),
+    [...doc.querySelectorAll(".data-table th.derived-column")].find((th) => th.textContent === "Downforce [N]")?.title);
+  const speed = doc.querySelector('input[data-force-setting="speedKmh"]');
+  speed.value = "100";
+  speed.dispatchEvent(new app.contentWindow.Event("change"));
+  await waitFor(() => cellFor(doc, "caseA", "Downforce [N]") === (3.2 * dynamicPressure(100)).toFixed(1), 5000);
+  check("changing the speed recomputes the forces", cellFor(doc, "caseA", "Downforce [N]") === (3.2 * dynamicPressure(100)).toFixed(1) && cellFor(doc, "caseA", "−CzA (downforce)") === "3.200",
+    cellFor(doc, "caseA", "Downforce [N]"));
+  check("speed is remembered", JSON.parse(app.contentWindow.localStorage.getItem("homo-cfd-force-settings-v1") || "{}").speedKmh === 100);
+  speed.value = "-5";
+  speed.dispatchEvent(new app.contentWindow.Event("change"));
+  check("invalid speed is rejected", !speed.validity.valid && cellFor(doc, "caseA", "Downforce [N]") === (3.2 * dynamicPressure(100)).toFixed(1), cellFor(doc, "caseA", "Downforce [N]"));
+  speed.value = "60";
+  speed.dispatchEvent(new app.contentWindow.Event("change"));
+  await waitFor(() => cellFor(doc, "caseA", "Downforce [N]") === (3.2 * dynamicPressure(60)).toFixed(1), 5000);
 
   // Comparison window: 1 → 4 panels, minimum readable panel height, zoom keys.
   doc.querySelector('.tree-entry.image-folder[data-path="caseA/Cp_x-Section"]').click();

@@ -2621,3 +2621,75 @@ MEMORY.md:77-79|note=[grounded the next improvements in the existing CFD image a
 > - Scaling to other speeds with v² assumes CzA stays constant with speed. That's a good approximation, but it's only exact at the simulated speed.
 >
 > If useful, HoMo CFD could show a **downforce in N** column for a speed you enter, but I'd keep that for after the current phases unless you want it now.
+
+## 2026-10-02 — Downforce [N] and Drag [N] columns
+
+### User message (verbatim)
+
+> yes, do it.
+
+(In reply to the offer to show downforce in N for a speed the user enters.)
+
+### Contributor messages (verbatim)
+
+> Looking for the simulation's speed and air density in your case files, so the force column uses the same values as STAR-CCM+.
+
+> Your case files store the simulated speed in km/h (`Vehicle State/Velocity`), but not the air density, which lives inside the .sim file. Looking at how the table is built so I can add the force columns:
+
+> Plan: add **Downforce [N]** and **Drag [N]** after −CzA/−CxA, computed as ½·ρ·v²·(−CzA) from a speed (km/h) and air density you can set in the table's toolbar. They're recomputed when you change either value, and both settings are remembered. Checking the chart labels and toolbar styles first:
+
+> Writing the force columns now. Let me see how the existing browser test drives the table:
+
+> Adding the code:
+
+> The app code is in. The stylesheet has that rule twice, so I'll append the new styles at the end instead:
+
+> Escaping trouble again; writing the script as a file instead:
+
+> All 75 browser checks pass, 8 of them new. Taking a screenshot of the real app to check the toolbar layout with your data:
+
+> The page needs real time to load the results, so I'll take the screenshot again with a real-time wait:
+
+> Screenshot taken while it was still indexing. Trying again with a longer wait:
+
+> Headless Chrome takes the shot before the results finish loading. Checking whether a scripting route is available to wait properly:
+
+> No libraries for that, so I'll write a small script that drives Chrome directly and waits until the table is drawn:
+
+> Real values look right: 0830_mk3 has −CzA 5.755, which gives 946.5 N at 60 km/h. Checking the layout:
+
+> Layout is fine: the Speed and ρ boxes fit in the toolbar, and Downforce [N] and Drag [N] sit right after −CzA and −CxA. Now the project notes:
+
+### Work record
+
+- `web/app.js`: `Downforce [N]` and `Drag [N]` = ½ · ρ · v² · (−CzA / −CxA), inserted after the −CzA / −CxA columns by `withForceColumns()` when the table is drawn (not stored in the CSV cache). Toolbar inputs **Speed [km/h]** and **ρ [kg/m³]** (defaults 60 and 1.18415, saved in local storage `homo-cfd-force-settings-v1`; values ≤ 0 or non-numbers are rejected and outlined). Hover note shows v in km/h and m/s, ρ and q in Pa, and the constant-CzA assumption. Forces display with 1 decimal (table, Δ view, chart); coefficients keep 3. Δ note mentions the force columns. Fixed: an empty CzA/CxA cell no longer becomes 0 in the computed columns (`numericCell`).
+- `web/styles.css`: `.force-settings` / `.force-setting` toolbar styles.
+- Tests: `tests/browser/server-mode.html` +8 checks (column order, values at 60 km/h, Δ Downforce [N], hover note with q = 164.5 Pa, change to 100 km/h recomputes, setting remembered, invalid speed rejected).
+- Docs: `CHANGELOG.md`, `DECISIONS.md` (new entry: one speed for all cases, default values and why), `SHARED_CONTEXT.md`, `STATUS.md`, `HANDOFF_FOR_CHATGPT.md`, `tests/README.md`.
+- Research (read-only): the case `Settings` file has `Vehicle State/Velocity` in km/h (`mesh.java` divides by 3.6 for `u_inlet`): 40 in the local `0830_mk3` copy, 45 in `D:\CFD_tool\finished\0924_corner2`; the other finished cases have no `Settings` file. No reference density in the macros or settings; it is in the .sim file.
+- Checked against the real results through the user's server (headless Chrome, scratch script): e.g. 0830_mk3 −CzA 5.755 → 946.5 N, −CxA 1.922 → 316.2 N at 60 km/h; toolbar fits at 1600 px.
+- Checks: `py -m unittest discover -s tests` 15/15 OK; `py tests/run_browser_tests.py` 75/75 passed.
+
+### Final response (verbatim)
+
+> Done. The table now has **Downforce [N]** and **Drag [N]** right after −CzA and −CxA:
+>
+> ```text
+> F = ½ · ρ · v² · (−CzA)      (same for drag with −CxA)
+> ```
+>
+> - The **Speed** (km/h) and **ρ** (kg/m³) boxes are in the toolbar above the table. Change a value, press Enter or click elsewhere, and the forces update. Your values are remembered next time.
+> - Defaults are **60 km/h** (CFD-Tool's preset speed) and **1.18415 kg/m³** (STAR-CCM+'s default air density).
+> - Hover over a force heading to see the speed in m/s, the density and ½ · ρ · v² in Pa.
+> - The Δ-vs-reference view and the monitor chart work for the force columns too, with forces shown to 1 decimal.
+>
+> With your real results at 60 km/h, for example, 0830_mk3 gives **946.5 N** of downforce and **316.2 N** of drag.
+>
+> Two things to check with the team:
+>
+> - **Density:** the forces are only right if ρ matches the reference density in your STAR-CCM+ coefficient reports. That's stored in the .sim file, not in the results, so I couldn't read it. If it isn't 1.18415, just type the right value.
+> - **Speed:** one speed applies to all simulations, which is what you want for comparing designs. Your simulations weren't all run at 60 km/h: the `Settings` files say 40 km/h for 0830_mk3 and 45 km/h for 0924_corner2, and the other cases have no `Settings` file. Using another speed assumes CzA stays the same at that speed.
+>
+> Also fixed along the way: an empty CzA or CxA cell no longer shows up as 0 in the computed columns.
+>
+> All tests pass (15 unit tests, 75 browser checks, 8 of them new). Committed and pushed to GitHub `master`. Reload http://127.0.0.1:5173 to see it.

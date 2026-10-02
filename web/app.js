@@ -2,6 +2,10 @@ const SECTION_FOLDER = /^(.+)_([xyz])-Section$/i;
 const ROOT_DB = "homo-cfd-settings";
 const ROOT_STORE = "folders";
 const TABLE_COLUMN_PREFS_KEY = "homo-cfd-coefficient-table-columns-v1";
+// Speed and air density for the Downforce [N] / Drag [N] columns. 1.18415 kg/m³
+// is STAR-CCM+'s default air density; users can change both per browser.
+const FORCE_SETTINGS_KEY = "homo-cfd-force-settings-v1";
+const DEFAULT_FORCE_SETTINGS = { speedKmh: 60, density: 1.18415 };
 // Viewer windows receive their folder handles through IndexedDB entries;
 // entries older than this are pruned when the main window starts.
 const VIEWER_ENTRY_MAX_AGE_MS = 24 * 60 * 60 * 1000;
@@ -147,6 +151,7 @@ const browserState = {
   coefficientRows: [],
   monitorChartHeader: "",
   coefficientView: "values",
+  forceSettings: readForceSettings(),
   coefficientReferencePath: "",
   pressureCasePath: "",
   pressureComparePaths: [],
@@ -429,7 +434,11 @@ function renderCsvWorkspaceHeader() {
     browserState.coefficientReferencePath = referenceSelect.value;
     renderCsvTables(browserState.coefficientRows);
   });
-  el.summary.replaceChildren(heading, count, filter, customize, comparisonMode, referenceSelect, pressureButton);
+  const forceSettings = document.createElement("div");
+  forceSettings.className = "force-settings";
+  forceSettings.title = "Speed and air density used for Downforce [N] and Drag [N]: F = ½ · ρ · v² · (−CzA or −CxA)";
+  forceSettings.append(forceSettingInput("Speed", "km/h", "speedKmh"), forceSettingInput("ρ", "kg/m³", "density"));
+  el.summary.replaceChildren(heading, count, filter, customize, comparisonMode, referenceSelect, forceSettings, pressureButton);
   updateCoefficientViewControls();
   el.panels.replaceChildren(Object.assign(document.createElement("div"), {
     className: "workspace-empty",
@@ -991,6 +1000,8 @@ const DERIVED_AERO_COLUMNS = [
 ];
 
 function derivedAeroColumn(header) {
+  const force = FORCE_COLUMNS.find((column) => column.header === header);
+  if (force) return { ...force, note: forceColumnNote(force) };
   return DERIVED_AERO_COLUMNS.find((column) => column.header === header);
 }
 
@@ -1003,12 +1014,107 @@ function withDerivedAeroColumns(headers, row) {
   DERIVED_AERO_COLUMNS.forEach(({ header, source }) => {
     const sourceIndex = headers.findIndex((candidate) => classifyHeader(candidate) === source);
     if (sourceIndex < 0) return;
-    const value = Number(row[sourceIndex]);
+    const value = numericCell(row[sourceIndex]);
     outHeaders.splice(insertAt, 0, header);
     outRow.splice(insertAt, 0, Number.isFinite(value) ? String(-value) : "");
     insertAt++;
   });
   return { headers: outHeaders, row: outRow };
+}
+
+function numericCell(raw) {
+  const text = String(raw ?? "").trim();
+  return text ? Number(text) : NaN;
+}
+
+// Forces from the area-weighted coefficients: F = ½ · ρ · v² · (−CzA or −CxA),
+// at the speed and density set above the table. Assumes CzA and CxA do not
+// change with speed.
+const FORCE_COLUMNS = [
+  { header: "Downforce [N]", source: "−CzA (downforce)", name: "Downforce", coefficient: "CzA" },
+  { header: "Drag [N]", source: "−CxA (drag)", name: "Drag", coefficient: "CxA" },
+];
+
+function validForceSetting(value) {
+  return typeof value === "number" && Number.isFinite(value) && value > 0;
+}
+
+function readForceSettings() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(FORCE_SETTINGS_KEY) || "{}");
+    return {
+      speedKmh: validForceSetting(saved.speedKmh) ? saved.speedKmh : DEFAULT_FORCE_SETTINGS.speedKmh,
+      density: validForceSetting(saved.density) ? saved.density : DEFAULT_FORCE_SETTINGS.density,
+    };
+  } catch {
+    return { ...DEFAULT_FORCE_SETTINGS };
+  }
+}
+
+function dynamicPressure({ speedKmh, density }) {
+  const speed = speedKmh / 3.6;
+  return 0.5 * density * speed * speed;
+}
+
+function forceColumnNote(column) {
+  const settings = browserState.forceSettings;
+  return `${column.name} = ½ · ρ · v² · (−${column.coefficient}) with v = ${settings.speedKmh} km/h ` +
+    `(${(settings.speedKmh / 3.6).toFixed(2)} m/s) and ρ = ${settings.density} kg/m³, so ½ · ρ · v² = ${dynamicPressure(settings).toFixed(1)} Pa. ` +
+    `Change the speed and density above the table. Assumes ${column.coefficient} does not change with speed.`;
+}
+
+function forceSettingInput(labelText, unit, key) {
+  const label = document.createElement("label");
+  label.className = "force-setting";
+  const input = document.createElement("input");
+  input.type = "number";
+  input.min = "0";
+  input.step = "any";
+  input.value = String(browserState.forceSettings[key]);
+  input.dataset.forceSetting = key;
+  input.setAttribute("aria-label", `${labelText} (${unit})`);
+  input.addEventListener("change", () => {
+    const value = Number(input.value);
+    if (!validForceSetting(value)) {
+      input.setCustomValidity("Enter a number above 0.");
+      input.title = "Enter a number above 0.";
+      return;
+    }
+    input.setCustomValidity("");
+    input.title = "";
+    browserState.forceSettings = { ...browserState.forceSettings, [key]: value };
+    try {
+      localStorage.setItem(FORCE_SETTINGS_KEY, JSON.stringify(browserState.forceSettings));
+    } catch {}
+    if (browserState.coefficientRows.length) renderCsvTables(browserState.coefficientRows);
+  });
+  label.append(labelText, input, unit);
+  return label;
+}
+
+// Adds Downforce [N] / Drag [N] after the −CzA / −CxA columns. Done at render
+// time (not in the cached CSV rows) so speed and density can change.
+function withForceColumns(data) {
+  const row = data.rows[data.rows.length - 1];
+  if (!row) return data;
+  const present = FORCE_COLUMNS.filter(({ source }) => data.headers.includes(source));
+  if (!present.length) return data;
+  const pressure = dynamicPressure(browserState.forceSettings);
+  const headers = [...data.headers];
+  const values = [...row];
+  let insertAt = Math.max(...present.map(({ source }) => headers.indexOf(source))) + 1;
+  present.forEach(({ header, source }) => {
+    const value = numericCell(row[data.headers.indexOf(source)]);
+    headers.splice(insertAt, 0, header);
+    values.splice(insertAt, 0, Number.isFinite(value) ? String(value * pressure) : "");
+    insertAt++;
+  });
+  return { ...data, headers, rows: [...data.rows.slice(0, -1), values] };
+}
+
+// Forces in newtons get one decimal; coefficients keep three.
+function valueDecimals(header) {
+  return FORCE_COLUMNS.some((column) => column.header === header) ? 1 : 3;
 }
 
 async function loadCsvTable(file) {
@@ -1077,7 +1183,7 @@ function coefficientReadErrors(coefficientRows) {
 }
 
 function renderCsvTables(coefficientRows) {
-  const validRows = coefficientRows.filter((data) => Array.isArray(data.headers) && Array.isArray(data.rows));
+  const validRows = coefficientRows.filter((data) => Array.isArray(data.headers) && Array.isArray(data.rows)).map(withForceColumns);
   const readErrors = coefficientReadErrors(coefficientRows);
   browserState.columnHeaders = [...new Set(validRows.flatMap((data) => data.headers))];
   const customizeButton = el.summary.querySelector(".customize-columns");
@@ -1106,7 +1212,8 @@ function renderCsvTables(coefficientRows) {
     const note = document.createElement("p");
     note.className = "comparison-note";
     note.textContent = "Δ = this simulation minus the reference. −CzA and −CxA are the downforce and drag coefficients × reference area " +
-      "with the sign flipped, so a positive Δ there means more downforce or more drag. Other columns are the exported monitors, unchanged.";
+      "with the sign flipped, so a positive Δ there means more downforce or more drag. Downforce [N] and Drag [N] are those values × ½ · ρ · v² " +
+      "at the speed and density set above. Other columns are the exported monitors, unchanged.";
     collective.appendChild(note);
   }
 
@@ -1143,7 +1250,7 @@ function renderCsvTables(coefficientRows) {
           const value = coefficientValue(data, column.key);
           const referenceValue = coefficientValue(referenceRow, column.key);
           const difference = value === null || referenceValue === null ? null : value - referenceValue;
-          row.appendChild(cell("td", difference === null ? "" : difference.toFixed(3)));
+          row.appendChild(cell("td", difference === null ? "" : difference.toFixed(valueDecimals(column.key))));
         } else {
           const index = data.headers.indexOf(column.key);
           const value = index < 0 ? "" : sourceRow[index] ?? "";
@@ -1244,7 +1351,7 @@ function drawMonitorChart(coefficientRows, header, referenceRow) {
     label.setAttribute("y", "18");
     label.setAttribute("text-anchor", "middle");
     label.setAttribute("class", "monitor-tick-label");
-    label.textContent = tick.toFixed(3);
+    label.textContent = tick.toFixed(valueDecimals(header));
     svg.appendChild(label);
   });
 
@@ -1270,7 +1377,7 @@ function drawMonitorChart(coefficientRows, header, referenceRow) {
     valueLabel.setAttribute("x", String(labelWidth + plotWidth + 16));
     valueLabel.setAttribute("y", String(y + 4));
     valueLabel.setAttribute("class", "monitor-value-label");
-    valueLabel.textContent = value.toFixed(3);
+    valueLabel.textContent = value.toFixed(valueDecimals(header));
     svg.appendChild(valueLabel);
   });
   return svg;
@@ -1409,7 +1516,7 @@ function formatCoefficientValue(header, rawValue) {
   if (!value) return value;
   const numeric = Number(value);
   if (/^iteration$/i.test(header)) return Number.isFinite(numeric) ? String(numeric) : value;
-  return Number.isFinite(numeric) ? numeric.toFixed(3) : value;
+  return Number.isFinite(numeric) ? numeric.toFixed(valueDecimals(header)) : value;
 }
 
 function simulationNameFromCsvPath(path) {

@@ -48,6 +48,21 @@ forces (correction from the user, same day; the columns were first labelled
 displayed as exported.
 **Why:** the user asked to keep the raw values and also show downforce and drag.
 
+## 2026-10-02 — Downforce [N] and Drag [N] at a chosen speed
+
+Requested by the user. `F = ½ · ρ · v² · (−CzA)` (and the same with CxA), with
+one speed and density for all simulations, set in the table toolbar and kept
+in the browser's local storage. Defaults: 60 km/h (CFD-Tool's preset speed)
+and 1.18415 kg/m³ (STAR-CCM+'s default air density); the density must match
+the reference density of the team's coefficient reports, which is stored in
+the .sim file and not in the exported results.
+**Why one speed:** comparing designs at the same speed is the common use, and
+most result folders have no `Settings` file with the simulated speed
+(`Vehicle State/Velocity`, km/h). Scaling with v² assumes CzA and CxA do not
+change with speed; the hover note says so.
+The force columns are computed when the table is drawn, not stored with the
+cached CSV rows, so changing the speed or density only redraws the table.
+
 ## 2026-10-02 — Filenames are not parsed for navigation (except pressure linking)
 
 Image sections are stepped by natural filename order, not by an mm position
