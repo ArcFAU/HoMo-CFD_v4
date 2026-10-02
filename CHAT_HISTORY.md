@@ -4410,3 +4410,29 @@ The background watcher of the post job (job 4285206 in `exp`) finished; no new u
 > 4. **"Post-processing failed":** HoMo now spots an uncaught macro error in the post log and shows the case in red with **Download anyway**. Checked on your real cases: it found one genuine failure, `001_post` from 31 July (a `NullPointerException`, and the job never finished), which HoMo used to show as still post-processing. Errors the 3D export handles itself don't trigger it.
 >
 > All tests pass (71 unit tests, 128 → 134 browser checks), your HoMo server runs the new code, the portable zip is rebuilt, and the changes are on GitHub `master`.
+
+## 2026-10-02 — What else
+
+### User message (verbatim)
+
+> okay, anything else?
+
+### Contributor messages (verbatim)
+
+> Checking on the test job first:
+
+> Nothing more is needed from you right now. The only open item is the test job: it's 9 minutes in and needs about 50 more. When it ends, I'll check that the vortex part now has values and show you the result.
+>
+> When you have time, these are worth considering, in my order of usefulness:
+> 1. **Share HoMo with a teammate:** give them `dist\HoMo-CFD-portable.zip`. I can also put it on GitHub as a release download.
+> 2. **3D viewer extras** from earlier:
+>    - mirroring the half car into a full car,
+>    - reading the exact value under the mouse pointer,
+>    - a section cut.
+>
+>    Now that skin friction and vortices are coming in, the value under the pointer is probably the most useful.
+> 3. **Tidy up Fritz:** once the test is through, the test folder `exp` (a 10 GB `.sim` copy) can go. I won't delete anything there myself.
+
+### Work record
+
+- Job 4285535 running (5:08 elapsed at 21:13). No changes.
