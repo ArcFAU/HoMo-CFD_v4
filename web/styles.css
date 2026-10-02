@@ -1567,3 +1567,16 @@ select {
 .cluster-stale {
   color: var(--muted);
 }
+
+/* No scroll bars in the image viewer: zoomed images move by dragging, the
+   wheel zooms, and the 3-4 case layout still scrolls with the wheel over a
+   panel header or caption. */
+.image-viewer-stage,
+.compare-image-stage {
+  scrollbar-width: none;
+}
+
+.image-viewer-stage::-webkit-scrollbar,
+.compare-image-stage::-webkit-scrollbar {
+  display: none;
+}

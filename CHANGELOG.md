@@ -19,6 +19,7 @@ User-visible changes, newest first. Detailed reasoning lives in
 - Tests: `tests/test_serve.py` and the headless browser suite `tests/run_browser_tests.py` on generated data.
 
 ### Changed
+- The image viewer shows no scroll bars: move zoomed images by dragging, zoom with the wheel or `+` / `-`; with 3–4 cases the window still scrolls with the wheel over a panel header or caption.
 - The table toolbar is hidden behind the working-directory and cluster cards, a table that finishes loading no longer replaces an open card, and the cards' inputs use the dark theme.
 - Faster start-up with many simulations: 120 simulations load in about 4 s (was 5.7 s).
 

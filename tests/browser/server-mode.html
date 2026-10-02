@@ -90,6 +90,16 @@ runTests(async () => {
   check("- zooms out", viewer.getElementById("zoom-level").textContent === "83%", viewer.getElementById("zoom-level").textContent);
   key(win, "0");
   check("0 resets zoom", viewer.getElementById("zoom-level").textContent === "100%", viewer.getElementById("zoom-level").textContent);
+  const panelStage = viewer.querySelector(".compare-image-stage");
+  const barWidth = (element) => {
+    const style = win.getComputedStyle(element);
+    return element.offsetWidth - element.clientWidth - parseFloat(style.borderLeftWidth) - parseFloat(style.borderRightWidth);
+  };
+  check("no scroll bars in the image viewer", win.getComputedStyle(stage).scrollbarWidth === "none" && barWidth(stage) === 0 && barWidth(panelStage) === 0,
+    `${win.getComputedStyle(stage).scrollbarWidth} window ${barWidth(stage)} px, panel ${barWidth(panelStage)} px`);
+  stage.scrollTop = 200;
+  check("3-4 case layout is still scrollable without the bar", stage.scrollTop > 0, String(stage.scrollTop));
+  stage.scrollTop = 0;
 
   // Pressure plot, scene gallery, 3D viewer from the tree.
   doc.querySelector('summary.tree-entry[data-path="caseA/PressureDistributions/pd_FW_x-Section"]').click();

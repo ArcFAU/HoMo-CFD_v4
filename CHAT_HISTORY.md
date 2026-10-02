@@ -3183,3 +3183,41 @@ Messages that quoted the user's cluster user name or host are shown with those m
 > One note for step 4 (submitting jobs): your HoMo session goes to the jump host, but your other WinSCP session goes straight to `fritz.nhr.fau.de`, which can submit jobs. We can decide which one to use when we get there.
 >
 > All tests pass (50 unit tests, 91 browser checks). Committed and pushed to GitHub `master`.
+
+## 2026-10-02 — Remove scroll bars from the image viewer
+
+### User message (verbatim)
+
+> can we remove scrol bars from image viewer?
+
+### Contributor messages (verbatim)
+
+> The comparison window has two kinds of scroll bars: one inside each image panel when you zoom in, and one on the whole window when 3–4 cases don't fit. Both can go:
+> - **Inside the panels:** you already move a zoomed image by dragging it, and the mouse wheel zooms.
+> - **The whole window (3–4 cases):** with the bar gone, the mouse wheel over a panel's header or caption still scrolls it.
+>
+> Hiding them while keeping scrolling working:
+
+> The 2-pixel difference is the panel border, not a scroll bar. I'm fixing the check to subtract borders. I'm also simplifying the second check: a synthetic wheel event doesn't scroll in a browser, so it can only honestly confirm the area is still scrollable.
+
+> All 93 browser checks pass. Running the unit tests too, then the docs:
+
+### Work record
+
+- `web/styles.css`: `.image-viewer-stage` and `.compare-image-stage` get `scrollbar-width: none` and a hidden `::-webkit-scrollbar`; overflow stays `auto`, so drag-pan, synced panning and the 3–4 case layout's scrolling keep working.
+- Tests: `tests/browser/server-mode.html` +2 checks (no scroll bar width on the window or a panel, border-corrected; the 3–4 case layout is still scrollable).
+- Docs: `CHANGELOG.md`, `STATUS.md`.
+- Checks: `py -m unittest discover -s tests` 50/50 OK; `py tests/run_browser_tests.py` 93/93 passed.
+
+### Final response (verbatim)
+
+> Done. The image viewer no longer shows scroll bars, neither inside the image panels nor on the window itself. Everything still moves the same way:
+>
+> - **Zoomed image:** drag it with the mouse to move around. The mouse wheel or `+` / `-` zooms, `0` resets.
+> - **3–4 cases:** when they don't fit, scroll with the mouse wheel over a panel's header (the case and field selectors) or its caption. Over the image itself the wheel zooms, as before.
+>
+> It applies to the scene gallery too. Close and reopen any viewer windows to pick up the change.
+>
+> All tests pass (50 unit tests, 93 browser checks). Committed and pushed to GitHub `master`.
+>
+> Still open from before: did you delete the six case folders on Fritz, or should we look into what removed them?
