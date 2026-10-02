@@ -6,6 +6,7 @@ User-visible changes, newest first. Detailed reasoning lives in
 ## 2026-10-02
 
 ### Added
+- **HoMo CFD icon:** an inverted wing profile with flow lines, in the browser tabs of all windows (`web/favicon.svg`, `web/homo-cfd.ico`) and on a desktop shortcut: `Create desktop shortcut.bat` (also in the portable zip) puts a **HoMo CFD** shortcut on the desktop that starts HoMo CFD.
 - **"Post-processing failed"** in Simulations on Fritz: when the newest post log has an uncaught macro error (a Java exception at the start of a line, or a macro compile error), the case shows in red instead of "Ready to download" and offers **Download anyway**. Errors the 3D export catches itself don't count. A case with a post log now counts as post-processing even without solver logs (test folders set up by hand).
 - **3D export installed in `SCRIPT_RANS`** (previous macro kept as `postprocessing.java.bak`). `export3D.java` writes the car (`<sim>.case`, 10 fields) and the Lambda2/Bad_Cells parts (`<sim>_flow.case`, flow fields only) as two exports; the 3D viewer reads all `.case` files of a `3D-data` folder as one model.
 - **More 3D data:** `starccm/export3D.java` now also exports skin friction coefficient, y+, and the magnitudes of wall shear stress, velocity and vorticity, plus the simulation's `Lambda2` part (vortex cores, iso-surface of neg(Lambda2)) and `Bad_Cells` part, and a `fields.txt` list of all field functions. It finds `CpZ-CpX` (missed before) and skips the `Cells deleted from …` regions. Not yet run in STAR-CCM+.
@@ -27,6 +28,7 @@ User-visible changes, newest first. Detailed reasoning lives in
 - Tests: `tests/test_serve.py` and the headless browser suite `tests/run_browser_tests.py` on generated data.
 
 ### Changed
+- The portable build deletes its unpacked folder after writing the zip, so `dist/` holds only the zip and the cached Python download.
 - **Sidebar:** the **HoMo CFD** title is now the working-directory button and shows the folder underneath (replaces the separate Working directory button); **3D viewer** and **Cluster** (renamed from Open 3D Cp viewer and Fritz cluster) sit side by side at the bottom of the sidebar and stay visible when the folder tree scrolls.
 - Portable zip for teammates: now includes the STAR-CCM+ macros (`starccm/`, with instructions for their own template) and no longer the changelog; `starccm/README.md` rewritten for teammates.
 - **Faster image viewer (speed over memory):** the first image shows as soon as it is read; the rest of the sequence loads in the background and stays loaded, so stepping back and forth or holding an arrow key doesn't wait again, and switching back to a field or axis is instant. The comparison window lists a case in one request instead of one per section folder; single folders and the 3D scene gallery no longer read every image before showing the first. Measured on a real case: 45 ms per step instead of 75 ms, 3D scene gallery open in 0.42 s instead of 0.81 s.

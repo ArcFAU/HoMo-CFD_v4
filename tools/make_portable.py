@@ -28,7 +28,7 @@ PYTHON_URL = f"https://www.python.org/ftp/python/{PYTHON_VERSION}/{PYTHON_ZIP}"
 PYTHON_SHA256 = "a93abe456ab01bd96d7a085b3cdb6566b3063f4241360d114142fbdb07f0a310"
 
 # What a teammate needs to run the app; never tests, notes, data or secrets.
-APP_FILES = ["serve.py", "cluster.py", "Start HoMo CFD.bat", "README.md"]
+APP_FILES = ["serve.py", "cluster.py", "Start HoMo CFD.bat", "Create desktop shortcut.bat", "README.md"]
 # starccm/: the STAR-CCM+ macros for the 3D export, which teammates add to their own template.
 APP_FOLDERS = ["web", "starccm"]
 
@@ -66,7 +66,7 @@ def with_app_folder(pth_text):
     return "\n".join(lines) + "\n"
 
 
-def build(app=APP, archive=ARCHIVE, package=None, verify=None):
+def build(app=APP, archive=ARCHIVE, package=None, verify=None, keep_folder=False):
     package = package or python_package()
     if app.exists():
         if app.parent != DIST and not (app / "serve.py").is_file():
@@ -91,6 +91,8 @@ def build(app=APP, archive=ARCHIVE, package=None, verify=None):
         for path in sorted(app.rglob("*")):
             if path.is_file():
                 out.write(path, Path(app.name) / path.relative_to(app))
+    if not keep_folder:  # only the zip is shared; the unpacked folder is not needed
+        shutil.rmtree(app)
     return archive
 
 

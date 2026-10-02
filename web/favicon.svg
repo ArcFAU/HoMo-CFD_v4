@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- HoMo CFD: an inverted wing profile (downforce) with flow lines, on the app's dark background. -->
+  <rect width="64" height="64" rx="14" fill="#0b0f14"/>
+  <path d="M5 19 C 22 15, 40 11, 59 9" fill="none" stroke="#3d9cf0" stroke-width="5" stroke-linecap="round"/>
+  <path d="M5 47 C 22 52, 42 47, 59 34" fill="none" stroke="#e2231a" stroke-width="5" stroke-linecap="round"/>
+  <g transform="rotate(-12 32 30)">
+    <path d="M7 31 C 7 26.5, 13 25, 28 25 C 41 25, 52 25.5, 59 26 C 49 30, 38 36, 26 38.5 C 15 40.5, 7 37, 7 31 Z" fill="#e8eef6"/>
+  </g>
+</svg>

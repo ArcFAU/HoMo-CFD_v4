@@ -4607,3 +4607,80 @@ The background watcher of the post job (job 4285206 in `exp`) finished; no new u
 > - Also cleared about 400 MB of my own temporary files outside the project.
 >
 > Python's cache folders (`__pycache__`) come back whenever HoMo runs; that's normal and Git ignores them. All tests pass (71 unit tests, 136 browser checks), and the changes are on GitHub `master`. The 3D export test on Fritz is still running; I'll report when it's done.
+
+## 2026-10-02 — HoMo CFD icon: browser tab and desktop shortcut
+
+### User message (verbatim)
+
+> one last thing. icon
+
+### Clarification (question tool; the user's answer verbatim)
+
+- Which icon do you mean? (Browser tab icon / Desktop shortcut icon / Icons on buttons) → "Browser tab icon, Desktop shortcut icon"
+
+### Contributor messages (verbatim)
+
+> "Icon" could mean a few things, so I'll check which one you mean:
+
+> Both, then:
+> - **Browser tab icon:** an SVG icon in all three windows (main window, image viewer, 3D viewer).
+> - **Desktop shortcut icon:** the same design as a Windows `.ico`. I'll create a "HoMo CFD" shortcut on your desktop, and add a small "Create desktop shortcut" script to the zip so teammates can do the same.
+>
+> First the design. I'm thinking of a dark rounded square, matching the app, with an inverted wing profile (downforce) in white and two flow lines in the app's blue and the team's red. Drawing it and checking how it reads at real icon sizes (16 to 256 px):
+
+> My preview script tried to edit the SVG file as if it were a web page, which doesn't work. I'm using a small preview page instead:
+
+> It reads well at every size, but the wing looks too much like a symmetric lens (almost an eye). A real inverted wing profile reads better: rounded leading edge, flat top, bulged suction side underneath, sharp trailing edge, set at a slight angle. Drawing that version for comparison:
+
+> Version B reads clearly as a wing in airflow, even at 16 px. I'll use it.
+>
+> Next, the Windows icon file. It needs sharp PNG renderings at 16–256 px with transparent corners. I'll render those with the headless browser and pack them into a `.ico`. Reusing the browser-control code from my screenshot helper:
+
+> Writing the renderer: it draws the SVG at each size on a transparent background, captures it as PNG and packs the images into `web/homo-cfd.ico`:
+
+> Windows reads the icon file (8 KB, 9 sizes). Checking the 256 px rendering for clean, transparent corners:
+
+> The 256 px image shows the icon at 16 px. My resize command declared the same variable each time, which fails from the second size on, so every size was captured at 16 px. Fixing the command and rendering again:
+
+> The 256 px icon is clean, with transparent corners. Next:
+> 1. **Link the icon in all three pages,** as SVG plus the `.ico` as a fallback.
+> 2. **A `Create desktop shortcut.bat`** for the zip. Double-clicked once, it puts a "HoMo CFD" shortcut with this icon on the desktop. It finds the desktop even when OneDrive moves it, and it passes the folder path in an environment variable, so unusual characters in folder names can't break it.
+
+> Both icons are served with the right types. Now creating your desktop shortcut by running the new script itself, which also tests it, and reading the shortcut back to verify it:
+
+> Your shortcut is on the desktop: it starts `Start HoMo CFD.bat` from the project folder and uses the new icon. The "Input redirection" message comes only from the 5-second pause at the end, which can't wait when run from a script; on a double-click it works. To make the script exit cleanly in both cases, I'm swapping that pause for an equivalent that doesn't need a keyboard, and adding a browser check for the icons:
+
+> That quoting doesn't work from this shell; rerunning through PowerShell as before, and checking the inserted test line:
+
+> The script now finishes cleanly (exit code 0). Running both test suites and rebuilding the zip:
+
+> Both suites pass (71 unit tests, 137 browser checks). The zip now has 57 files, including `Create desktop shortcut.bat` and the icon.
+>
+> Each rebuild recreates the unpacked `dist\HoMo-CFD` folder I cleaned up earlier. To keep `dist` tidy for good, the build will delete that folder once the zip is written:
+
+> `dist` now holds only the zip and the Python download cache. Updating the docs:
+
+> The docs are updated, and the zip is rebuilt with the new README. Writing the log entry and committing:
+
+### Work record
+
+- `web/favicon.svg` (new; version B: inverted wing profile rotated −12°, blue flow line above, red below, dark rounded square). Previews at 16–256 px on dark and light backgrounds checked; version A (symmetric lens) rejected.
+- `web/homo-cfd.ico` (new, 25 KB): PNG renderings at 16, 20, 24, 32, 40, 48, 64, 128, 256 px from headless Chrome with a transparent background (scratchpad `render_ico.py`), PNG-in-ICO; `System.Drawing.Icon` reads it.
+- `web/index.html`, `web/image-viewer.html`, `web/3d-viewer.html`: icon links. serve.py serves `image/svg+xml` and `image/x-icon`.
+- `Create desktop shortcut.bat` (new, CRLF): PowerShell `WScript.Shell` shortcut `HoMo CFD.lnk` on the desktop → `Start HoMo CFD.bat`, icon `web\homo-cfd.ico`; folder via `HOMO_DIR`; `ping` pause instead of `timeout`. Run for the user: `C:\Users\Archit\Desktop\HoMo CFD.lnk` verified (target, start-in folder, icon); exit code 0.
+- `tools/make_portable.py`: ships the shortcut script; deletes the unpacked folder after zipping (`keep_folder`). Zip rebuilt (57 files, 12.5 MB); `dist/` holds the zip and `cache/` only.
+- Tests: `tests/test_portable.py` (shortcut script and icon in the zip; unpacked folder removed), `tests/browser/first-start.html` (+1 icon check). Docs: `README.md`, `CHANGELOG.md`, `STATUS.md`, `tests/README.md`.
+- Job 4285535 on Fritz still running (35 min at 21:43).
+- Checks: `py -m unittest discover -s tests` 71/71 OK; `py tests/run_browser_tests.py` 137/137 passed.
+
+### Final response (verbatim)
+
+> Done. HoMo CFD has its own icon: an inverted wing profile with a blue flow line above and a red one below, on the app's dark background.
+>
+> - **Browser tab:** the main window, image viewer and 3D viewer all show it. Reload the page to see it; browsers sometimes cache the old (blank) tab icon for a while.
+> - **Desktop:** there's now a **HoMo CFD** shortcut with this icon on your desktop. It starts HoMo just like `Start HoMo CFD.bat`. You can also pin it to the taskbar or Start menu (right-click → Pin).
+> - **For teammates:** the zip now contains `Create desktop shortcut.bat`. Double-clicking it once puts the same shortcut on their desktop; it works wherever they unzipped HoMo.
+>
+> The small black console window that stays open while HoMo runs still shows the standard Windows console icon; Windows doesn't let a batch file change that.
+>
+> The zip is rebuilt (`dist\HoMo-CFD-portable.zip`), and the build now leaves only the zip in `dist`. All tests pass (71 unit tests, 137 browser checks), and the changes are on GitHub `master`. The 3D export test on Fritz is at 35 minutes; I'll report when it's done.
