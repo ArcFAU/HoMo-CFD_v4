@@ -17,7 +17,7 @@ import subprocess
 import tempfile
 import time
 from pathlib import Path
-from urllib.parse import unquote
+from urllib.parse import quote, unquote
 
 # Control characters and double quotes would break a WinSCP script line.
 UNSAFE = re.compile(r'["\x00-\x1f\x7f]')
@@ -67,12 +67,19 @@ def check_remote_folder(value):
     return value
 
 
+def open_command(session):
+    """Log in with a saved session. HoMo CFD only uses full paths, so the
+    session's own local folder is replaced by the temp folder: WinSCP stops a
+    script when that folder no longer exists (e.g. a moved results folder)."""
+    return f'open "{session}" -rawsettings LocalDirectory="{quote(tempfile.gettempdir(), safe=":")}"'
+
+
 def test_script(session, remote_folder=""):
     """WinSCP script that logs in, changes to the folder and prints it.
 
     Read-only: nothing is uploaded, downloaded, started or deleted.
     """
-    lines = ["option batch abort", "option confirm off", f'open "{session}"']
+    lines = ["option batch abort", "option confirm off", open_command(session)]
     if remote_folder:
         lines.append(f'cd "{remote_folder}"')
     lines += ["pwd", "exit"]
@@ -276,7 +283,7 @@ def case_status_command():
 
 
 def status_script(session, remote_folder):
-    return ["option batch abort", "option confirm off", f'open "{session}"', f'cd "{remote_folder}"',
+    return ["option batch abort", "option confirm off", open_command(session), f'cd "{remote_folder}"',
             f"call {case_status_command()}", "exit"]
 
 
@@ -331,7 +338,7 @@ def download_script(session, remote_folder, case, local_dir, include_sim=False):
     find_filters = " ".join(f'! -name "{pattern}"' for pattern in excluded)
     remote_case = f"{remote_folder}/{case}"
     return [
-        "option batch abort", "option confirm off", f'open "{session}"',
+        "option batch abort", "option confirm off", open_command(session),
         f'call cd "{remote_case}" && find . -type f {find_filters} -printf "%s\\n" | '
         f"awk '{{n++; b+=$1}} END {{print \"{TOTAL_PREFIX}\" n+0 \"|\" b+0}}'",
         f'synchronize local -filemask="|{"; ".join(excluded)}" "{local_dir}" "{remote_case}"',
@@ -446,7 +453,7 @@ def format_settings(pairs):
 
 def settings_fetch_script(session, remote_folder, source, local_file):
     """Download <source>/Settings (read-only on Fritz)."""
-    return ["option batch abort", "option confirm off", f'open "{session}"',
+    return ["option batch abort", "option confirm off", open_command(session),
             f'get "{remote_folder}/{source}/Settings" "{local_file}"', "exit"]
 
 
@@ -466,7 +473,7 @@ def new_case_script(session, remote_folder, template, case, template_dir, settin
     template_dir on this computer; the echo lines mark how far the script got.
     """
     return [
-        "option batch abort", "option confirm off", f'open "{session}"', f'cd "{remote_folder}"',
+        "option batch abort", "option confirm off", open_command(session), f'cd "{remote_folder}"',
         f'get -filemask="|*.sim; *.sim~" "{template}/*" "{template_dir}\\"',
         f"echo {TEMPLATE_FETCHED}",
         f'mkdir "{case}"',
@@ -481,13 +488,13 @@ def new_case_script(session, remote_folder, template, case, template_dir, settin
 
 def submit_script(session, remote_folder, case):
     """Start the job chain: mesh.sh submits rans.sh, which submits post.sh."""
-    return ["option batch abort", "option confirm off", f'open "{session}"',
+    return ["option batch abort", "option confirm off", open_command(session),
             f'call cd "{remote_folder}/{case}" && sbatch mesh.sh', "exit"]
 
 
 def submit_test_script(session, remote_folder):
     """Read-only check that the session can use SLURM."""
-    lines = ["option batch abort", "option confirm off", f'open "{session}"']
+    lines = ["option batch abort", "option confirm off", open_command(session)]
     if remote_folder:
         lines.append(f'cd "{remote_folder}"')
     return lines + ["call sbatch --version", "exit"]
@@ -495,7 +502,7 @@ def submit_test_script(session, remote_folder):
 
 def jobs_script(session):
     """Your queued and running jobs with their working folders (read-only)."""
-    return ["option batch abort", "option confirm off", f'open "{session}"',
+    return ["option batch abort", "option confirm off", open_command(session),
             f'call squeue -u $USER -h -o "{JOB_PREFIX}%i|%j|%T|%M|%Z"', "exit"]
 
 

@@ -3675,3 +3675,122 @@ Messages that quoted the user's cluster user name or host are shown with those m
 > As you said, part show/hide is left out. All tests pass (69 unit tests, 121 browser checks). Committed and pushed to GitHub `master`, and I restarted your HoMo server: reload the page and reopen the 3D viewer to try it.
 >
 > Should I also put the zip on GitHub as a release download, so teammates can get it from there?
+
+## 2026-10-02 — Automatic 3D data export from STAR-CCM+; WinSCP login fix
+
+### User message (verbatim)
+
+> what about 3d view export?
+
+### Clarification (question tool; the user's answer verbatim)
+
+- What do you mean by "3D view export"? (Automatic 3D data / Save view as image / Both) → "Automatic 3D data"
+
+### Contributor messages (verbatim)
+
+> "3D view export" could mean two things here, so first I'm checking whether it came up earlier in the project:
+
+> Earlier in the project, "3D export" meant exporting the 3D surface data from STAR-CCM+ by hand (the `3D-data` folders). Checking whether the team's post-processing macro already does that automatically. I'm searching a local copy of `postprocessing.java` for export commands:
+
+> The team's `postprocessing.java` saves section images, the 3D scene pictures (the `3D` folder) and pressure distributions, but **no 3D data for the viewer**. Only `0823_upsi` has a `3D-data` folder, and that one was exported by hand, front wing only. So "3D view export" could mean two different things:
+
+> Got it: STAR-CCM+ should export the 3D surface data automatically for every simulation. In your `finished` folder there's a `test1.java` next to a `UPSI_CFD_BASE_0823_surface.case`, which looks like an earlier export macro. Checking it for anything sensitive first, then reading it:
+
+> That `test1.java` is a recorded STAR-CCM+ macro. It shows the exact export call your STAR-CCM+ version uses:
+>
+> `ImportManager.export(path, regions, boundaries, parts, part surfaces, scalar fields, options)`
+>
+> That's the template I need. Next I'm checking which boundaries it exported and how they're named, and how big the resulting files are:
+
+> This export has the whole car as 10 parts: Frontwing, mono, Rearwing, Remaining, Undertray, wheels, rims and suspension. The geometry file is 72 MB, plus about 6 MB per field. It leaves out the domain (floor, inlet, outlet, walls) and the internal interfaces, which is what the viewer needs.
+>
+> Next I need the post-processing macro your template actually uses. I'm downloading `SCRIPT_RANS/postprocessing.java` (read-only) through your fritz session into the scratchpad. Macros don't contain the licence key (that's in the `.sh` scripts), but I'll check anyway:
+
+> The download failed (exit code 1). I'm checking WinSCP's message to see why (user name masked):
+
+> Found the cause, and it matters beyond this download. Your fritz WinSCP session has a **local folder** setting that points to `C:\Users\Archit\Downloads\HoMo-CFD\0830_mk3`, and that folder no longer exists. WinSCP tries to open it on login and stops the script. That would also break **Start** and the job list in HoMo, which use the same session.
+>
+> Checking the local-folder setting of both sessions:
+
+> The jump-host session uses `D:\SIM`, which exists. The fritz session points to `HoMo-CFD\0830_mk3`, which was removed from the project folder after 15:19, when this session last worked.
+>
+> HoMo never uses WinSCP's local folder, since all its paths are complete. So the robust fix is for HoMo to set a local folder that always exists (the Windows temp folder) every time it logs in. That also protects teammates from the same problem. Trying it first with a read-only login through your fritz session:
+
+> Both forms work: the login succeeds and the local folder becomes the temp folder. Building this into HoMo: every WinSCP script will log in through one helper that sets the local folder.
+
+> All 70 unit tests pass. Now the macro download again, using HoMo's new login line, which also tests the fix for real:
+
+> The fix works: the session logs in and the macro downloaded. The checker flagged "key-like text", but that check is crude (it also matches any `@`), so I'll see exactly what matched:
+
+> No licence key in it; the match was just a Java `@Override`. The template's version differs from your Downloads copy only in the order of the y and z sections, so I'll work from the template's. Reading its structure:
+
+> The macro reads its `Settings` and then exports images and pressure distributions. The cleanest place for the 3D export is right after the 3D scene pictures. Checking how the recorded macro looks up the Cp field, so the new code uses the same calls:
+
+> The recorded macro confirms the calls I need. My plan:
+> - **A separate macro, `export3D.java`**, for the template. It exports all car surfaces with the five fields your hand export had (PressureCoefficient, TotalPressureCoefficient, CpX, CpZ, CpZCpX) into `3D-data/` of each case. It skips the domain boundaries (floor, inlet, outlet, walls) and the internal interfaces.
+> - **One added call** at the end of `postprocessing.java`, wrapped so that a problem in the export can never break the normal post-processing.
+>
+> STAR-CCM+ seems to be installed on this PC (`test1.java` used `D:\` paths). If so, I can at least compile the macro against STAR's own libraries before it goes near Fritz. Looking for the installation:
+
+> STAR-CCM+ 20.04 is installed; that's version 2506, the same one Fritz runs. It comes with its own Java compiler, so I can compile the macro against STAR's own libraries. Finding the library that contains `ImportManager`:
+
+> The STAR libraries are under `star/lib/java/platform/modules/ext`. Before writing the macro, I'm checking the exact methods it will call against STAR-CCM+ 2506's own classes: the export call, the field lookup, and running one macro from another.
+
+> All the calls exist in STAR-CCM+ 2506:
+> - the exact `export(…, NeoProperty)` call from your recording,
+> - `hasFunction` for checking whether a field exists,
+> - the `WallBoundary` type, so the macro can keep only wall surfaces (not inlets or interfaces),
+> - `StarScript(…).play()` for running one macro from another.
+>
+> Writing the export macro:
+
+> Now the change to `postprocessing.java`: a call at the end of its 3D part, plus a small method that runs `export3D.java` only if that file is there and catches every error. I'm editing a copy in the scratchpad; nothing on Fritz changes.
+
+> Both macros compile against STAR-CCM+ 2506's own libraries. The only compiler note is about an outdated call the existing macro already uses.
+>
+> One more robustness point. A half-car model can still contain empty boundaries, such as `wheel-fr` and `wheel-rr`, which the macro would include. The viewer currently stops with "Invalid coordinate count" on a part without points. Checking how the test data writes geometry, so I can add an empty part to the tests:
+
+> I'm adding an empty `wheel-fr` part to the test data, like a half-car export can contain. The viewer will accept it and leave it out of the part list:
+
+> All 121 browser checks still pass with the empty part in the test data. The viewer opens the case and lists only Frontwing.
+>
+> Next, the instructions. I'm writing a short README for the macro, and putting a ready-to-use copy of both files in a local folder that isn't uploaded to GitHub. The team's `postprocessing.java` contains another person's Fritz path, so it stays out of GitHub.
+
+> Next, the docs. Two changes beyond the macro need recording:
+> - **The login fix:** WinSCP no longer stops when a session's local folder is missing.
+> - **The viewer:** it now accepts empty parts.
+
+> Both suites pass (70 unit tests, 121 browser checks), and the portable zip is rebuilt with today's fixes. Restarting your HoMo server so the login fix takes effect:
+
+> Writing the log entry:
+
+### Work record
+
+- Research (read-only): local `postprocessing.java` copy and the template's `SCRIPT_RANS/postprocessing.java` (downloaded through the fritz session; no licence key, only another user's path in an unused field) export section PNGs, 3D scene PNGs and pressure distributions, no EnSight. `D:\CFD_tool\finished\test1.java` (recorded by the user, STAR-CCM+ 2506) shows `ImportManager.export(String, Collection<Region>, Collection<Boundary>, Collection<Part>, Collection<PartSurface>, Collection<FieldFunction>, NeoProperty)`; the hand export `UPSI_CFD_BASE_0823_surface00000.geo` has 10 car parts (72 MB) and no domain parts. Boundary names in the sim: car walls plus `floor`, `inlet`, `outlet`, `Walls`, `internal-1 N`, `Air/MRF-… [n]`.
+- WinSCP: the fritz session's `LocalDirectory` pointed to the removed `HoMo-CFD\0830_mk3`, so `open` failed ("Error changing directory", exit 1). `cluster.open_command()` adds `-rawsettings LocalDirectory="<encoded temp folder>"` to all 8 logins; verified read-only on Fritz (encoded and plain forms both work).
+- `starccm/export3D.java` (new): wall boundaries (`WallBoundary`) of all regions minus tunnel names and interfaces, fields via `hasFunction`, no regions, per cell, `3D-data/<sim name>.case`, all errors logged. `starccm/README.md`: manual test and template instructions. Patched copy of the template's `postprocessing.java` (adds `export3DData()` after the 3D scenes; plays `export3D.java` via `StarScript` in a catch-all) plus `export3D.java` in `dist/starccm-template/` (git-ignored). Both compiled with STAR-CCM+ 20.04's JDK 21 javac against `star/lib/java/platform/modules/ext/*`; signatures checked with javap. Not run in STAR-CCM+; nothing uploaded to Fritz.
+- `web/3d-viewer.js`: parts with 0 points accepted and left out of the part list. `tests/fixture.py`: empty `wheel-fr` part in the EnSight test case.
+- Tests: `tests/test_cluster.py` (+1: login independent of the local folder; expectations use `open_command`), `tests/test_serve.py` (same).
+- Portable zip rebuilt (`dist/HoMo-CFD-portable.zip`, 12.5 MB). User's server on 5173 restarted.
+- Docs: `CHANGELOG.md`, `STATUS.md`, `DECISIONS.md`, `README.md`, `tests/README.md`, `starccm/README.md`.
+- Checks: `py -m unittest discover -s tests` 70/70 OK; `py tests/run_browser_tests.py` 121/121 passed.
+
+### Final response (verbatim)
+
+> The automatic 3D export is ready to try. I haven't changed anything on Fritz yet.
+>
+> **What I built**
+> - **`export3D.java`**, a new STAR-CCM+ macro. It exports the car's surfaces with the same five fields as your hand export (PressureCoefficient, TotalPressureCoefficient, CpX, CpZ, CpZCpX) into a `3D-data` folder in the case. It skips the wind tunnel (floor, inlet, outlet, walls) and the internal interfaces. A full car comes to about 100 MB.
+> - **A small addition to your template's `postprocessing.java`**: after the 3D scene pictures, it runs `export3D.java`. It's fail-safe: if anything goes wrong in the export, only a line goes into the log, and images, plots and pressure distributions still come out as before.
+> - Both files compile against STAR-CCM+ 2506's own libraries, the version installed on your PC and on Fritz. They haven't run in STAR-CCM+ yet.
+> - The ready-to-use pair is in `dist\starccm-template\`. Instructions are in `starccm\README.md`.
+> - HoMo already shows a downloaded `3D-data` folder as **3D-data · 3D viewer**. I also made the viewer accept empty parts, which a half-car export can contain (such as `wheel-fr`).
+>
+> **Fixed along the way**
+> Your fritz WinSCP session has its local folder set to `HoMo-CFD\0830_mk3`, which no longer exists. WinSCP then refuses to log in, which would have broken **Start** and the job list in HoMo. HoMo now always logs in with the temp folder as local folder, so this can't happen again, for teammates either. Optionally, you can also clear that folder in the session settings in WinSCP.
+>
+> **Next steps**
+> 1. **Test it by hand:** open `0823_upsi`'s `.sim` in STAR-CCM+ on your PC, then **File → Macro → Play Macro…** and choose `dist\starccm-template\export3D.java`. A `3D-data` folder should appear next to the `.sim`. Open it in HoMo and tell me whether the whole car shows up.
+> 2. **Add it to the template:** if the test works, I can upload `export3D.java` and the updated `postprocessing.java` into `SCRIPT_RANS` on Fritz, keeping your current one as `postprocessing.java.bak`. Just say "upload it". Or copy the two files yourself with WinSCP.
+>
+> Each case will then download about 100 MB more. All tests pass (70 unit tests, 121 browser checks), the portable zip is rebuilt, and the changes are on GitHub `master`. I restarted your HoMo server.

@@ -11,6 +11,7 @@ import tempfile
 import threading
 import time
 import unittest
+from urllib.parse import unquote
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -178,11 +179,18 @@ class InputTests(unittest.TestCase):
 class ScriptTests(unittest.TestCase):
     def test_test_script_is_read_only(self):
         lines = cluster.test_script("Fritz", "/home/vault/g/u/Pipeline")
-        self.assertEqual(lines, ["option batch abort", "option confirm off", 'open "Fritz"',
+        self.assertEqual(lines, ["option batch abort", "option confirm off", cluster.open_command("Fritz"),
                                  'cd "/home/vault/g/u/Pipeline"', "pwd", "exit"])
         words = " ".join(lines).split()
         for command in ("put", "get", "rm", "rmdir", "mv", "call", "synchronize", "chmod"):
             self.assertNotIn(command, words)
+
+    def test_login_never_depends_on_the_sessions_local_folder(self):
+        line = cluster.open_command("Fritz")
+        self.assertTrue(line.startswith('open "Fritz" -rawsettings LocalDirectory="'))
+        local = line.split('LocalDirectory="', 1)[1].rstrip('"')
+        self.assertTrue(Path(unquote(local)).is_dir(), local)
+        self.assertNotIn(" ", local, "encoded like WinSCP's own settings")
 
     def test_without_folder_skips_cd(self):
         self.assertNotIn("cd", " ".join(cluster.test_script("Fritz")).split())
@@ -191,7 +199,7 @@ class ScriptTests(unittest.TestCase):
         fake = FakeWinScp(0, "Searching for host...\nAuthenticated.\nSession started.\n/home/vault/g/u/Pipeline\n")
         result = cluster.test_connection(fake, "Fritz", "/home/vault/g/u/Pipeline")
         self.assertEqual((result["ok"], result["remoteFolder"]), (True, "/home/vault/g/u/Pipeline"))
-        self.assertEqual(fake.scripts[0][2], 'open "Fritz"')
+        self.assertEqual(fake.scripts[0][2], cluster.open_command("Fritz"))
 
     def test_connection_failure_gives_hint(self):
         cases = {
@@ -319,7 +327,7 @@ class NewCaseTests(unittest.TestCase):
 
     def test_create_never_overwrites(self):
         lines = cluster.new_case_script("Fritz", "/home/vault/g/u", "SCRIPT_FABSI", "new1", "C:\\t\\tpl", "C:\\t\\s", "D:\\base.sim")
-        self.assertEqual(lines[:4], ["option batch abort", "option confirm off", 'open "Fritz"', 'cd "/home/vault/g/u"'])
+        self.assertEqual(lines[:4], ["option batch abort", "option confirm off", cluster.open_command("Fritz"), 'cd "/home/vault/g/u"'])
         commands = [line.split()[0] for line in lines[4:]]
         self.assertEqual(commands, ["get", "echo", "mkdir", "echo", "put", "put", "put", "echo", "exit"])
         self.assertNotIn("call", commands, "no shell command: it needs a second login and does not stop on errors")

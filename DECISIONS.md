@@ -66,6 +66,16 @@ change with speed; the hover note says so.
 The force columns are computed when the table is drawn, not stored with the
 cached CSV rows, so changing the speed or density only redraws the table.
 
+## 2026-10-02 — 3D data exported by a separate macro the post-processing plays
+
+The 3D viewer needs EnSight surface data for every case, so STAR-CCM+ should
+export it during post-processing on Fritz. The export lives in its own file,
+`export3D.java`, which `postprocessing.java` plays through `StarScript` inside
+a catch-all: a compile or runtime error in the export can never break the
+images and plots, and cases without the file skip it. Only wall boundaries
+of the car are exported (no volume, values per cell), matching what the
+viewer reads and keeping a full car around 100 MB.
+
 ## 2026-10-02 — Portable build with Python's embeddable package
 
 Teammates should unzip and run, like CFD-Tool with its bundled Java. Python's

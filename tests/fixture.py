@@ -76,7 +76,7 @@ def record(text):
 
 
 def write_ensight(folder):
-    """Two-triangle + one-quad surface part with per-element fields."""
+    """Two-triangle + one-quad surface part with per-element fields, plus an empty part."""
     folder.mkdir(parents=True, exist_ok=True)
     nodes = [(0, 0, 0), (1, 0, 0), (0, 1, 0), (1, 1, 0), (2, 0, 0), (2, 1, 0)]
     geometry = b"".join([
@@ -89,6 +89,8 @@ def write_ensight(folder):
         struct.pack(f"<{len(nodes)}f", *[n[2] for n in nodes]),
         record("tria3"), struct.pack("<i", 2), struct.pack("<6i", 1, 2, 3, 2, 4, 3),
         record("quad4"), struct.pack("<i", 1), struct.pack("<4i", 2, 5, 6, 4),
+        # An empty boundary, as a half-car export can contain (e.g. the other side's wheel).
+        record("part"), struct.pack("<i", 2), record("wheel-fr"), record("coordinates"), struct.pack("<i", 0),
     ])
     (folder / "test.geo").write_bytes(geometry)
     lines = ["FORMAT", "type: ensight gold", "", "GEOMETRY", "model: test.geo", "", "VARIABLE"]
@@ -97,6 +99,7 @@ def write_ensight(folder):
             record(name), record("part"), struct.pack("<i", 1),
             record("tria3"), struct.pack("<2f", t1, t2),
             record("quad4"), struct.pack("<1f", q1),
+            record("part"), struct.pack("<i", 2),
         ])
         (folder / f"test.{name}").write_bytes(values)
         lines.append(f"scalar per element: {name} test.{name}")

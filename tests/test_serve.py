@@ -20,6 +20,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent))
+import cluster  # noqa: E402
 import fixture  # noqa: E402
 from test_cluster import FakeWinScp  # noqa: E402
 
@@ -226,7 +227,7 @@ class ClusterApiTests(ApiTests):
     def test_connection_test(self):
         status, data = self.post("/api/cluster/test", {"session": "Fritz", "remoteFolder": "/home/vault/g/u/Pipeline"})
         self.assertEqual((status, data["ok"], data["remoteFolder"]), (200, True, "/home/vault/g/u/Pipeline"))
-        self.assertIn('open "Fritz"', self.fake.scripts[0])
+        self.assertIn(cluster.open_command("Fritz"), self.fake.scripts[0])
         self.assertNotIn("cluster", serve.read_settings(), "testing does not save")
 
     def test_unlock_key_with_pageant(self):
@@ -360,7 +361,7 @@ class ClusterApiTests(ApiTests):
         self.assertEqual(self.post("/api/cluster/submit", {"case": "notListed"})[0], 400)
         status, data = self.post("/api/cluster/submit", {"case": "caseF"})
         self.assertEqual((status, data), (200, {"ok": True, "jobId": "4242"}))
-        self.assertIn('open "Other"', self.fake.scripts[-1], "started with the job session")
+        self.assertIn(cluster.open_command("Other"), self.fake.scripts[-1], "started with the job session")
         self.assertEqual(self.post("/api/cluster/submit", {"case": "caseF"})[0], 409)
 
     def test_submit_needs_job_session(self):
