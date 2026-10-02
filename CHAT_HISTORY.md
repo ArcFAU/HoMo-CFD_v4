@@ -3896,3 +3896,49 @@ Messages that quoted the user's cluster user name or host are shown with those m
 > **To finish the test:** copy `Settings` from `0830_mk2.2` (the case this `.sim` comes from) into `exp`, then submit `post.sh` again. I can do both through your fritz session if you say "go ahead". It's the same kind of post job as before, about 1.5 hours at most.
 >
 > **One more thing the log revealed:** even though the macro failed, the job still printed "Job finished at…". HoMo uses that line, so it would show a failed post-processing as **Ready to download**. I can make HoMo spot a failed macro in the post log and show "Post-processing failed" instead. Should I?
+
+## 2026-10-02 — Post-processing test rerun; what next
+
+### User messages (verbatim)
+
+> done, it is working. i forgot to put it in
+
+> what next?
+
+### Contributor messages (verbatim)
+
+> Good. I'll check the result before recording it: first the log in `starccm` (in case you replaced it with the new one), then the `exp` folder on Fritz (read-only).
+
+> The new run (job 4285206) has finished. The old log you have locally is from the first try, but the listing doesn't show a `3D-data` folder yet; my filter may have hidden it. Checking the folders and the new log's export lines on Fritz (read-only; only matching lines are printed, so the licence key isn't):
+
+> No `3D-data` yet, but no error or "Job finished" in the new log either. The job is most likely still running: it has made the x and y sections so far, and the 3D part (pressure distributions, 3D scene pictures, then the 3D export) comes last. Checking the job queue (read-only):
+
+> The post job is still running (17 min 51 s so far, limit 1.5 h). So far it has made the x and y sections; the 3D export comes at the very end, after the pressure distributions and 3D scene pictures. So "working" is right so far, but the 3D export hasn't run yet.
+>
+> I'll watch the job in the background: one read-only check every 5 minutes. When it finishes, I'll check the log and the `3D-data` folder.
+
+> Thanks for adding `Settings`. The post job is running fine: about 18 minutes in, it has made the x and y section images.
+>
+> The 3D export isn't done yet; it runs at the very end, after the pressure distributions and 3D scene pictures. So there's no `3D-data` folder yet.
+>
+> I'm watching the job in the background with a read-only check every 5 minutes. When it finishes, I'll check the log for the export lines and look at the `3D-data` folder, then tell you whether the export worked.
+
+> Checking how far the background watch has got:
+
+> The post job is still running: 18 minutes at the last check, of at most 1.5 hours. The 3D export comes at the very end. Here's what's left, in order:
+>
+> 1. **Wait for the test to finish** (running now, nothing for you to do). When the job ends, I'll check that `3D-data` exists, look at the export lines in the log, and screenshot the result in HoMo's 3D viewer.
+> 2. **Put the macros into your template.** If the test works, `export3D.java` and the new `postprocessing.java` go into `SCRIPT_RANS`, so every new simulation gets the 3D export automatically. Say "upload it" and I'll do it, keeping the old macro as `postprocessing.java.bak`, or copy them yourself with WinSCP.
+> 3. **Spot failed post-processing in HoMo.** Your first test showed the gap: a failed macro still ends with "Job finished", so HoMo would call the case "Ready to download". I'd make it show "Post-processing failed" instead. That's small, and I can build it while the job runs; say yes.
+> 4. **Small cleanups for you:**
+>    - Delete `starccm\post.o4285168`, since it contains your licence key (Git already ignores it).
+>    - Optionally, in WinSCP, clear the local folder of your fritz session; it points to the deleted `HoMo-CFD\0830_mk3`. HoMo no longer needs this.
+> 5. **Teammates:** when someone is ready, give them `dist\HoMo-CFD-portable.zip`. I can also put it on GitHub as a release download.
+>
+> My suggestion: let me do item 3 now, and decide on item 2 once the test result is in.
+
+### Work record
+
+- The user added `Settings` to `exp` and resubmitted `post.sh` themselves (job 4285206). Read-only checks through the fritz session: job RUNNING (17:51 elapsed at 17:54); `exp` has the x and y section folders so far, no `3D-data` yet; the new log has no exception and no "Job finished" yet.
+- Background watcher (scratchpad `wait_post.py`): `squeue` every 5 minutes, then `check_exp.py` (folders, `3D-data` listing, export/exception lines of the newest post log; licence-key lines filtered). Result pending.
+- No code changes.
