@@ -3040,3 +3040,30 @@ The user pasted the WinSCP output of their first **Test connection**. Per the no
 > All tests pass (36 unit tests, 85 browser checks). Committed and pushed to GitHub `master`; your server is already running the new version.
 >
 > One privacy note: the output you pasted contains your Fritz user name and key path. That's fine here, but I masked them in the project log so they don't end up on GitHub.
+
+## 2026-10-02 — Step 1 confirmed: Test connection works
+
+### User message (verbatim)
+
+> it's working
+
+### Contributor messages (verbatim)
+
+> Your session and remote folder are saved, and Pageant is running. Recording the result:
+
+### Work record
+
+- Checked through the local API (booleans only): session saved, remote folder saved and absolute, Pageant running. Saved working directory is still `D:\CFD_tool\finished`.
+- `STATUS.md`, `TASK.md`: step 1 confirmed working; next is step 2 when the user says go.
+- No code changed, so the test suites were not rerun.
+
+### Final response (verbatim)
+
+> Great: HoMo can now log in to Fritz with your own WinSCP session, and your session and remote folder are saved. That's step 1 of Stage 7 done.
+>
+> **Step 2** is next: HoMo watches your running cases and downloads each one into `finished` once post-processing is done. It only reads from Fritz. Before I build it, two things:
+>
+> 1. **Working directory:** it's still `D:\CFD_tool\finished`. Please set it to `D:\CFD_tool` via **Working directory**. Step 2 uses the `inProgress` folder next to `finished`. Your results will look the same.
+> 2. **May I look at your remote folder once?** I'd run a read-only listing (WinSCP `ls`) of the folder you saved, through your session, to see how running and finished cases are laid out on Fritz. Nothing is changed, downloaded or started. That way step 2 matches what's really there instead of my guess.
+>
+> If you also have a case running on Fritz right now, or can start one through CFD-Tool, I can test the downloading for real. Otherwise I'll build it against a fake cluster first.
