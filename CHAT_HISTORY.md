@@ -3503,3 +3503,31 @@ Messages that quoted the user's cluster user name or host are shown with those m
 > Your template is now `SCRIPT_RANS` (`SCRIPT_FABSI` is no longer in your folder). It has all 7 files and uses STAR-CCM+ 2506-r8-clang, like the scripts before, so it works as a template.
 >
 > I couldn't test a real create myself: even a harmless `mkdir` on Fritz was blocked as a change to Fritz. I checked the WinSCP rule it relies on locally instead. All tests pass (62 unit tests, 108 browser checks). Committed and pushed to GitHub `master`.
+
+## 2026-10-02 — User confirms the Fritz workflow works
+
+### User message (verbatim)
+
+> it seems everything is working now.
+
+### Contributor messages (verbatim)
+
+> Good to hear. Before I record it, I'm checking the app's own record of the create (local only, nothing on Fritz):
+
+> Confirmed: `1002_homo_test` was created through the new one-login path, and the job session is now different from the main one. Recording that in the docs and the log:
+
+### Work record
+
+- Read the running app's task list (`GET /api/cluster/new-case`, local): `1002_homo_test` done, "Created on Fritz. Start it from the list when you are ready." Saved settings: job session differs from the main session; template `SCRIPT_RANS`. Nothing on Fritz was accessed.
+- Docs: `STATUS.md` (user confirmation), `TASK.md` (Stage 7 complete).
+- No code changes, so the test suites were not rerun (last run: 62/62 unit, 108/108 browser).
+
+### Final response (verbatim)
+
+> Great, that completes Stage 7. HoMo can now set up a new simulation from your template, start it, show its progress and download the results. The app's record confirms `1002_homo_test` was created with the new one-login method, and your fritz session is saved as the session for starting jobs.
+>
+> I've marked Stage 7 as complete in the status docs and the log. Two things I'd still like to hear about when you get to them:
+> - **The first real start and download:** whether `1002_homo_test` moves through Queued → Running → Ready to download, and how long the download takes.
+> - **The `.sim` upload time:** whether the "Uploading…" message is enough while it runs, or whether you'd like a progress bar.
+>
+> The items on the list for later are a portable Python bundle for teammates, the 3D orientation widget with angled views, and showing/hiding parts in the 3D viewer. Tell me when you want to start one of them, or when a teammate is ready to try HoMo.

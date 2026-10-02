@@ -40,6 +40,7 @@ stale detection) and downloads via inProgress → finished. Waiting for the user
 first real download (the six vanished folders were the user's own cleanup). 
 **Steps 3–4 built (2026-10-02):** New simulation on Fritz (copy of
 `SCRIPT_FABSI`, Settings form, `.sim` upload) and Start (`sbatch mesh.sh` via
-the fritz login-node session), live job states. Waiting for the user to choose
-the job session and try a real new simulation. Stage 7 is then complete.
+the fritz login-node session), live job states. The user's first real new
+simulation (`1002_homo_test`) was created on 2026-10-02 and the user reports
+everything working: Stage 7 is complete.
 Next: step 2, monitor and download for cases in `inProgress`.
