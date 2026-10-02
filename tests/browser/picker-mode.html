@@ -266,5 +266,13 @@ runTests(async () => {
   check("3d: a Cp field starts at -5..1", rangeOf() === "-5..1", rangeOf());
   await showField("Velocity Magnitude");
   check("3d: the range set for a field comes back with it", rangeOf() === "0..50", rangeOf());
+  // export3D.java writes the car and the flow parts as two cases in one folder; they show as one model.
+  check("3d: car and flow cases of one folder load as one model", win3d.eval("caseSets.length") === 2 &&
+    win3d.eval("caseSets.map((set) => set.parts.map((p) => p.name).join('+')).join(' | ')") === "Frontwing+wheel-fr | Lambda2",
+    win3d.eval("caseSets.map((set) => set.parts.map((p) => p.name).join('+')).join(' | ')"));
+  await showField("CpX");
+  check("3d: a field only the car case has leaves the flow parts without values",
+    win3d.eval("[...model.cp].filter(Number.isNaN).length") === 3 && win3d.eval("[...model.cp].filter(Number.isFinite).length") > 0,
+    win3d.eval("[...model.cp].map(String).join(',')"));
 });
 </script></body></html>

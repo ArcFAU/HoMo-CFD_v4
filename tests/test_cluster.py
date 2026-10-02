@@ -28,6 +28,7 @@ STATUS_OUTPUT = "\n".join([
     f"HOMO|caseD|SMT|{NOW - 600}",       # solving
     "HOMO|caseE|SDMTR|1600000000",      # post-processing, but long silent
     "HOMO|caseF||0",                    # created, not started
+    f"HOMO|caseG|SDMTRPF|{NOW - 900}",   # post-processing failed (macro error in the post log)
     "HOMO|bad/name|SDMTRP|1",           # not usable as a folder name
 ])
 
@@ -224,14 +225,29 @@ class ScriptTests(unittest.TestCase):
 class StatusTests(unittest.TestCase):
     def test_states_from_flags(self):
         expected = {"": "prepared", "S": "meshing", "SM": "meshing", "SMT": "solving", "SDMT": "waiting-post",
-                    "SDMTR": "post", "SDMTRP": "ready", "SDMTRX": "ready", "DMTRP": "ready"}
+                    "SDMTR": "post", "SDMTRP": "ready", "SDMTRX": "ready", "DMTRP": "ready",
+                    "SDMTRPF": "post-failed", "SDMTRF": "post-failed", "SR": "post"}
         for flags, state in expected.items():
             with self.subTest(flags=flags):
                 self.assertEqual(cluster.case_state(flags), state)
 
+    def test_failed_post_processing_is_recognised(self):
+        failed = ["java.lang.RuntimeException: java.io.FileNotFoundException: /home/vault/g/u/exp/Settings (No such file or directory)",
+                  "postprocessing.java:12: error: cannot find symbol",
+                  "star.base.neo.NeoException: Object not found"]
+        fine = ["export3D failed, post-processing continues: A floating point error has occurred.",
+                "   error: Server Error",
+                "postprocessing.java:464: warning: [deprecation] star.common.XYPlot in star.common has been deprecated",
+                "Job finished at Fri Oct  2 20:13:47 CEST 2026"]
+        pattern = re.compile(cluster.POST_FAILED)
+        self.assertEqual([bool(pattern.search(line)) for line in failed + fine], [True] * 3 + [False] * 4)
+        self.assertIn(f"grep -E -q '{cluster.POST_FAILED}' \"$p\"", cluster.case_status_command())
+        failed_case = next(case for case in cluster.parse_cases(STATUS_OUTPUT, now=NOW + 10 ** 6) if case["name"] == "caseG")
+        self.assertEqual((failed_case["state"], failed_case["stale"]), ("post-failed", False))
+
     def test_parse_cases(self):
         cases = cluster.parse_cases("noise\n" + STATUS_OUTPUT + "\nHOMO|broken", now=NOW)
-        self.assertEqual([case["name"] for case in cases], ["caseD", "caseC", "caseA", "caseE", "bad/name", "caseF"])
+        self.assertEqual([case["name"] for case in cases], ["caseD", "caseG", "caseC", "caseA", "caseE", "bad/name", "caseF"])
         by_name = {case["name"]: case for case in cases}
         self.assertEqual((by_name["caseC"]["state"], by_name["caseC"]["stale"]), ("ready", False))
         self.assertEqual((by_name["caseD"]["state"], by_name["caseD"]["stale"]), ("solving", False))

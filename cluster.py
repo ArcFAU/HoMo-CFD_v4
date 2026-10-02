@@ -267,7 +267,8 @@ def case_status_command():
     Prints "HOMO|<name>|<flags>|<newest job log, epoch s>" per folder that has
     Settings, STARTED or plots. Flags: S STARTED, D plots/DONE (solver
     finished), X plots/POST_DONE, M meshing log, T solver log, R post log,
-    P newest post log finished ("Job finished at", written last by post.sh).
+    P newest post log finished ("Job finished at", written last by post.sh),
+    F newest post log has an uncaught macro error (POST_FAILED below).
     """
     return (
         'for d in */; do d="${d%/}"; '
@@ -276,10 +277,18 @@ def case_status_command():
         '[ -e "$d/plots/POST_DONE" ] && f="${f}X"; '
         'ls "$d"/mesh.o* >/dev/null 2>&1 && f="${f}M"; ls "$d"/resTAURANtS.o* >/dev/null 2>&1 && f="${f}T"; '
         'p=$(ls -t "$d"/post.o* 2>/dev/null | head -n 1); '
-        'if [ -n "$p" ]; then f="${f}R"; tail -c 4000 "$p" | grep -q "Job finished at" && f="${f}P"; fi; '
+        'if [ -n "$p" ]; then f="${f}R"; tail -c 4000 "$p" | grep -q "Job finished at" && f="${f}P"; '
+        f"grep -E -q '{POST_FAILED}' \"$p\" && f=\"${{f}}F\"; fi; "
         'l=$(ls -t "$d"/*.o* 2>/dev/null | head -n 1); t=0; [ -n "$l" ] && t=$(stat -c %Y "$l"); '
         f'echo "{CASE_PREFIX}$d|$f|$t"; done'
     )
+
+
+# An uncaught error stops a macro: STAR-CCM+ prints the Java exception at the start of a line
+# ("java.lang.RuntimeException: ... Settings (No such file or directory)"), or a compile error
+# ("postprocessing.java:12: error: ..."). post.sh still ends with "Job finished at". Errors the
+# macros catch themselves (export3D.java's) are printed differently and don't count.
+POST_FAILED = r"^((java|star)\.[A-Za-z0-9_.]*(Exception|Error)|[A-Za-z0-9_]+\.java:[0-9]+: error:)"
 
 
 def status_script(session, remote_folder):
@@ -288,11 +297,15 @@ def status_script(session, remote_folder):
 
 
 def case_state(flags):
-    """prepared → meshing → solving → waiting-post → post → ready."""
+    """prepared → meshing → solving → waiting-post → post → ready (or post-failed)."""
+    if "F" in flags:
+        return "post-failed"
     if "X" in flags or "P" in flags:
         return "ready"
+    if "R" in flags:  # a post log: post-processing runs (also in folders set up by hand, without solver logs)
+        return "post"
     if "D" in flags:
-        return "post" if "R" in flags else "waiting-post"
+        return "waiting-post"
     if "S" in flags:
         return "solving" if "T" in flags else "meshing"
     return "prepared"
@@ -314,7 +327,7 @@ def parse_cases(output, now=None):
             continue
         name, flags, stamp = parts
         state, last_log = case_state(flags), int(stamp) or None
-        stale = state not in ("ready", "prepared") and last_log is not None and now - last_log > STALE_HOURS * 3600
+        stale = state not in ("ready", "post-failed", "prepared") and last_log is not None and now - last_log > STALE_HOURS * 3600
         cases.append({"name": name, "flags": flags, "state": state, "lastLog": last_log, "stale": stale})
     return sorted(cases, key=lambda case: (-(case["lastLog"] or 0), case["name"].lower()))
 

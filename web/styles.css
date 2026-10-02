@@ -1574,6 +1574,10 @@ select {
   color: #65b891;
 }
 
+.cluster-state-post-failed {
+  color: #ff8d8d;
+}
+
 .cluster-stale {
   color: var(--muted);
 }

@@ -4262,3 +4262,151 @@ The background watcher of the post job (job 4285206 in `exp`) finished; no new u
 > 2. **Put both macros into `SCRIPT_RANS`**, so every new simulation exports 3D data. Say "upload it".
 > 3. **Show "Post-processing failed" in HoMo** when a post job's macro fails.
 > 4. **Cleanup:** delete `starccm\post.o4285168` (it contains your licence key).
+
+## 2026-10-02 — "Do all": export fix and rerun, macros into SCRIPT_RANS, "Post-processing failed"
+
+### User message (verbatim)
+
+> do all
+
+### Contributor messages (verbatim)
+
+> Doing all four:
+> 1. Delete the log that contains your licence key.
+> 2. Copy the new `export3D.java` into `exp` on Fritz and start `post.sh` there.
+> 3. Install both macros in `SCRIPT_RANS`, keeping the old one as `postprocessing.java.bak`.
+> 4. While the job runs, build the "Post-processing failed" state in HoMo.
+>
+> Starting with the local cleanup, plus a read-only look at `exp` and `SCRIPT_RANS` on Fritz before changing anything:
+
+> You'd already deleted the log; no job logs are left in the project. Now the read-only look at `exp` and `SCRIPT_RANS` on Fritz:
+
+> You've already done the first step: `exp` has the new `export3D.java` (10,918 bytes, put there at 19:06), and a new post job (4285254) finished at 20:13. Checking its result: the export lines in its log and the `3D-data` folder:
+
+> The export got much further this time, but not all the way:
+> - **Written:** all 10 fields, including CpZ-CpX, skin friction, y+, wall shear stress, velocity and vorticity, plus `fields.txt`. The geometry grew from 74 to 86 MB, which suggests the Lambda2 and Bad_Cells parts are in it.
+> - **Then it stopped:** STAR-CCM+ reported "A floating point error has occurred … Server Error", and the macro logged "export3D failed". As designed, the rest of the post-processing still ran.
+>
+> Reading the log around the error, with any licence-key lines filtered out:
+
+> Clear diagnosis:
+> - **The export itself finished:** all 10 fields were written for the 10 car parts, plus the `.case` file. "Time to export: 3.4 s … Done." Velocity and vorticity look plausible (velocity 0 on fixed walls and up to 11 m/s on the rotating wheels), and so do y+ and wall shear stress.
+> - **The error came right after:** "Non-finite value detected while evaluating field function **Norm Area x**". Your `CpX` is `PressureCoefficient × Norm_Area_x`, and `Norm_Area_x` divides by the face area. On some face with zero area, that's a division by zero.
+> - Also useful from `fields.txt`: STAR's own `Lambda2` is called "Lambda 2 criterion".
+>
+> I still need to know whether the Lambda2 and Bad_Cells parts made it into the files, and where exactly the error was triggered. Reading the log lines before that section:
+
+> My in-place edit broke that helper script, so I'm rewriting it cleanly:
+
+> Too broad: "Exporting" matches every section image. Narrowing to the 3D export's own lines:
+
+> "Lambda2" also matches the section pictures. Narrowing further:
+
+> Now the full picture of this run:
+> - **Geometry:** the 10 car parts, plus the `Lambda2` part (11) and `Bad_Cells` part (12). That explains the extra 12 MB.
+> - **Field values:** written for the 10 car parts only.
+> - **The failure:** STAR-CCM+ then tried to evaluate `CpX` on the Lambda2 and Bad_Cells iso-surfaces. `Norm_Area_x` divides by a face area, which is zero on some iso-surface faces, so it hit a division by zero. So the vortex parts got no values at all.
+>
+> `CpX`, `CpZ` and `CpZ-CpX` are wall quantities, which don't make sense on an iso-surface anyway. The fix: **two exports into the same folder.**
+> - `<sim>.case`: the car surfaces with all 10 fields.
+> - `<sim>_flow.case`: Lambda2 and Bad_Cells, with the fields that are defined in the flow (Cp, total pressure, velocity, vorticity).
+>
+> Each export runs on its own, so a problem in the flow export can't cost the car data. The viewer will read both `.case` files of a folder as one model.
+>
+> Starting with the macro:
+
+> The macro now gets two separate exports, each in its own error handling:
+
+> Both macros compile. Now the viewer: it should read every `.case` file in a `3D-data` folder (car first, then `_flow`) and merge them into one model. A field that only one of them has stays empty (grey) on the other's parts.
+
+> Patch applied. Updating the test data to match the real export: a car case plus a separate `test_flow.case` holding the Lambda2 part, without CpX (as on Fritz):
+
+> Adding a check that the car case and the flow case load as one model, with CpX empty (grey) on the Lambda2 part:
+
+> All 133 browser checks pass. Next, Fritz. Your "do all" covers both changes there:
+> 1. Put the fixed `export3D.java` into `exp` and start `post.sh` there again.
+> 2. Install the macros in `SCRIPT_RANS`: rename the old `postprocessing.java` to `postprocessing.java.bak`, then copy in the new `postprocessing.java` and `export3D.java`.
+>
+> Checking the files are in Unix line endings, then uploading everything in one WinSCP run (any error stops it):
+
+> Git converted the working copy of `postprocessing.java` to Windows line endings during a branch switch; the content is unchanged. The original on Fritz uses Unix line endings, so I'll upload Unix-line-ending copies from a temporary folder:
+
+> The shell mangled the escape sequences again. Rewriting the upload script with the editor:
+
+> All three uploads and the rename went through. Only my check at the end failed: WinSCP's `ls` takes a folder, not a file name. Verifying by listing both folders:
+
+> Verified on Fritz:
+> - **`exp`:** the new `export3D.java` (12,301 bytes).
+> - **`SCRIPT_RANS`:** the new `postprocessing.java` (25,739 bytes) and `export3D.java`, with your previous macro kept as `postprocessing.java.bak` (25,188 bytes).
+>
+> Starting `post.sh` in `exp` through your fritz session, the same way HoMo's **Start** button does:
+
+> Job **4285535** is submitted. Starting the background watcher (one read-only check every 5 minutes; when the job ends it checks the log and `3D-data`):
+
+> While the job runs: the **"Post-processing failed"** state in HoMo. Reading how the case list decides a case's state:
+
+> Plan: the status check gets a new flag **F**, set when the newest post log contains an **uncaught** macro error. That means a line starting with a Java exception (as in your first test: `java.lang.RuntimeException: …Settings`) or a macro compile error (`postprocessing.java:12: error: …`). Errors the 3D export catches itself (like today's floating-point one) start differently, so they don't count. HoMo then shows **"Post-processing failed"** instead of "Ready to download", and still offers **Download anyway**.
+>
+> Checking how download availability is decided:
+
+> The server doesn't restrict downloads by state; the page decides. Changes:
+> - **`cluster.py`:** the **F** flag in the read-only status command; a new state, `post-failed`; and a failed case is never marked "probably stopped".
+> - **`app.js`:** the label "Post-processing failed (see the post log)" and a **Download anyway** button.
+>
+> Checking how the test data describes cases, so the new state gets its own test case:
+
+> Adding a failed case (`caseG`) to the test data and building the state:
+
+> The generated shell command looks right. Before relying on the pattern, I'm testing it on your three real post logs in `exp` (read-only, counts only):
+> - **4285168**, which failed on the missing `Settings`: should match.
+> - **4285206**, which succeeded: should not match.
+> - **4285254**, where the 3D export's error was caught: should not match.
+
+> The two good logs don't match, as intended. The failed log (4285168) is no longer on Fritz (you'd moved it off), so I'm testing the positive case on its exact error line from earlier, plus a compile error. I'm using GNU grep, as Fritz does, together with the lines that must not count:
+
+> Exactly the two real failures match. The caught export error, the deprecation warning and the "Job finished" line don't.
+>
+> Adding the unit and browser checks:
+
+> Both suites pass (71 unit tests, 134 browser checks). Restarting your HoMo server so it uses the new code. Then I'm running its real case list once (the same read-only check as the **Refresh** button) to make sure none of your real cases is wrongly flagged as failed:
+
+> Mostly as expected, with two cases to look at:
+> - **`001_post` shows as failed.** That might be correct, but I'll check what in its log matched before trusting it.
+> - **`exp` shows "Meshing"** while its post job runs. That's because this hand-made test folder has no mesh or solver logs. A small fix: a case that has a post log is in post-processing, whatever else is missing.
+>
+> Checking `001_post`'s log, matching lines only:
+
+> That printed no matching line, although the status check flagged the case, so my ad-hoc quoting may have broken the command. I'm rerunning it from a script file. The log also has no "Job finished" line, so that job ended abnormally either way.
+
+> That one is a **real failure**. `001_post`'s post job on 31 July crashed with a `NullPointerException` in the macro and then ran into its 2-hour limit without finishing. The old version showed it as "Post-processing"; it's now correctly "Post-processing failed".
+>
+> Now the small fix for `exp`: a case with a post log counts as post-processing, even without mesh or solver logs.
+
+> Unit tests pass. Running the browser suite, restarting your server again, then updating the docs:
+
+> The docs are updated and the portable zip is rebuilt. Checking on the job before committing:
+
+> Job 4285535 is running (5 minutes in at the last check; about 55 minutes in total). I'll commit everything now and report the result when the watcher reports back. Writing the log entry:
+
+### Work record
+
+- Fritz (read-only first): `exp` had export3D v2 (uploaded by the user at 19:06) and post job 4285254 (finished 20:13): car export complete (10 fields, 10 parts), derived parts `Lambda2`/`Bad_Cells` in the geometry without values, then "Non-finite value detected while evaluating field function Norm Area x" (caught; "export3D failed, post-processing continues"). `fields.txt`: `Lambda2` = "Lambda 2 criterion", `neg(Lambda2)`, `SkinFrictionCoefficient`, `WallYplus`, `WallShearStress`, `VorticityVector`, `Velocity` (RELATIVE_VECTOR).
+- `starccm/export3D.java` v3: `<sim>.case` (car, all fields) and `<sim>_flow.case` (derived parts; PressureCoefficient, TotalPressureCoefficient, |Velocity|, |VorticityVector|), separate exports, flow export in its own try. Compiled against 2506.
+- `web/3d-viewer.js`: all `.case` files of a folder load as one model (`caseSets`; car first, `_flow` after); fields missing from a case are NaN on its parts. `tests/fixture.py`: `test_flow.case` with the Lambda2 part; `tests/browser/picker-mode.html` +2 checks.
+- Changes on Fritz (user's "do all"): uploaded export3D v3 to `exp` (12,301 bytes); `SCRIPT_RANS/postprocessing.java` → `postprocessing.java.bak` (25,188), new `postprocessing.java` (25,739) and `export3D.java` (12,301), Unix line endings (git had checked out CRLF), verified by listing; submitted `post.sh` in `exp` via the fritz session (job 4285535). Background watcher running; result pending.
+- Local: `starccm/post.o4285168` had already been deleted by the user.
+- HoMo: `cluster.POST_FAILED` pattern and flag F in the status command, state `post-failed` (not stale), state `post` whenever a post log exists; `web/app.js` label and Download anyway; `web/styles.css` red state. Pattern checked with GNU grep on real/sample lines and on Fritz: `exp` logs 4285206/4285254 → no match; `001_post` (post.o3924242, 31 July) → real `java.lang.NullPointerException`, no "Job finished". Real case list after restart: `exp` post (running job), `001_post` post-failed, others unchanged.
+- Tests: `tests/test_cluster.py` (caseG, states incl. post-failed and SR → post, pattern test), `tests/browser/server-mode.html` (+1 check).
+- Docs: `starccm/README.md`, `CHANGELOG.md`, `STATUS.md`, `tests/README.md`. Portable zip rebuilt; user's server restarted.
+- Checks: `py -m unittest discover -s tests` 71/71 OK; `py tests/run_browser_tests.py` 134/134 passed.
+
+### Final response (verbatim)
+
+> All four are done; one result is still coming in (the test job on Fritz).
+>
+> 1. **Licence-key log:** you'd already deleted it, and no job logs are left in the project.
+> 2. **3D export test:** your run from this afternoon got the whole car with all 10 fields (Cf, y+, wall shear, velocity, vorticity, the Cp fields). It failed only on the vortex parts: your `CpX` divides by face area, and some faces of the λ2 iso-surface have zero area. The macro now exports the car and the vortex/bad-cell parts separately, the latter with Cp, total pressure, velocity and vorticity only, and HoMo's viewer reads both as one model. I've put this version into `exp` and started `post.sh` (job 4285535, about an hour). I'll check the result when it's done and tell you.
+> 3. **Template:** `SCRIPT_RANS` now has the new `postprocessing.java` and `export3D.java`; your previous macro is kept there as `postprocessing.java.bak`. Every new simulation you create from HoMo gets the 3D export.
+> 4. **"Post-processing failed":** HoMo now spots an uncaught macro error in the post log and shows the case in red with **Download anyway**. Checked on your real cases: it found one genuine failure, `001_post` from 31 July (a `NullPointerException`, and the job never finished), which HoMo used to show as still post-processing. Errors the 3D export handles itself don't trigger it.
+>
+> All tests pass (71 unit tests, 128 → 134 browser checks), your HoMo server runs the new code, the portable zip is rebuilt, and the changes are on GitHub `master`.

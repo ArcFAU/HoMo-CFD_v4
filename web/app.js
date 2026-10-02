@@ -1781,6 +1781,7 @@ const CLUSTER_STATES = {
   "waiting-post": "Solver done, post-processing queued",
   post: "Post-processing",
   ready: "Ready to download",
+  "post-failed": "Post-processing failed (see the post log)",
 };
 const CLUSTER_REFRESH_MS = 5 * 60 * 1000;
 
@@ -1901,11 +1902,12 @@ function clusterCasesSection({ saved, onNeedsPassphrase, templateFolder }) {
     }
     if (download?.message) td.append(`${download.message} `);
     if (!canDownload || !item.downloadable || (item.state === "prepared" && item.local !== "partial")) return td;
-    const allowed = item.state === "ready" || item.stale || item.local === "partial";
+    const allowed = item.state === "ready" || item.state === "post-failed" || item.stale || item.local === "partial";
     const button = document.createElement("button");
     button.type = "button";
     button.className = item.state === "ready" ? "primary small" : "small-control";
-    button.textContent = item.local === "partial" ? "Resume download" : item.state !== "ready" && item.stale ? "Download anyway" : "Download";
+    button.textContent = item.local === "partial" ? "Resume download"
+      : item.state === "post-failed" || (item.state !== "ready" && item.stale) ? "Download anyway" : "Download";
     button.disabled = !allowed;
     button.title = allowed ? "" : "Available once post-processing has finished";
     button.addEventListener("click", async () => {

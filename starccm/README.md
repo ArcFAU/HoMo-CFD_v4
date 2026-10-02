@@ -1,7 +1,9 @@
 # STAR-CCM+ macros for HoMo CFD
 
 Two macros for the template folder on Fritz (e.g. `SCRIPT_RANS`), for
-STAR-CCM+ 2506 (20.04). Tested on Fritz on 2026-10-02: a post job on
+STAR-CCM+ 2506 (20.04). **Installed in `SCRIPT_RANS` on 2026-10-02** (the
+previous macro is kept there as `postprocessing.java.bak`), so new simulations
+created from it export 3D data. Tested on Fritz on 2026-10-02: a post job on
 `0830_mk2.2_10degree` (57 min) wrote `3D-data` with the full car (74 MB
 geometry + 6 MB per field), which opens in HoMo CFD's 3D viewer.
 
@@ -30,11 +32,19 @@ folder in the results tree as **3D-data · 3D viewer**:
   WallYplus, and the magnitudes of WallShearStress, Velocity and
   VorticityVector. A full car is about 70 MB plus about 6 MB per field.
 - **The simulation's derived part `Lambda2`** (iso-surface of `neg(Lambda2)` at
-  30000 in `UPSI_CFD_BASE`: the vortex cores), coloured by the same fields; the
-  viewer shows it with a **Vortices (λ2)** checkbox. Without such a part the
-  macro makes a temporary one from the `neg(Lambda2)` field function.
-- **The derived part `Bad_Cells`** (iso-surface around bad mesh cells), off by
-  default in the viewer (**Bad cells** checkbox).
+  30000 in `UPSI_CFD_BASE`: the vortex cores), in a second case
+  `<sim>_flow.case` with the fields defined in the flow (PressureCoefficient,
+  TotalPressureCoefficient, Velocity and Vorticity magnitude); the viewer shows
+  it with a **Vortices (λ2)** checkbox. Wall fields are left out there: `CpX`
+  = Cp × `Norm_Area_x` divides by a face area that is zero on some iso-surface
+  faces, which stopped STAR-CCM+ with a floating point error in a test run.
+  Without such a part the macro makes a temporary one from `neg(Lambda2)`.
+- **The derived part `Bad_Cells`** (iso-surface around bad mesh cells), also in
+  `<sim>_flow.case`, off by default in the viewer (**Bad cells** checkbox).
+
+The car and the flow parts are two separate exports, so a problem with the flow
+parts never costs the car data. The viewer reads all `.case` files of a
+`3D-data` folder as one model.
 - **`fields.txt`**: every field function of the simulation (name, display name,
   type), to look up names.
 
@@ -56,10 +66,12 @@ Optional lines in the case's `Settings`:
   `SKIPPED` at the top of the macro if your domain uses other names.
 - Fields or parts a simulation does not have are left out; problems are written
   to the log and never stop the post-processing.
-- The first version (tested on Fritz) missed `CpZ-CpX` (looked up as `CpZCpX`)
-  and exported walls of the `Cells deleted` regions as tiny parts without values
-  (`rim 3`, …); both are fixed in this version, which is compiled against 2506
-  but not yet run in STAR-CCM+.
+- Test runs on Fritz (`exp`, 2026-10-02): version 1 missed `CpZ-CpX` and
+  exported value-less pieces of the `Cells deleted` regions; version 2 wrote all
+  10 car fields (y+ 0–128, skin friction up to 0.11, velocity 0 on fixed walls
+  and up to 11 m/s on the rotating wheels) but no values on Lambda2/Bad_Cells
+  (floating point error from `Norm Area x`); version 3 (two exports) is
+  installed and being tested.
 
 ### Try it once by hand
 

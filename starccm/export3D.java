@@ -1,8 +1,11 @@
 // Exports 3D data for HoMo CFD's 3D viewer into 3D-data/ of the case folder (EnSight Gold):
-// - the car's wall surfaces with Cp, skin friction, wall shear stress, y+ and flow fields,
-// - the simulation's derived parts "Lambda2" (vortex cores: iso-surface of neg(Lambda2)) and
-//   "Bad_Cells" (iso-surface around bad mesh cells), when they exist,
+// - <sim>.case: the car's wall surfaces with Cp, skin friction, wall shear stress, y+ and flow fields,
+// - <sim>_flow.case: the simulation's derived parts "Lambda2" (vortex cores: iso-surface of
+//   neg(Lambda2)) and "Bad_Cells" (iso-surface around bad mesh cells), when they exist, with the
+//   fields defined in the flow (wall-only fields such as CpX = Cp * Norm_Area_x divide by a face
+//   area that is zero on some iso-surface faces, which stops STAR-CCM+ with a floating point error),
 // - fields.txt: every field function of the simulation, to look up names.
+// The two exports run separately, so a problem with the flow parts never costs the car data.
 // postprocessing.java plays it at the end; it can also be played on its own in STAR-CCM+
 // (File > Macro > Play Macro). Written for STAR-CCM+ 2506 (20.04).
 //
@@ -37,6 +40,9 @@ public class export3D extends StarMacro {
             "SkinFrictionCoefficient", "WallYplus"};
     // Vector fields, exported as their magnitude.
     private static final String[] MAGNITUDES = {"WallShearStress", "Velocity", "VorticityVector"};
+    // Fields also exported on the flow parts (defined away from walls).
+    private static final String[] FLOW_FIELDS = {"PressureCoefficient", "TotalPressureCoefficient"};
+    private static final String[] FLOW_MAGNITUDES = {"Velocity", "VorticityVector"};
     // Wall boundaries that belong to the wind tunnel, not to the car (compared ignoring case).
     private static final String[] SKIPPED = {"floor", "ground", "road", "walls", "wall", "tunnel", "symmetry", "sym", "top", "side"};
     // The team's lambda2 iso value (derived part "Lambda2" in UPSI_CFD_BASE).
@@ -67,23 +73,8 @@ public class export3D extends StarMacro {
                     }
                 }
             }
-            ArrayList<FieldFunction> fields = new ArrayList<>();
-            for (String name : FIELDS) {
-                FieldFunction function = find(name);
-                if (function != null) {
-                    fields.add(function);
-                } else {
-                    simulation.println("export3D: no field function " + name + ", left out");
-                }
-            }
-            for (String name : MAGNITUDES) {
-                FieldFunction function = find(name);
-                if (function != null) {
-                    fields.add(function.getMagnitudeFunction());
-                } else {
-                    simulation.println("export3D: no field function " + name + ", left out");
-                }
-            }
+            ArrayList<FieldFunction> fields = fields(FIELDS, MAGNITUDES, true);
+            ArrayList<FieldFunction> flowFields = fields(FLOW_FIELDS, FLOW_MAGNITUDES, false);
 
             ArrayList<Part> parts = new ArrayList<>();
             if (!"false".equalsIgnoreCase(setting("3D-Data/Vortices"))) {
@@ -101,21 +92,26 @@ public class export3D extends StarMacro {
                     parts.add(badCells);
                 }
             }
+
+            String name = simulation.getPresentationName();
             if (surfaces.isEmpty() || fields.isEmpty()) {
-                simulation.println("export3D: nothing to export (" + surfaces.size() + " surfaces, " + fields.size() + " fields)");
-                return;
+                simulation.println("export3D: no car surfaces or fields (" + surfaces.size() + " surfaces, " + fields.size() + " fields)");
+            } else {
+                export(new File(folder, name + ".case"), surfaces, new ArrayList<Part>(), fields);
+                simulation.println("export3D: " + surfaces.size() + " car surfaces with " + fields.size() + " fields written");
             }
-            String caseFile = new File(folder, simulation.getPresentationName() + ".case").getPath();
-            // Boundaries and derived parts only (regions would add the whole volume mesh), values per cell.
-            simulation.getImportManager().export(caseFile, new ArrayList<Region>(), surfaces, parts,
-                    new ArrayList<PartSurface>(), fields,
-                    NeoProperty.fromString("{'exportFormatType': 2, 'appendToFile': false, 'solutionOnly': false, 'dataAtVerts': false}"));
-            ArrayList<String> partNames = new ArrayList<>();
-            for (Part part : parts) {
-                partNames.add(part.getPresentationName());
+            if (!parts.isEmpty() && !flowFields.isEmpty()) {
+                try {
+                    export(new File(folder, name + "_flow.case"), new ArrayList<Boundary>(), parts, flowFields);
+                    ArrayList<String> partNames = new ArrayList<>();
+                    for (Part part : parts) {
+                        partNames.add(part.getPresentationName());
+                    }
+                    simulation.println("export3D: flow parts " + partNames + " with " + flowFields.size() + " fields written");
+                } catch (Exception e) {
+                    simulation.println("export3D: flow parts failed, the car data is complete: " + e);
+                }
             }
-            simulation.println("export3D: " + surfaces.size() + " car surfaces, parts " + partNames + ", " + fields.size()
-                    + " fields written to " + caseFile);
         } catch (Exception e) {
             simulation.println("export3D failed, post-processing continues: " + e);
         } finally {
@@ -127,6 +123,35 @@ public class export3D extends StarMacro {
                 }
             }
         }
+    }
+
+    // Boundaries and derived parts only (regions would add the whole volume mesh), values per cell.
+    private void export(File caseFile, ArrayList<Boundary> surfaces, ArrayList<Part> parts, ArrayList<FieldFunction> fields) {
+        simulation.getImportManager().export(caseFile.getPath(), new ArrayList<Region>(), surfaces, parts,
+                new ArrayList<PartSurface>(), fields,
+                NeoProperty.fromString("{'exportFormatType': 2, 'appendToFile': false, 'solutionOnly': false, 'dataAtVerts': false}"));
+    }
+
+    // Scalars as they are, vectors as their magnitude; missing ones are reported once (report = true).
+    private ArrayList<FieldFunction> fields(String[] scalars, String[] vectors, boolean report) {
+        ArrayList<FieldFunction> found = new ArrayList<>();
+        for (String name : scalars) {
+            FieldFunction function = find(name);
+            if (function != null) {
+                found.add(function);
+            } else if (report) {
+                simulation.println("export3D: no field function " + name + ", left out");
+            }
+        }
+        for (String name : vectors) {
+            FieldFunction function = find(name);
+            if (function != null) {
+                found.add(function.getMagnitudeFunction());
+            } else if (report) {
+                simulation.println("export3D: no field function " + name + ", left out");
+            }
+        }
+        return found;
     }
 
     private Part derivedPart(String name) {
