@@ -2430,9 +2430,9 @@ async function startFilesystemWorkspace() {
     // Served by serve.py: the saved working directory needs no picker or permission.
     const config = await serverConfig;
     if (config) {
-      openResults.textContent = "Working directory";
+      document.getElementById("working-dir-label").textContent = config.workingDir || "Choose working directory";
       clusterButton.hidden = false;
-      openResults.title = config.workingDir ? `${config.workingDir} — click to change` : "Choose the folder that holds your results";
+      openResults.title = config.workingDir ? `Working directory: ${config.workingDir} — click to change` : "Choose the folder that holds your results";
       if (!config.resultsRoot) {
         showWorkingDirectoryChooser(config);
         return;

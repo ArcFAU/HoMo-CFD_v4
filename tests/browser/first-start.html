@@ -9,7 +9,8 @@ runTests(async () => {
   check("first start shows Choose working directory", card, app.contentDocument?.getElementById("panels")?.textContent.slice(0, 200));
   let doc = app.contentDocument;
   check("chooser offers Browse…", [...doc.querySelectorAll(".working-dir-card button")].some((button) => button.textContent === "Browse…"));
-  check("sidebar button reads Working directory", doc.getElementById("open-results").textContent === "Working directory", doc.getElementById("open-results").textContent);
+  check("the HoMo CFD title is the working-directory button", /HoMo CFD/.test(doc.getElementById("open-results").textContent) &&
+    doc.getElementById("working-dir-label").textContent === "Choose working directory", doc.getElementById("open-results").textContent);
   const useButton = () => [...doc.querySelectorAll(".working-dir-card button")].find((button) => button.textContent === "Use this folder");
 
   doc.querySelector(".working-dir-input").value = "Z:/does/not/exist";
@@ -24,6 +25,10 @@ runTests(async () => {
   check("simulations load from the working directory's finished folder", rowNames(doc).join(",") === "caseA,caseB",
     rowNames(doc).join(",") || doc.getElementById("panels").textContent.slice(0, 200));
   check("sidebar tooltip shows the working directory", doc.getElementById("open-results").title.includes("CFD_tool"), doc.getElementById("open-results").title);
+  check("the working directory shows under the title", /CFD_tool$/.test(doc.getElementById("working-dir-label").textContent), doc.getElementById("working-dir-label").textContent);
+  const footer = [...doc.querySelectorAll(".sidebar-footer button")].map((button) => button.textContent);
+  check("3D viewer and Cluster sit at the bottom of the sidebar", footer.join(",") === "3D viewer,Cluster" &&
+    doc.querySelector(".sidebar").lastElementChild.classList.contains("sidebar-footer"), footer.join(","));
   doc.getElementById("open-results").click();
   const again = await waitFor(() => doc.querySelector(".working-dir-card"));
   check("Working directory reopens the chooser with the current folder", again && /Current: .*CFD_tool.*finished/.test(again.textContent), again?.textContent.slice(0, 300));

@@ -4492,3 +4492,58 @@ The background watcher of the post job (job 4285206 in `exp`) finished; no new u
 > **For teammates:** unzip anywhere, double-click `Start HoMo CFD.bat`, pick their working directory. For the Fritz features they need WinSCP with their own saved session, as with CFD-Tool. When HoMo changes, I rebuild the zip and they unzip the new one over the old folder; their settings stay.
 >
 > I changed two things for this: the changelog (our development history) is no longer in the zip, and the macros folder now is. All tests pass (71 unit tests, 134 browser checks), and the changes are on GitHub `master`. The 3D export test on Fritz is still running; I'll report when it's done.
+
+## 2026-10-02 — Sidebar: HoMo CFD title as working-directory button; 3D viewer and Cluster at the bottom
+
+### User message (verbatim)
+
+> can you shift the open 3d cp viewer and fritz cluster button down arrange them properly and rename them 3D viewer and Cluster. also i want to infuse working directory button with HoMo CFD written on top
+
+### Contributor messages (verbatim)
+
+> Looking at the current sidebar markup and its styles:
+
+> Checking which tests and docs rely on these buttons' names and positions:
+
+> I'll go with this layout:
+> - **Top: "HoMo CFD" becomes the working-directory button.** Logo, "HoMo CFD", and underneath your current working directory in small grey text. Clicking it opens the chooser, as "Working directory" does now. Without `serve.py` (picker mode), the line reads "Open folder".
+> - **Middle:** "Results", the filter and the folder tree, as before.
+> - **Bottom: "3D viewer" and "Cluster"** side by side, pinned to the bottom of the sidebar so they stay visible however long the tree gets.
+>
+> Checking how the page refreshes after the working directory changes, so the path under the title stays current:
+
+> The page reloads after a change, so filling in the path at startup is enough. Reading the first-start test that checks this button:
+
+> Making the changes: markup, styles, wiring, and the test that read the old button text.
+
+> One redundant `width` line slipped into the new style; removing it, then taking screenshots of the sidebar (your real data, through your HoMo):
+
+> The layout works: "HoMo CFD" with `D:\CFD_tool` underneath at the top, and "3D viewer" and "Cluster" pinned side by side at the bottom.
+>
+> Checking the case where the folder tree is longer than the window: the buttons should stay visible while the tree scrolls behind them.
+
+> The buttons stay pinned at the bottom while the tree scrolls behind them.
+>
+> Running both suites, then updating the README, which still names the old buttons:
+
+> The docs are updated and the zip is rebuilt. Checking on the Fritz job, then logging and committing:
+
+### Work record
+
+- `web/index.html`: `#open-results` is the brand block (logo, "HoMo CFD", `#working-dir-label`); the Results heading lost its button; new `.sidebar-footer` with `#open-3d-viewer` "3D viewer" and `#cluster-settings` "Cluster" (hidden without serve.py, as before).
+- `web/styles.css`: `.brand-button` (hover/focus highlight, path line with ellipsis), `.sidebar-footer` (sticky at the bottom, full-width row; narrow-screen variant).
+- `web/app.js`: with serve.py the label shows the working directory (or "Choose working directory"); tooltip "Working directory: … — click to change".
+- Screenshots with the real data at 1400×800 and 1400×420 (sidebar scrolls; footer stays at the bottom).
+- Tests: `tests/browser/first-start.html` (title is the working-directory button, path under the title, footer buttons). Docs: `README.md`, `CHANGELOG.md`, `STATUS.md`. Portable zip rebuilt.
+- Checks: `py -m unittest discover -s tests` 71/71 OK; `py tests/run_browser_tests.py` 136/136 passed.
+
+### Final response (verbatim)
+
+> Done. Reload http://127.0.0.1:5173 to see it:
+> - **Top:** the logo and **HoMo CFD** are now one button, with your working directory (`D:\CFD_tool`) in small grey text underneath. Click it to change the working directory; it highlights on hover. The separate "Working directory" button is gone.
+> - **Middle:** Results, filter and folder tree, as before.
+> - **Bottom:** **3D viewer** and **Cluster** side by side. They stay at the bottom even when the folder tree is long and scrolls.
+>
+> I checked it with your real data in a normal and a short window. All tests pass (71 unit tests, 136 browser checks), the portable zip and README are updated, and the changes are on GitHub `master`. If you'd like the buttons arranged differently (stacked, or with icons), tell me.
+>
+> The 3D export test on Fritz is still running; I'll report when it's done.

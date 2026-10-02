@@ -9,21 +9,26 @@
   <body>
     <div class="app">
       <aside class="sidebar">
-        <div class="brand">
-          <span><img src="./High-Voltage_white.png" alt="High Voltage Motorsports" /> </span>
-          <span>HoMo CFD</span>
-        </div>
+        <!-- The title is also the working-directory button; the line below it shows the folder. -->
+        <button class="brand brand-button" id="open-results" type="button" title="Choose the folder that holds your results">
+          <img src="./High-Voltage_white.png" alt="High Voltage Motorsports" />
+          <span class="brand-text">
+            <span class="brand-title">HoMo CFD</span>
+            <span class="brand-path" id="working-dir-label">Open folder</span>
+          </span>
+        </button>
         <div class="error" id="error" hidden></div>
         <button class="primary small" id="reconnect-results" type="button" hidden>Reconnect folder</button>
         <div class="group">
           <div class="filesystem-heading">
             <h2>Results</h2>
-            <button class="primary small" id="open-results" type="button">Open folder</button>
           </div>
-          <button class="small-control" id="open-3d-viewer" type="button">Open 3D Cp viewer</button>
-          <button class="small-control" id="cluster-settings" type="button" hidden>Fritz cluster</button>
           <input id="folder-search" class="folder-search" type="search" placeholder="Filter folders" aria-label="Filter folders" />
           <div id="case-slots"></div>
+        </div>
+        <div class="sidebar-footer">
+          <button class="small-control" id="open-3d-viewer" type="button" title="Open the 3D viewer for an EnSight 3D-data folder">3D viewer</button>
+          <button class="small-control" id="cluster-settings" type="button" title="Fritz cluster: connection, simulations, new simulations" hidden>Cluster</button>
         </div>
       </aside>
       <main class="viewer">
