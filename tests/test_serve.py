@@ -187,6 +187,14 @@ class BackgroundTests(ApiTests):
         self.assertTrue(serve.should_stop(0, 31 * minute, busy=False))
         self.assertFalse(serve.should_stop(0, 300 * minute, busy=True), "never while a download or upload runs")
 
+    def test_about(self):
+        status, data = self.request("GET", "/api/about")
+        text = json.loads(data)["text"]
+        self.assertEqual(status, 200)
+        self.assertIn("Archit Paneliya", text)
+        self.assertIn("archit.paneliya@voltages.de", text)
+        self.assertRegex(text, r"Version \d+\.\d+")
+
     def test_open_windows_keep_it_alive(self):
         serve.Handler.last_seen = 0
         status, data = self.request("GET", "/api/alive")

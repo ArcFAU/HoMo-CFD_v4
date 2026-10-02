@@ -31,8 +31,13 @@ runTests(async () => {
   check("the HoMo CFD icon is linked and served", doc.querySelector('link[rel="icon"][href="./favicon.svg"]') &&
     doc.querySelector('link[rel="icon"][href="./homo-cfd.ico"]') && icons.every((line) => / 200 image\//.test(line)), icons.join(" | "));
   const footer = [...doc.querySelectorAll(".sidebar-footer button")].map((button) => button.textContent);
+  doc.getElementById("about-app").click();
+  const about = await waitFor(() => doc.getElementById("about-dialog").open && /Archit Paneliya/.test(doc.getElementById("about-text").textContent));
+  check("About shows version, maker and a contact link", about && /Version \d/.test(doc.getElementById("about-text").textContent) &&
+    doc.querySelector('#about-text a[href="mailto:archit.paneliya@voltages.de"]'), doc.getElementById("about-text").textContent.slice(0, 120));
+  doc.getElementById("about-dialog").close();
   check("Quit button shown when served by serve.py", !doc.getElementById("quit-app").hidden && doc.querySelector(".sidebar-footer #quit-app"));
-  check("3D viewer and Cluster sit at the bottom of the sidebar", footer.join(",") === "3D viewer,Cluster,⏻" &&
+  check("3D viewer and Cluster sit at the bottom of the sidebar", footer.join(",") === "3D viewer,Cluster,ⓘ,⏻" &&
     doc.querySelector(".sidebar").lastElementChild.classList.contains("sidebar-footer"), footer.join(","));
   doc.getElementById("open-results").click();
   const again = await waitFor(() => doc.querySelector(".working-dir-card"));

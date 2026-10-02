@@ -28,7 +28,7 @@ PYTHON_URL = f"https://www.python.org/ftp/python/{PYTHON_VERSION}/{PYTHON_ZIP}"
 PYTHON_SHA256 = "a93abe456ab01bd96d7a085b3cdb6566b3063f4241360d114142fbdb07f0a310"
 
 # What a teammate needs to run the app; never tests, notes, data or secrets.
-APP_FILES = ["serve.py", "cluster.py", "Start HoMo CFD.bat", "Create desktop shortcut.bat", "README.md"]
+APP_FILES = ["serve.py", "cluster.py", "Start HoMo CFD.bat", "Create desktop shortcut.bat", "README.md", "ABOUT.txt"]
 # starccm/: the STAR-CCM+ macros for the 3D export, which teammates add to their own template.
 APP_FOLDERS = ["web", "starccm"]
 
@@ -75,7 +75,7 @@ def build(app=APP, archive=ARCHIVE, package=None, verify=None, keep_folder=False
     app.mkdir(parents=True)
     for name in APP_FILES:
         shutil.copy2(ROOT / name, app / name)
-        if name.endswith(".bat"):  # cmd.exe needs CRLF line endings
+        if name.endswith((".bat", ".txt")):  # cmd.exe needs CRLF; Notepad shows it best
             text = (app / name).read_bytes().replace(b"\r\n", b"\n")
             (app / name).write_bytes(text.replace(b"\n", b"\r\n"))
     for name in APP_FOLDERS:

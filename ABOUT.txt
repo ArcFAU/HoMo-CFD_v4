@@ -1,0 +1,27 @@
+HoMo CFD
+Version 1.0 - 2 October 2026
+
+A local app for the aerodynamics CFD results of High Voltage Motorsports
+(STAR-CCM+ on the NHR@FAU Fritz cluster): coefficient tables and forces,
+section images, pressure distributions, 3D surface data with vortices, and
+creating, starting and downloading simulations on Fritz. It replaces the
+team's earlier CFD-Tool and runs offline on each member's own computer.
+
+Made by
+  Archit Paneliya, High Voltage Motorsports
+  Contact: archit.paneliya@voltages.de (questions, bugs, requests)
+
+Developed with AI assistants
+  ChatGPT (OpenAI): ideas and requirements
+  Codex (OpenAI): coding
+  Cursor: coding
+  GitHub Copilot: coding in VS Code
+  Claude Code (Anthropic): coding and testing
+
+Using HoMo CFD
+  Start: the HoMo CFD desktop shortcut (made once with "Create desktop
+         shortcut.bat") or "Start HoMo CFD.bat". It runs without a window.
+  Stop:  the power button at the bottom of the sidebar; it also stops by
+         itself 30 minutes after its last window was closed.
+  Your settings are stored per user in %APPDATA%\HoMo-CFD.
+  More: README.md; STAR-CCM+ macros for the 3D export: starccm\README.md.

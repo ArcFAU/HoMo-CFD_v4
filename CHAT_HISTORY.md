@@ -4860,3 +4860,64 @@ The background watcher of the post job (job 4285206 in `exp`) finished; no new u
 ### Work record
 
 - No changes.
+
+## 2026-10-02 — About HoMo CFD (software and maker), also in the zip
+
+### User message (verbatim)
+
+> just one thing. can you add something that informs future use about the software and maker. also add that in zip.
+
+### Clarifications (question tool; the user's answers verbatim)
+
+- How should the maker be credited in HoMo CFD's About information? → "Archit Paneliya"
+- Which contact should the About information show (for questions and bug reports)? → "archit.paneliya@voltages.de"
+- Should the About information mention that HoMo CFD was developed with an AI assistant (Claude)? → "u could do it but keep every AI in it with very short description."
+
+### Contributor messages (verbatim)
+
+> I'll add an **About** window in the app (opened from the HoMo CFD title area, with the version, purpose and maker) and an `ABOUT.txt` in the zip. Before writing your name and contact into something that goes to the whole team, I'll check how you want to be credited:
+
+> Noted: **Archit Paneliya**, contact **archit.paneliya@voltages.de**, and a very short line for each AI that worked on HoMo. Checking the project history for which AIs contributed, so the list is complete and correct:
+
+> Five AI tools worked on HoMo, according to the project history:
+> - **ChatGPT:** ideas and requirements.
+> - **Codex:** coding tasks.
+> - **Cursor:** the early code.
+> - **GitHub Copilot:** coding in VS Code.
+> - **Claude Code (me):** coding and testing since then.
+>
+> The plan:
+> - **`ABOUT.txt`** as the single source: what HoMo is, version 1.0 (2 Oct 2026), maker and contact, the AI tools, and how to start and stop it. It goes into the zip next to the README.
+> - **An ⓘ button** at the bottom of the sidebar that shows the same text in the app.
+> - **One line in the README** pointing to it.
+
+> Applying the patch, then running both test suites:
+
+> Both suites pass, including the new About check. Restarting your window-less HoMo so it has the new `/api/about`, then a screenshot of the About window:
+
+> The About window looks right. One side effect, though: with four buttons in the footer, "3D viewer" now wraps onto two lines. Tightening the footer slightly (narrower ⓘ and ⏻ buttons, less spacing, no wrapping):
+
+> All four buttons now fit on one line. Rerunning the browser suite after the style change, then rebuilding the zip and checking that `ABOUT.txt` is in it with Windows line endings (so Notepad shows it properly):
+
+> Almost done: the zip now includes `ABOUT.txt` (58 files) and all tests pass. Writing the log entry and committing:
+
+### Work record
+
+- AI tools taken from the project history: ChatGPT and Cursor (`SHARED_CONTEXT.md` cooperation rules), GitHub Copilot (earlier VS Code Copilot Chat sessions), Codex (shared Codex task, codex annotations), Claude Code (this session's commits).
+- `ABOUT.txt` (new): HoMo CFD, version 1.0 (2 October 2026), purpose, maker Archit Paneliya (High Voltage Motorsports), contact archit.paneliya@voltages.de, AI assistants (one short line each), start/stop, settings location, pointers to README and `starccm/README.md`.
+- `serve.py`: `GET /api/about` (returns ABOUT.txt). `web/index.html`, `web/app.js`, `web/styles.css`: ⓘ button in the sidebar footer, About dialog (plain text, e-mail as mailto link, works with a fallback text without serve.py); footer tightened so all four buttons fit on one line. `README.md`: maker line with a link to ABOUT.txt.
+- `tools/make_portable.py`: ships `ABOUT.txt`; `.txt` written with CRLF. Zip rebuilt: 58 files, `ABOUT.txt` with CRLF.
+- User's server on 5173 restarted window-less with the new code. Screenshots of the About window and the footer checked.
+- Tests: `tests/test_serve.py` (`test_about`), `tests/test_portable.py` (ABOUT.txt in the zip), `tests/browser/first-start.html` (About dialog with version, maker and mailto link; four footer buttons). Docs: `CHANGELOG.md`, `STATUS.md`, `tests/README.md`.
+- Checks: `py -m unittest discover -s tests` 83/83 OK; `py tests/run_browser_tests.py` 140/140 passed.
+
+### Final response (verbatim)
+
+> Done. HoMo CFD now tells everyone what it is and who made it:
+>
+> - **In the app:** a new **ⓘ** button at the bottom of the sidebar opens **About HoMo CFD**. It shows version 1.0 (2 October 2026), what HoMo does, **Made by Archit Paneliya, High Voltage Motorsports**, your contact **archit.paneliya@voltages.de** (clickable), the AI assistants with one short line each, and how to start and stop it.
+> - **In the zip:** the same text as `ABOUT.txt`, right next to `README.md`, readable in Notepad. The README's first line also names you as the maker.
+>
+> AI assistants listed: ChatGPT (ideas and requirements), Codex, Cursor and GitHub Copilot (coding), and Claude Code (coding and testing). I took these from the project history.
+>
+> The zip is rebuilt (`dist\HoMo-CFD-portable.zip`, 58 files) and ready to share. All tests pass (83 unit tests, 140 browser checks), and the changes are on GitHub `master`. For a future version, change the version line at the top of `ABOUT.txt` and rebuild the zip.

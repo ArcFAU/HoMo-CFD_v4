@@ -6,6 +6,7 @@ User-visible changes, newest first. Detailed reasoning lives in
 ## 2026-10-02
 
 ### Added
+- **About HoMo CFD:** `ABOUT.txt` (version 1.0, purpose, maker Archit Paneliya with contact archit.paneliya@voltages.de, the AI assistants used, how to start and stop) is in the portable zip and shown by the new **ⓘ** button at the bottom of the sidebar; the README names the maker.
 - **HoMo CFD icon:** an inverted wing profile with flow lines, in the browser tabs of all windows (`web/favicon.svg`, `web/homo-cfd.ico`) and on a desktop shortcut: `Create desktop shortcut.bat` (also in the portable zip) puts a **HoMo CFD** shortcut on the desktop that starts HoMo CFD.
 - **"Post-processing failed"** in Simulations on Fritz: when the newest post log has an uncaught macro error (a Java exception at the start of a line, or a macro compile error), the case shows in red instead of "Ready to download" and offers **Download anyway**. Errors the 3D export catches itself don't count. A case with a post log now counts as post-processing even without solver logs (test folders set up by hand).
 - **3D export installed in `SCRIPT_RANS`** (previous macro kept as `postprocessing.java.bak`). `export3D.java` writes the car (`<sim>.case`, 10 fields) and the Lambda2/Bad_Cells parts (`<sim>_flow.case`, flow fields only) as two exports; the 3D viewer reads all `.case` files of a `3D-data` folder as one model.
