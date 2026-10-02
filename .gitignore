@@ -46,3 +46,6 @@ dist/
 *.log
 # --- SLURM job logs (mesh.o*, rans.o*, post.o*): they print the STAR-CCM+ licence key ---
 *.o[0-9]*
+
+# --- STAR-CCM+ simulation reports (large; may describe confidential designs) ---
+/RANS.html

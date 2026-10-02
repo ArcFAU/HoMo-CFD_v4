@@ -66,6 +66,16 @@ change with speed; the hover note says so.
 The force columns are computed when the table is drawn, not stored with the
 cached CSV rows, so changing the speed or density only redraws the table.
 
+## 2026-10-02 — 3D viewer: a colour range per field
+
+Fields now differ by orders of magnitude (Cp around −5…1, skin friction around
+0.01, velocity tens of m/s), so one shared range no longer works. Each field
+keeps the range the user set (or Auto range) in the browser, which still gives
+like-for-like comparisons between cases; untouched fields start at −5…1 (Cp
+fields) or at their own 1st–99th percentile. Flow parts from the export
+(vortex iso-surface, bad cells) get checkboxes instead of general part
+show/hide, which the user did not need.
+
 ## 2026-10-02 — 3D data exported by a separate macro the post-processing plays
 
 The 3D viewer needs EnSight surface data for every case, so STAR-CCM+ should

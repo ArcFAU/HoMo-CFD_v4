@@ -232,5 +232,28 @@ runTests(async () => {
   check("3d: wheel zooms towards the pointer", after.zoom > before.zoom &&
     near((ndc.x - after.panX) / after.zoom, (ndc.x - before.panX) / before.zoom) && near((ndc.y - after.panY) / after.zoom, (ndc.y - before.panY) / before.zoom),
     `${JSON.stringify(before)} → ${JSON.stringify(after)}`);
+
+  // Flow parts: the Lambda2 iso-surface has its own checkbox; a part switched off is not drawn.
+  const vortexBox = doc3d.querySelector('#part-toggles input[data-part="Lambda2"]');
+  check("3d: Lambda2 part gets a Vortices checkbox, on by default", !doc3d.getElementById("part-toggles").hidden && vortexBox?.checked === true &&
+    /Vortices/.test(vortexBox?.parentElement?.textContent ?? ""), doc3d.getElementById("part-toggles").textContent);
+  vortexBox.checked = false; vortexBox.dispatchEvent(new win3d.Event("change"));
+  check("3d: unticking Vortices hides the Lambda2 part", win3d.eval("hiddenParts.has('Lambda2')") === true);
+  vortexBox.checked = true; vortexBox.dispatchEvent(new win3d.Event("change"));
+  // Colour range per field: a non-Cp field starts from its own values; ranges set by hand are remembered per field.
+  const fieldSelect = doc3d.getElementById("field-select"), rangeOf = () => [doc3d.getElementById("cp-min").value, doc3d.getElementById("cp-max").value].join("..");
+  const showField = async (name) => { fieldSelect.value = name; fieldSelect.dispatchEvent(new win3d.Event("change"));
+    await waitFor(() => doc3d.getElementById("legend-title").textContent === name, 10000); };
+  check("3d: field names with spaces are read from the .case file", [...fieldSelect.options].some((o) => o.value === "Velocity Magnitude"),
+    [...fieldSelect.options].map((o) => o.value).join(","));
+  await showField("Velocity Magnitude");
+  const [vMin, vMax] = rangeOf().split("..").map(Number);
+  check("3d: a non-Cp field starts with a range from its own values", vMin >= 10 && vMax <= 30 && vMin < vMax, rangeOf());
+  doc3d.getElementById("cp-min").value = "0"; doc3d.getElementById("cp-max").value = "50";
+  doc3d.getElementById("cp-max").dispatchEvent(new win3d.Event("input"));
+  await showField("PressureCoefficient");
+  check("3d: a Cp field starts at -5..1", rangeOf() === "-5..1", rangeOf());
+  await showField("Velocity Magnitude");
+  check("3d: the range set for a field comes back with it", rangeOf() === "0..50", rangeOf());
 });
 </script></body></html>

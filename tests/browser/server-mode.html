@@ -136,7 +136,7 @@ runTests(async () => {
   await waitFor(() => /triangles/.test(opened[2]?.contentDocument?.getElementById("case-name")?.textContent ?? "") ||
     opened[2]?.contentDocument?.getElementById("error")?.hidden === false, 60000);
   const viewer3d = opened[2]?.contentDocument;
-  check("3D viewer loads the EnSight case from the tree", /Frontwing · 4 triangles/.test(viewer3d?.getElementById("case-name")?.textContent ?? ""),
+  check("3D viewer loads the EnSight case from the tree", /Frontwing, Lambda2 · 5 triangles/.test(viewer3d?.getElementById("case-name")?.textContent ?? ""),
     viewer3d?.getElementById("error")?.hidden === false ? viewer3d.getElementById("error").textContent : viewer3d?.getElementById("case-name")?.textContent);
   // Stage 7 step 1: Fritz cluster settings (fake WinSCP on the test server).
   const clusterButton = doc.getElementById("cluster-settings");

@@ -53,9 +53,11 @@ FINAL_VALUES = {
 }
 
 # EnSight per-element field values: (tria3 cell 1, tria3 cell 2, quad4 cell).
+# Field name -> values of the two triangles and the quad of Frontwing, then the Lambda2 triangle.
 ENSIGHT_FIELDS = {
-    "CpX": (-2.25, 0.5, 1.125),
-    "PressureCoefficient": (-1.5, 0.25, 0.75),
+    "CpX": (-2.25, 0.5, 1.125, 0.0),
+    "PressureCoefficient": (-1.5, 0.25, 0.75, 0.0),
+    "Velocity Magnitude": (10.0, 20.0, 30.0, 25.0),
 }
 
 
@@ -76,7 +78,7 @@ def record(text):
 
 
 def write_ensight(folder):
-    """Two-triangle + one-quad surface part with per-element fields, plus an empty part."""
+    """Two-triangle + one-quad surface part with per-element fields, an empty part and a Lambda2 part."""
     folder.mkdir(parents=True, exist_ok=True)
     nodes = [(0, 0, 0), (1, 0, 0), (0, 1, 0), (1, 1, 0), (2, 0, 0), (2, 1, 0)]
     geometry = b"".join([
@@ -91,18 +93,25 @@ def write_ensight(folder):
         record("quad4"), struct.pack("<i", 1), struct.pack("<4i", 2, 5, 6, 4),
         # An empty boundary, as a half-car export can contain (e.g. the other side's wheel).
         record("part"), struct.pack("<i", 2), record("wheel-fr"), record("coordinates"), struct.pack("<i", 0),
+        # A derived part in the flow (vortex iso-surface), shown with its own checkbox.
+        record("part"), struct.pack("<i", 3), record("Lambda2"), record("coordinates"), struct.pack("<i", 3),
+        struct.pack("<3f", 0, 1, 0), struct.pack("<3f", 0, 0, 1), struct.pack("<3f", 1, 1, 1),
+        record("tria3"), struct.pack("<i", 1), struct.pack("<3i", 1, 2, 3),
     ])
     (folder / "test.geo").write_bytes(geometry)
     lines = ["FORMAT", "type: ensight gold", "", "GEOMETRY", "model: test.geo", "", "VARIABLE"]
-    for name, (t1, t2, q1) in ENSIGHT_FIELDS.items():
+    for name, (t1, t2, q1, flow) in ENSIGHT_FIELDS.items():
         values = b"".join([
             record(name), record("part"), struct.pack("<i", 1),
             record("tria3"), struct.pack("<2f", t1, t2),
             record("quad4"), struct.pack("<1f", q1),
             record("part"), struct.pack("<i", 2),
+            record("part"), struct.pack("<i", 3),
+            record("tria3"), struct.pack("<1f", flow),
         ])
-        (folder / f"test.{name}").write_bytes(values)
-        lines.append(f"scalar per element: {name} test.{name}")
+        file = name.replace(" ", "")
+        (folder / f"test.{file}").write_bytes(values)
+        lines.append(f"scalar per element: {name} test.{file}")
     (folder / "test.case").write_text("\n".join(lines) + "\n", encoding="ascii")
 
 

@@ -4004,3 +4004,139 @@ The background watcher of the post job (job 4285206 in `exp`) finished; no new u
 > 1. **Template:** say "upload it" and I'll put `export3D.java` and the new `postprocessing.java` into `SCRIPT_RANS` (old macro kept as `postprocessing.java.bak`). After that, every new simulation gets 3D data automatically.
 > 2. **Spot failed post-processing in HoMo** (from the first test): should I build that?
 > 3. Delete `starccm\post.o4285168` (it contains your licence key) and, if you like, the test folder `exp` on Fritz when you're done with it.
+
+## 2026-10-02 — More fields in the 3D export (skin friction, velocity, vorticity, λ2 vortices); per-field colour ranges
+
+### User messages (verbatim)
+
+> how about adding more things for 3d viewer.
+
+> check out HoMo-CFD/RANS.html in folder. you might get idea what more we could export.
+
+### Clarification (question tool; the user's answer verbatim)
+
+- Which additions to the 3D viewer would help you most? (Mirror to full car / Value at the pointer / Section cut / Compare two cases) → "i meant more things like skin friction coeficient, nlamda2, velocity, vorticity etc..."
+
+### Contributor messages (verbatim)
+
+> The 3D viewer now works on real exports, so there's plenty to add. Pick what's useful for your work:
+
+> Got it: you mean more **fields**, not more controls. One thing about the physics shapes how these can be shown:
+>
+> - **On the car's surface:** skin friction coefficient, wall shear stress and y+ live on the walls, so they fit the current viewer directly.
+> - **In the flow around the car:** velocity is zero on the surface (no slip), and λ2 and vorticity describe the flow. They're usually shown as **λ2 iso-surfaces**, the vortex "tubes", colored by velocity or total pressure. STAR-CCM+ can export such an iso-surface as an extra part, next to the car.
+>
+> Before writing anything, I'm checking STAR-CCM+ 2506's libraries for the λ2, vorticity, skin-friction and iso-surface functions, so the macro uses names that exist:
+
+> STAR-CCM+ 2506 has built-in skin friction coefficient and vorticity functions, plus `IsoPart` for iso-surfaces. There's no built-in λ2 class, so your team's λ2 (used for the `Lambda2_x-Section` pictures) must be a user field function. Looking for its name and definition in the team macros:
+
+> λ2 isn't defined in any macro, so it lives in your base `.sim` as a user field function with an unknown internal name. The macro will therefore find fields by their display name too (e.g. anything named like "Lambda2"). It will also write a list of all field functions into `3D-data`, so we learn the exact names from the next run.
+>
+> Checking the API for listing field functions, vector magnitudes and creating an iso-surface:
+
+> An iso-surface needs a threshold, and λ2's scale depends on how your team defined it. The `Lambda2` section pictures show the color range the team uses, so I'll look at one:
+
+> That picture settles the λ2 question. Your team's function is shown as **`neg(Lambda2)`** (that is, −λ2), and the color scale runs from 0 to 100,000. Vortex cores are where `neg(Lambda2)` is large, so the macro can make an iso-surface at a threshold such as 20,000. I'll put the threshold in `Settings`, so it can be tuned without touching the macro.
+>
+> Checking the remaining calls: setting the iso value, and naming the part:
+
+> All the calls exist: `createIsoPart(regions, field)`, `setMode(ISOVALUE_SINGLE)`, `getSingleIsoValue().setValue(…)`, plus setting the part's name.
+>
+> Writing version 2 of `export3D.java`:
+> - **Surface fields** (new): skin friction coefficient, wall shear stress (magnitude) and y+, alongside the Cp fields.
+> - **Flow fields:** velocity and vorticity (magnitudes).
+> - **A "Vortices" part:** the λ2 iso-surface (threshold from `Settings`, default 20,000), removed from the simulation again after the export.
+> - **A `fields.txt` list** in `3D-data` with every field function, so we learn the exact names.
+
+> Version 2 compiles against STAR-CCM+ 2506. The viewer needs four things to go with it:
+> - **A Vortices checkbox**, to show or hide the iso-surface around the car.
+> - **A color range per field**, because skin friction (around 0.01) and velocity (tens of m/s) can't share Cp's −5…1. Each field remembers its own range; a new field starts from its own data.
+> - **Per-node values**, in case STAR-CCM+ writes the iso-surface's values per point instead of per cell.
+> - **Field names with spaces**, such as a magnitude function, read correctly from the `.case` file.
+>
+> Reading the viewer code for those spots:
+
+> That should give us the exact field function names. Checking its size first, then searching it for field functions:
+
+> It's an 8.6 MB STAR-CCM+ report of the whole simulation tree (`UPSI_CFD_BASE_0823`). Git doesn't ignore it yet, so the next commit would include it. Checking it for personal data, then looking for the field functions:
+
+> No personal paths in it. The field functions section is near the end. Extracting each function's display name, internal name and definition:
+
+> Two useful findings:
+> - **The real name is `CpZ-CpX`**, with a hyphen. That's why the first version found no `CpZCpX`. The new version also matches display names while ignoring punctuation, so it will find it now.
+> - **`neg(Lambda2)` = −λ2, set to zero within 5 mm of any wall**, built on STAR's own `Lambda2`. That's ideal for an iso-surface, because it leaves out the noise at the walls. The macro already prefers this function.
+>
+> Now the rest of the report, for what else is worth exporting (scenes, derived parts, reports). Listing the upper levels of the tree:
+
+> Important find: besides `Air`, `MRF-FL` and `MRF-RL`, the simulation has **hundreds of "Cells deleted from …" regions**, left over from mesh repair. They hold no solution. That explains both oddities from the test: the "566 surfaces" in the log, and the 8 tiny pieces without values (their walls). The macro should skip those regions; then the export is just the car, and the vortex search covers only the real flow.
+>
+> Listing the rest of the tree without them:
+
+> The report has two ready-made **derived parts** I hadn't expected:
+> - **`Lambda2`**: your team already defines a λ2 iso-surface in the simulation.
+> - **`Streamline`**: streamlines from a point seed.
+>
+> Using the team's own `Lambda2` part is better than inventing a threshold. Reading the properties of both, plus `Bad_Cells` and the reports, from the report:
+
+> That settles it:
+> - **`Lambda2`** is a ready λ2 iso-surface: `neg(Lambda2)` = 30,000 in region `Air`. The macro will export exactly this team part, as a part called "Lambda2". Only if a simulation lacks it does the macro build one itself, with the same 30,000.
+> - **`Bad_Cells`** is an iso-surface around bad mesh cells. Exported as well, it shows where mesh problems sit, as an optional overlay.
+> - **`Streamline`** has a single seed point, so it isn't worth exporting.
+>
+> Updating the macro: skip the "Cells deleted" regions, use the team's `Lambda2` and `Bad_Cells` parts, and drop the temporary part only if the macro created it.
+
+> The macro compiles, and `RANS.html` is now ignored by Git. It's 8.6 MB and describes your car's geometry, so it shouldn't go to GitHub.
+>
+> Next, the viewer side: on/off checkboxes for the Lambda2 and Bad_Cells parts, a remembered color range per field, and field names with spaces. Reading the code I'll change:
+
+> I'm making those viewer changes with a patch script:
+> - **Part ranges:** each part's triangles are recorded, so parts can be switched on and off.
+> - **Checkboxes:** "Vortices (λ2)" is on by default, "Bad cells" off. Each appears only when the export contains that part.
+> - **Color range per field:** Cp fields start at −5…1; other fields start from their own data (1st–99th percentile). Any range you set or auto-set is remembered per field, so comparing cases stays like-for-like.
+> - **Field names:** names with spaces in the `.case` file are read correctly.
+
+> Patch applied. For the tests, the test data needs a `Lambda2` part and a non-Cp field. Checking which fields the test data has:
+
+> The test data has only Cp fields. I'll add two things to it:
+> - a **"Velocity Magnitude"** field: a non-Cp field whose name contains a space, as a magnitude export might have,
+> - a small **"Lambda2"** part.
+>
+> First, checking that the browser tests start with empty browser storage, since the remembered ranges live there:
+
+> Fresh profile every run, so remembered ranges start empty. Updating the test data and adding the checks:
+
+> All 128 browser checks pass, including 6 new ones. Running the unit tests (the test data changed), and loading the real car export again with the updated viewer:
+
+> Unit tests pass, and the real car still loads (5.6 million triangles; no λ2 part in that older export, so no checkbox). Now the docs:
+
+> The docs are updated and the portable zip is rebuilt. Writing the log entry:
+
+### Work record
+
+- STAR-CCM+ 2506 API (javap on `modules/ext` jars): `SkinFrictionCoefficientFunction`, `VorticityVectorFunction`, `star.vis.IsoPart`, `PartManager.createIsoPart(Vector, FieldFunction)`, `IsoMode.ISOVALUE_SINGLE`, `SingleIsoValue.setValue(double)`, `FieldFunction.getMagnitudeFunction()`, `ClientServerObjectManager.getObjects()`.
+- Team λ2: section pictures show `neg(Lambda2)` 0…1e5. `RANS.html` (the user's STAR-CCM+ report of `UPSI_CFD_BASE_0823`; no personal paths found; now git-ignored): field functions `CpX`, `CpZ`, `CpZ-CpX`, `neg(Lambda2)` = `(WallDistance > 0.005) ? -Lambda2 : 0`, `Norm_Area_x/z`, `omega_tunnel`; derived parts `pressureDistribution`, `Bad_Cells` (Bad Cell Indicator = 1), `Lambda2` (neg(Lambda2) = 30000 on Air), plane sections x/y/z, `Streamline` (one point seed); regions Air, MRF-FL/FR/RL/RR and hundreds of `Cells deleted from …`.
+- `starccm/export3D.java` (v2): skips `Cells deleted` regions; fields PressureCoefficient, TotalPressureCoefficient, CpX, CpZ, CpZ-CpX, SkinFrictionCoefficient, WallYplus + magnitudes of WallShearStress, Velocity, VorticityVector (matched by name or display name ignoring case/punctuation); exports the derived parts `Lambda2` and `Bad_Cells` (fallback: temporary iso part of neg(Lambda2) at 30000, removed in `finally`); `fields.txt`; optional Settings keys `3D-Data/Vortices`, `3D-Data/Bad Cells`, `3D-Data/Vortices Iso Value`. Compiled with STAR-CCM+ 20.04's javac. Not run in STAR-CCM+.
+- `web/3d-viewer.js|html|css`: per-part triangle ranges and per-part drawing; Vortices (λ2) / Bad cells checkboxes (`#part-toggles`); colour statistics leave Bad cells out; per-field colour ranges (localStorage `homo-cfd-3d-ranges-v1`; Cp fields −5…1, others 1st–99th percentile; set or Auto range remembered); `.case` field names may contain spaces. Per-node values (mentioned above) were not added: the export writes per-cell values.
+- Tests: `tests/fixture.py` (Lambda2 part, "Velocity Magnitude" field), `tests/browser/server-mode.html` (part list), `tests/browser/picker-mode.html` (+6 checks). Real car export (scratchpad) still loads.
+- Docs: `starccm/README.md`, `CHANGELOG.md`, `STATUS.md`, `DECISIONS.md`, `tests/README.md`; `.gitignore` (`/RANS.html`). Portable zip rebuilt.
+- Checks: `py -m unittest discover -s tests` 70/70 OK; `py tests/run_browser_tests.py` 128/128 passed.
+
+### Final response (verbatim)
+
+> The export now covers the fields you listed, plus two things I found in your `RANS.html`. It's in the repo, but nothing on Fritz has changed yet.
+>
+> **What `export3D.java` exports now**
+> - **On the car's surface:** the Cp fields (now including **CpZ-CpX**; it's spelled with a hyphen, which is why the first test missed it), plus **skin friction coefficient**, **y+**, and the magnitudes of **wall shear stress**, **velocity** and **vorticity**.
+> - **Vortices:** your simulation's own **`Lambda2`** part, the iso-surface of `neg(Lambda2)` = 30,000 that your team set up. It shows the vortex cores around the car and can be colored by any of the fields above. Velocity is zero on the car's surface (no slip), so this is where velocity and vorticity become meaningful.
+> - **Bad cells:** your `Bad_Cells` part, which shows where the mesh check found bad cells. It's off by default in the viewer.
+> - **`fields.txt`**: a list of every field function in the simulation, so we can add more later by name.
+>
+> **What `RANS.html` showed:** the simulation contains hundreds of empty "Cells deleted from …" regions left over from mesh repair. Those caused the 8 grey pieces and the "566 surfaces" in the first test; the macro now skips them. I've also made Git ignore `RANS.html`, since it describes your car's geometry.
+>
+> **In the 3D viewer:**
+> - **Vortices (λ2)** and **Bad cells** checkboxes appear when the export has those parts.
+> - Each field keeps its own color range: Cp starts at −5…1, other fields start from their own values, and any range you set is remembered for that field, so cases stay comparable.
+>
+> **Not run yet:** the new macro compiles against STAR-CCM+ 2506 but hasn't run in STAR-CCM+. To test it, replace `export3D.java` in your `exp` folder on Fritz with `starccm\export3D.java` and submit `post.sh` again (about an hour). I can copy the file for you; you'd only start the job. Then I'll check the result as last time.
+>
+> All tests pass (70 unit tests, 128 browser checks), the portable zip is rebuilt, and the changes are on GitHub `master`.

@@ -22,20 +22,44 @@ changes:
 
 ## export3D.java: 3D data for the 3D viewer
 
-Exports the car's surfaces with per-cell fields (PressureCoefficient,
-TotalPressureCoefficient, CpX, CpZ, CpZCpX) as EnSight Gold into `3D-data/`
-next to the `.sim`. HoMo CFD shows such a folder in the results tree as
-**3D-data · 3D viewer**. A full car is about 70 MB plus about 6 MB per field.
+Exports EnSight Gold into `3D-data/` next to the `.sim`; HoMo CFD shows such a
+folder in the results tree as **3D-data · 3D viewer**:
+
+- **The car's wall surfaces** with per-cell fields: PressureCoefficient,
+  TotalPressureCoefficient, CpX, CpZ, CpZ-CpX, SkinFrictionCoefficient,
+  WallYplus, and the magnitudes of WallShearStress, Velocity and
+  VorticityVector. A full car is about 70 MB plus about 6 MB per field.
+- **The simulation's derived part `Lambda2`** (iso-surface of `neg(Lambda2)` at
+  30000 in `UPSI_CFD_BASE`: the vortex cores), coloured by the same fields; the
+  viewer shows it with a **Vortices (λ2)** checkbox. Without such a part the
+  macro makes a temporary one from the `neg(Lambda2)` field function.
+- **The derived part `Bad_Cells`** (iso-surface around bad mesh cells), off by
+  default in the viewer (**Bad cells** checkbox).
+- **`fields.txt`**: every field function of the simulation (name, display name,
+  type), to look up names.
+
+Fields are found by name or display name, ignoring case and punctuation, so
+`CpZ-CpX` and `CpZCpX` both work. Regions named `Cells deleted from …` (left
+over from mesh repair, no solution) are skipped.
+
+Optional lines in the case's `Settings`:
+
+```text
+3D-Data/Vortices : false              no Lambda2 part
+3D-Data/Bad Cells : false             no Bad_Cells part
+3D-Data/Vortices Iso Value : 30000    only for the temporary part, when the simulation has no Lambda2 part
+```
 
 - Only **wall** boundaries are exported. Wind-tunnel walls are skipped by name
   (`floor`, `ground`, `road`, `walls`, `wall`, `tunnel`, `symmetry`, `sym`,
   `top`, `side`), and so are interfaces (`internal…`, names with `[`). Edit
   `SKIPPED` at the top of the macro if your domain uses other names.
-- Fields the simulation does not have are left out (e.g. `CpZCpX` in
-  `0830_mk2.2_10degree`); problems are written to the log and never stop the
-  post-processing.
-- STAR-CCM+ may add a few tiny pieces of the walls (named like `rim 3`) without
-  values; the viewer shows them grey.
+- Fields or parts a simulation does not have are left out; problems are written
+  to the log and never stop the post-processing.
+- The first version (tested on Fritz) missed `CpZ-CpX` (looked up as `CpZCpX`)
+  and exported walls of the `Cells deleted` regions as tiny parts without values
+  (`rim 3`, …); both are fixed in this version, which is compiled against 2506
+  but not yet run in STAR-CCM+.
 
 ### Try it once by hand
 
