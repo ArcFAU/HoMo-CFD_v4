@@ -2816,3 +2816,26 @@ MEMORY.md:77-79|note=[grounded the next improvements in the existing CFD image a
 > Still open for Stage 7: built-in Windows SSH or WinSCP/PuTTY, whether to delete the case on Fritz after download, whether HoMo should write the job scripts, and the licence key location.
 >
 > All tests pass (15 unit tests, 78 browser checks). Committed and pushed to GitHub `master`. Reload http://127.0.0.1:5173 to see it.
+
+## 2026-10-02 — Remove the aero balance column
+
+### User message (verbatim)
+
+> we can remove aero balance column
+
+### Work record
+
+- `web/app.js`: removed `Balance [% front]` from `COMPUTED_COLUMNS` and from the Δ note; L/D stays. `web/styles.css`: comment only.
+- Tests: `tests/browser/server-mode.html` — balance checks replaced by "L/D follows the forces, no balance column"; Δ L/D check kept.
+- Docs: `CHANGELOG.md`, `DECISIONS.md` (entry renamed; balance column added and removed the same day; CzA Front already shows the balance), `SHARED_CONTEXT.md` (no separate balance column), `STATUS.md`, `HANDOFF_FOR_CHATGPT.md`.
+- Checks: `py -m unittest discover -s tests` 15/15 OK; `py tests/run_browser_tests.py` 77/77 passed.
+
+### Final response (verbatim)
+
+> Done. The **Balance [% front]** column is gone. The table now reads:
+>
+> `Simulation | Iteration | Downforce [N] | Drag [N] | L/D | CzA Front(%) | CzA | …`
+>
+> CzA Front(%) still shows the balance as a fraction, exactly as exported.
+>
+> All tests pass (15 unit tests, 77 browser checks). Committed and pushed to GitHub `master`. Reload http://127.0.0.1:5173 to see it.

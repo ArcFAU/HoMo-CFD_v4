@@ -997,7 +997,6 @@ function numericCell(raw) {
 
 // Confirmed by the team (2026-10-02): CzA and CxA are the downforce and drag
 // coefficients times the reference area; negative means downforce / drag.
-// CzA Front (percentage) is the front share of the downforce, as a fraction.
 // The exported monitors stay unchanged; HoMo CFD adds these columns from the
 // total monitors. Forces use the speed and density set above the table and
 // assume CzA and CxA do not change with speed.
@@ -1012,10 +1011,6 @@ const COMPUTED_COLUMNS = [
     value: (monitor) => monitor.CzA / monitor.CxA,
     note: () => "Lift-to-drag ratio = Downforce ÷ Drag = CzA ÷ CxA. It does not depend on the speed or density. " +
       "Higher means more downforce for the same drag." },
-  { header: "Balance [% front]", sources: ["CzA Front(%)"], decimals: 1,
-    value: (monitor) => monitor["CzA Front(%)"] * 100,
-    note: () => "Aero balance: front share of the downforce = CzA Front (percentage) × 100 (the monitor is exported as a fraction). " +
-      "50 % is an even front/rear split; higher means more front-biased." },
 ];
 
 function derivedAeroColumn(header) {
@@ -1106,7 +1101,7 @@ function withComputedColumns(data) {
   return { ...data, headers, rows: [...data.rows.slice(0, -1), values] };
 }
 
-// Forces and balance get one decimal, L/D two; coefficients keep three.
+// Forces get one decimal, L/D two; coefficients keep three.
 function valueDecimals(header) {
   return COMPUTED_COLUMNS.find((column) => column.header === header)?.decimals ?? 3;
 }
@@ -1206,7 +1201,7 @@ function renderCsvTables(coefficientRows) {
     note.className = "comparison-note";
     note.textContent = "Δ = this simulation minus the reference. Downforce [N] and Drag [N] are positive for downforce and drag, so a positive Δ " +
       "there means more downforce or more drag. Other columns are the exported monitors, unchanged: for CzA and CxA a negative Δ means " +
-      "more downforce or more drag. A positive Δ L/D means more downforce per unit of drag; a positive Δ Balance means more front-biased.";
+      "more downforce or more drag. A positive Δ L/D means more downforce per unit of drag.";
     collective.appendChild(note);
   }
 

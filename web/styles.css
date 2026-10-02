@@ -1443,7 +1443,7 @@ select {
   min-width: 260px;
 }
 
-/* Columns computed by HoMo CFD (forces, L/D, balance). */
+/* Columns computed by HoMo CFD (forces, L/D). */
 .data-table th.derived-column {
   color: var(--accent);
   cursor: help;
