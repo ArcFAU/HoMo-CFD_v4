@@ -1,0 +1,160 @@
+<!doctype html><html><head><meta charset="utf-8"><title>picker mode</title><script src="/test/mock.js"></script><script src="/test/harness.js"></script></head><body>
+<script>
+// Pages opened without serve.py choose a folder in the browser. The folder
+// picker is mocked (mock.js) over virtual folder layouts of the fixture:
+//   single = one simulation as the root, multi = caseA/caseB/caseC (caseC's
+//   coefficients file fails to read) + hidden .git, nested = finished/caseA|B.
+window.__openViewer = (url) => {
+  opened.push(frame(url.replace("./image-viewer.html", "/__viewer_test.html").replace("./3d-viewer.html", "/__3d_test.html")));
+};
+
+async function openApp(scenario) {
+  window.__pickPath = scenario;
+  const app = frame("/__app_test.html");
+  await waitFor(() => app.contentDocument?.getElementById("open-results") && app.contentDocument.readyState === "complete");
+  app.contentDocument.getElementById("open-results").click();
+  await waitFor(() => app.contentDocument.querySelector("#case-slots .tree-root") &&
+    !/Indexing|Loading/.test(app.contentDocument.getElementById("panels").textContent), 120000);
+  return app;
+}
+
+runTests(async () => {
+  // ---- single simulation chosen as the root
+  resetFrames();
+  let app = await openApp("single"); let doc = app.contentDocument;
+  check("single: coefficient row named after the root folder", rowNames(doc)[0] === "single", rowNames(doc).join(","));
+  doc.querySelector('.tree-entry.image-folder[data-path="Cp_x-Section"]').click();
+  check("single: top-level section opens the comparison viewer", await waitFor(() => opened[0]?.contentDocument?.querySelector(".compare-image-panel img")));
+  let viewer = opened[0]?.contentDocument;
+  check("single: viewer seeded with Cp", viewer?.querySelector(".compare-case-controls select")?.value === "Cp");
+  check("single: viewer seeded with X axis", viewer?.querySelector(".compare-case-controls .active")?.textContent === "X");
+  const singleOptions = [...(viewer?.querySelector(".compare-case-header select")?.options ?? [])].map((option) => option.textContent);
+  check("single: case option labelled with the folder name", singleOptions.includes("single"), singleOptions.join("|"));
+
+  // ---- several simulations, unreadable CSV, hidden folder
+  resetFrames();
+  app = await openApp("multi"); doc = app.contentDocument;
+  check("multi: readable simulations listed", rowNames(doc).join(",") === "caseA,caseB", rowNames(doc).join(","));
+  const errorNote = doc.querySelector("#panels .error")?.textContent ?? "";
+  check("multi: unreadable coefficient file reported", /Could not read 1 coefficient file.*caseC/.test(errorNote), errorNote);
+  check("multi: hidden .git folder not indexed", ![...doc.querySelectorAll("#case-slots .tree-entry")].some((entry) => entry.textContent.startsWith(".git")));
+  doc.querySelector('.tree-entry.image-folder[data-path="caseA/Cp_x-Section"]').click();
+  await waitFor(() => opened[0]?.contentDocument?.querySelector(".compare-image-panel img"));
+  let win = opened[0].contentWindow; viewer = win.document;
+  check("multi: viewer offers all simulations", viewer.querySelector(".compare-case-header select").options.length === 4, viewer.querySelector(".compare-case-header select").options.length);
+  viewer.getElementById("add-case").click();
+  await waitFor(() => viewer.querySelectorAll(".compare-image-panel").length === 2);
+  const second = viewer.querySelectorAll(".compare-case-header select")[1];
+  second.value = "caseB"; second.dispatchEvent(new win.Event("change"));
+  await waitFor(() => viewer.querySelectorAll(".compare-image-panel img").length === 2);
+  await idle(win);
+  for (let press = 0; press < 15; press++) key(win, "ArrowRight");
+  await idle(win);
+  const afterBurst = captionIndex(viewer, 1);
+  check("multi: burst of arrow keys steps without error", afterBurst >= 2, afterBurst);
+  let previous = afterBurst, monotonic = true;
+  for (let press = 0; press < 40; press++) {
+    key(win, "ArrowRight"); await sleep(15);
+    const now = captionIndex(viewer, 1);
+    if (Number.isFinite(now)) { if (now < previous) monotonic = false; previous = now; }
+  }
+  await idle(win);
+  const held = captionIndex(viewer, 1);
+  check("multi: held arrow key never steps backwards", monotonic && held > afterBurst, `${afterBurst} -> ${held}`);
+  const retained = win.eval("compareCases.map((c) => c.images.filter((f) => f.image || f.loading).length)");
+  const farRetained = win.eval("compareCases.map((c) => c.images.filter((f, i) => (f.image || f.loading) && Math.abs(i - c.frameIndex) > 2).length)");
+  check("multi: decoded frames limited to current ±2", retained.every((count) => count <= 5) && farRetained.every((count) => count === 0), `retained ${retained} far ${farRetained}`);
+  key(win, "y"); await idle(win);
+  const axisNow = viewer.querySelectorAll(".compare-case-controls")[1].querySelector(".active")?.textContent;
+  check("multi: Y key switches the focused panel's axis", axisNow === "Y" && captionIndex(viewer, 1) === 1, axisNow);
+  key(win, "t"); await idle(win);
+  check("multi: T key switches the focused panel to CpT", viewer.querySelectorAll(".compare-case-controls select")[1].value === "CpT");
+  win.eval("window.__removed = compareCases[1]");
+  viewer.querySelectorAll(".compare-image-panel")[1].querySelector(".remove-case").click();
+  await idle(win);
+  check("multi: removed case releases its images", viewer.querySelectorAll(".compare-image-panel").length === 1 && win.eval("__removed.images.filter((f) => f.image || f.url).length") === 0);
+  check("multi: viewer shows no error", viewer.getElementById("viewer-error").hidden, viewer.getElementById("viewer-error").textContent);
+
+  // pressure overlay with a case missing the primary station (caseB has no 2460 mm)
+  doc.querySelector('summary.tree-entry[data-path="caseA/PressureDistributions/pd_FW_x-Section"]').click();
+  await waitFor(() => doc.querySelector("svg.pressure-chart"));
+  const xLabel = doc.querySelector(".pressure-axis-label")?.textContent;
+  check("pressure: x-axis label present", xLabel && xLabel.includes("mm"), xLabel);
+  const chartTitle = doc.querySelector("svg.pressure-chart title")?.textContent ?? "";
+  check("pressure: chart title has no 'undefined'", chartTitle && !chartTitle.includes("undefined"), chartTitle);
+  doc.querySelector(".pressure-toolbar select").value = "caseB";
+  doc.querySelector(".pressure-toolbar button").click();
+  await waitFor(() => doc.querySelectorAll("svg.pressure-chart .pressure-legend-label").length === 3);
+  const legend = [...doc.querySelectorAll("svg.pressure-chart .pressure-legend-label")].map((label) => label.textContent);
+  check("pressure: off-station case labelled in legend", legend.includes("caseB @ 2440 mm") && legend.includes("caseA"),
+    `${doc.querySelector(".pressure-chart-title")?.textContent} | ${legend.join(" | ")} | ${doc.getElementById("panels").textContent.slice(0, 300)}`);
+  const details = doc.querySelector(".pressure-chart-details")?.textContent ?? "";
+  check("pressure: details note the nearest-station substitution", /no data at 2460 mm.*nearest station/.test(details), details);
+
+  // 3D scene gallery zoom
+  doc.querySelector(".scene-gallery-folder").click();
+  await waitFor(() => opened[1]?.contentDocument?.querySelector("#image-stage img")?.naturalWidth);
+  win = opened[1].contentWindow; viewer = win.document;
+  const stage = viewer.getElementById("image-stage");
+  for (let press = 0; press < 3; press++) viewer.getElementById("zoom-in").click();
+  await sleep(150);
+  stage.scrollLeft = 0; stage.scrollTop = 0;
+  const image = stage.querySelector("img");
+  const stageBox = stage.getBoundingClientRect(), imageBox = image.getBoundingClientRect();
+  check("gallery: zoom makes the image scrollable", stage.scrollWidth > stage.clientWidth + 10, `${stage.scrollWidth} vs ${stage.clientWidth}`);
+  check("gallery: zoomed top-left corner reachable", imageBox.left >= stageBox.left - 1 && imageBox.top >= stageBox.top - 1, `${imageBox.left},${imageBox.top} vs ${stageBox.left},${stageBox.top}`);
+  stage.scrollLeft = stage.scrollWidth;
+  check("gallery: zoomed right edge reachable", Math.abs(image.getBoundingClientRect().right - (stage.getBoundingClientRect().left + stage.clientWidth)) < 3);
+
+  // ---- nested simulations
+  resetFrames();
+  app = await openApp("nested"); doc = app.contentDocument;
+  check("nested: both nested simulations in the table", rowNames(doc).join(",") === "caseA,caseB", rowNames(doc).join(","));
+  doc.querySelector('.tree-entry.image-folder[data-path="finished/caseA/Cp_x-Section"]').click();
+  await waitFor(() => opened[0]?.contentDocument?.querySelector(".compare-image-panel img"));
+  const nestedOptions = [...opened[0].contentDocument.querySelector(".compare-case-header select").options].map((option) => option.textContent);
+  check("nested: viewer can add the other nested simulation", nestedOptions.length === 3, nestedOptions.join("|"));
+  doc.querySelector('summary.tree-entry[data-path="finished/caseA/PressureDistributions/pd_FW_x-Section"]').click();
+  await waitFor(() => doc.querySelector("svg.pressure-chart"));
+  check("nested: pressure workspace offers the other simulation", [...doc.querySelector(".pressure-toolbar select").options].some((option) => option.value === "finished/caseB"));
+
+  // ---- remembered folder needing permission + viewer entry pruning
+  resetFrames();
+  __mockStore.set("resultsRoot", new MockDir("multi", "prompt"));
+  __mockStore.set("viewer-set:old", []);
+  __mockStore.set("viewer-set:new", []);
+  __mockStore.set("viewer-time:new", Date.now());
+  app = frame("/__app_test.html");
+  const reconnect = await waitFor(() => { const button = app.contentDocument?.getElementById("reconnect-results"); return button && !button.hidden && button; });
+  check("reconnect: one-click reconnect offered", reconnect, reconnect?.textContent);
+  check("prune: stale viewer entries removed, recent kept", !__mockStore.has("viewer-set:old") && __mockStore.has("viewer-set:new"), [...__mockStore.keys()].join(","));
+  reconnect?.click();
+  await waitFor(() => app.contentDocument.querySelector(".data-table tbody tr"));
+  check("reconnect: folder loads after reconnect", rowNames(app.contentDocument).length === 2 && app.contentDocument.getElementById("reconnect-results").hidden);
+
+  // ---- 3D viewer with the browser picker
+  resetFrames();
+  window.__pickPath = "multi/caseA/3D-data";
+  const viewer3dFrame = frame("/__3d_test.html");
+  await waitFor(() => viewer3dFrame.contentDocument?.getElementById("open-folder") && viewer3dFrame.contentDocument.readyState === "complete");
+  const win3d = viewer3dFrame.contentWindow, doc3d = viewer3dFrame.contentDocument;
+  doc3d.getElementById("open-folder").click();
+  await waitFor(() => /triangles/.test(doc3d.getElementById("case-name").textContent) || !doc3d.getElementById("error").hidden, 60000);
+  check("3d: EnSight case loads", /triangles/.test(doc3d.getElementById("case-name").textContent),
+    doc3d.getElementById("error").hidden ? doc3d.getElementById("case-name").textContent : doc3d.getElementById("error").textContent);
+  const field = doc3d.getElementById("field-select");
+  field.value = "PressureCoefficient"; field.dispatchEvent(new win3d.Event("change"));
+  field.value = "CpX"; field.dispatchEvent(new win3d.Event("change"));
+  await sleep(2000);
+  check("3d: rapid field switch ends on the selected field", doc3d.getElementById("legend-title").textContent === "CpX", doc3d.getElementById("legend-title").textContent);
+  doc3d.getElementById("auto-range").click();
+  check("3d: auto range legend uses up to 3 decimals", doc3d.getElementById("legend-min").textContent === "-2.25" && doc3d.getElementById("legend-max").textContent === "1.125",
+    `${doc3d.getElementById("legend-min").textContent} … ${doc3d.getElementById("legend-max").textContent}`);
+  doc3d.getElementById("cp-min").value = "2"; doc3d.getElementById("cp-max").value = "-1";
+  doc3d.getElementById("cp-min").dispatchEvent(new win3d.Event("input"));
+  check("3d: reversed range swapped and flagged", doc3d.getElementById("legend-min").textContent === "-1" && doc3d.getElementById("legend-max").textContent === "2" && doc3d.getElementById("cp-min").matches(":invalid"),
+    `${doc3d.getElementById("legend-min").textContent} … ${doc3d.getElementById("legend-max").textContent}`);
+  const nanMesh = win3d.eval("(() => { const parts=[{id:1,name:'t',points:new Float32Array([0,0,0, 1,0,0, 0,1,0, 1,1,0]),blocks:[{type:'tria3',count:2,width:3,conn:new Uint32Array([0,1,2, 1,3,2]),cp:new Float32Array([1,NaN])}]}]; const m=toMesh(parts); return [...m.cp].map(String).join(','); })()");
+  check("3d: NaN cells don't poison shared points", nanMesh === "1,1,1,NaN", nanMesh);
+});
+</script></body></html>

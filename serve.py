@@ -45,19 +45,21 @@ def user_config_dir():
     return Path.home() / ".config" / "homo-cfd"
 
 
-SETTINGS_FILE = user_config_dir() / "settings.json"
+def settings_file():
+    return user_config_dir() / "settings.json"
 
 
 def read_settings():
     try:
-        return json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
+        return json.loads(settings_file().read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {}
 
 
 def write_settings(settings):
-    SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    SETTINGS_FILE.write_text(json.dumps(settings, indent=2), encoding="utf-8")
+    path = settings_file()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(settings, indent=2), encoding="utf-8")
 
 
 def cfd_tool_working_dir():

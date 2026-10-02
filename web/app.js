@@ -988,6 +988,35 @@ async function renderCsvPage() {
   renderCsvTables(coefficientRows.filter(Boolean));
 }
 
+// Confirmed by the team (2026-10-02): negative CzA is downforce and negative
+// CxA is drag. Downforce and Drag are shown as positive numbers next to the
+// unchanged exported monitors; CzA Front stays a fraction as exported.
+const DERIVED_AERO_COLUMNS = [
+  { header: "Downforce (−CzA)", source: "CzA", note: "Downforce = −CzA (negative CzA is downforce); higher means more downforce." },
+  { header: "Drag (−CxA)", source: "CxA", note: "Drag = −CxA (negative CxA is drag); higher means more drag." },
+];
+
+function derivedAeroColumn(header) {
+  return DERIVED_AERO_COLUMNS.find((column) => column.header === header);
+}
+
+// Inserts Downforce/Drag right after Iteration, computed from the total CzA
+// and CxA monitors of the final row.
+function withDerivedAeroColumns(headers, row) {
+  const outHeaders = [...headers];
+  const outRow = [...row];
+  let insertAt = headers.findIndex((header) => /^iteration$/i.test(header)) + 1;
+  DERIVED_AERO_COLUMNS.forEach(({ header, source }) => {
+    const sourceIndex = headers.findIndex((candidate) => classifyHeader(candidate) === source);
+    if (sourceIndex < 0) return;
+    const value = Number(row[sourceIndex]);
+    outHeaders.splice(insertAt, 0, header);
+    outRow.splice(insertAt, 0, Number.isFinite(value) ? String(-value) : "");
+    insertAt++;
+  });
+  return { headers: outHeaders, row: outRow };
+}
+
 async function loadCsvTable(file) {
   if (browserState.csvCache.has(file.handle)) return browserState.csvCache.get(file.handle);
   const loading = (async () => {
@@ -996,7 +1025,9 @@ async function loadCsvTable(file) {
     if (!rows.length) return { name: file.name, path: file.path, headers: [], rows: [] };
     const headers = rows.shift().map((value, index) => value || `Column ${index + 1}`);
     if (/^coefficients.*\.csv$/i.test(file.name)) {
-      return { name: file.name, path: file.path, headers, rows: rows.length ? [rows[rows.length - 1]] : [] };
+      if (!rows.length) return { name: file.name, path: file.path, headers, rows: [] };
+      const derived = withDerivedAeroColumns(headers, rows[rows.length - 1]);
+      return { name: file.name, path: file.path, headers: derived.headers, rows: [derived.row] };
     }
     return { name: file.name, path: file.path, headers, rows };
   })();
@@ -1080,7 +1111,8 @@ function renderCsvTables(coefficientRows) {
   if (browserState.coefficientView === "delta") {
     const note = document.createElement("p");
     note.className = "comparison-note";
-    note.textContent = "Δ = this simulation minus the reference, using exported monitor values without sign or unit conversion.";
+    note.textContent = "Δ = this simulation minus the reference. Downforce = −CzA and Drag = −CxA, so a positive Δ Downforce means more downforce " +
+      "and a positive Δ Drag means more drag. Other columns are the exported monitors, unchanged.";
     collective.appendChild(note);
   }
 
@@ -1094,10 +1126,15 @@ function renderCsvTables(coefficientRows) {
     const head = document.createElement("thead");
     const headerRow = document.createElement("tr");
     headerRow.appendChild(cell("th", "Simulation"));
-    visibleHeaders.forEach((column) => headerRow.appendChild(cell(
-      "th",
-      browserState.coefficientView === "delta" ? `Δ ${column.label}` : column.label,
-    )));
+    visibleHeaders.forEach((column) => {
+      const th = cell("th", browserState.coefficientView === "delta" ? `Δ ${column.label}` : column.label);
+      const derived = derivedAeroColumn(column.key);
+      if (derived) {
+        th.classList.add("derived-column");
+        th.title = `Computed by HoMo CFD. ${derived.note}`;
+      }
+      headerRow.appendChild(th);
+    });
     head.appendChild(headerRow);
     table.appendChild(head);
 
@@ -1144,7 +1181,8 @@ function renderMonitorChart(coefficientRows, referenceRow) {
   select.setAttribute("aria-label", "Monitor to chart");
   orderedColumnDefinitions(columns).forEach((column) => select.add(new Option(column.label, column.key)));
   if (!columns.includes(browserState.monitorChartHeader)) {
-    browserState.monitorChartHeader = columns.find((header) => classifyHeader(header) === "CzA") ?? columns[0] ?? "";
+    browserState.monitorChartHeader = columns.find((header) => derivedAeroColumn(header)?.source === "CzA") ??
+      columns.find((header) => classifyHeader(header) === "CzA") ?? columns[0] ?? "";
   }
   select.value = browserState.monitorChartHeader;
   controls.appendChild(select);
@@ -1152,18 +1190,22 @@ function renderMonitorChart(coefficientRows, referenceRow) {
 
   const note = document.createElement("p");
   note.className = "monitor-chart-note";
-  note.textContent = browserState.coefficientView === "delta"
-    ? `Raw Δ for ${select.selectedOptions[0]?.textContent ?? "monitor"}: case minus ${simulationNameFromCsvPath(referenceRow.path)}. Sign meaning is not interpreted.`
-    : `Raw exported values for ${select.selectedOptions[0]?.textContent ?? "monitor"}; sign meaning is not interpreted.`;
+  const describeSelection = () => {
+    const label = select.selectedOptions[0]?.textContent ?? "monitor";
+    const derived = derivedAeroColumn(select.value);
+    const meaning = derived ? derived.note : "Exported monitor value, unchanged.";
+    return browserState.coefficientView === "delta"
+      ? `Δ ${label}: case minus ${simulationNameFromCsvPath(referenceRow.path)}. ${meaning}`
+      : `${label}. ${meaning}`;
+  };
+  note.textContent = describeSelection();
   chart.appendChild(note);
 
   const chartViewport = document.createElement("div");
   chartViewport.className = "monitor-chart-viewport";
   const draw = () => {
     browserState.monitorChartHeader = select.value;
-    note.textContent = browserState.coefficientView === "delta"
-      ? `Raw Δ for ${select.selectedOptions[0]?.textContent ?? "monitor"}: case minus ${simulationNameFromCsvPath(referenceRow.path)}. Sign meaning is not interpreted.`
-      : `Raw exported values for ${select.selectedOptions[0]?.textContent ?? "monitor"}; sign meaning is not interpreted.`;
+    note.textContent = describeSelection();
     chartViewport.replaceChildren(drawMonitorChart(coefficientRows, select.value, referenceRow));
   };
   select.addEventListener("change", draw);

@@ -4,7 +4,7 @@ Last updated: 2026-10-02
 
 - The landing view is a searchable filesystem tree. The chosen results-root handle is stored in IndexedDB and restored when browser permission remains granted; otherwise the sidebar shows a one-click **Reconnect** button. Hidden folders (for example `.git`) are skipped during indexing. The root may be a single simulation folder, a folder of simulations, or a tree with simulations nested deeper; every simulation at any depth is offered in comparison windows and pressure overlays.
 - The workspace displays only one collective table: the final data row from each `Coefficients*.csv`, one row per simulation. Coefficient values display to three decimal places and the iteration number as an integer. No other CSV tables or full coefficient histories are rendered.
-- Stage 5 has **Values / Δ vs reference** modes in the coefficient table plus a collapsible raw-monitor comparison chart. Deltas are signed case-minus-reference by original monitor header; the reference row is zero. No sign, unit, or aerodynamic benefit conversion is inferred.
+- Stage 5 has **Values / Δ vs reference** modes in the coefficient table plus a collapsible raw-monitor comparison chart. Deltas are signed case-minus-reference by original monitor header; the reference row is zero. Since 2026-10-02 the table also shows computed **Downforce (−CzA)** and **Drag (−CxA)** right after Iteration (team convention: negative CzA/CxA are downforce/drag), so a positive Δ means more downforce/drag than the reference; the monitor chart starts on Downforce. Exported monitors and the CzA Front fraction are unchanged.
 - **Customize columns** allows renaming, hiding, and reordering coefficient columns. Preferences persist in browser local storage; values remain bound to original CSV headers.
 - CSV discovery covers section-like folders even when they also contain images. Actual image files are not read during root indexing.
 - Clicking an image section opens a comparison window seeded with that simulation and selected field/axis; **Add case** inside the window adds more simulations. The main window has no comparison case slots.
@@ -12,7 +12,7 @@ Last updated: 2026-10-02
 - In the comparison scene window, T/V/P/L switch the focused panel to CpT/Velocity/Cp/Lambda2 when that field exists; the current axis is kept when available and the frame resets to the first image.
 - In the comparison window, X/Y/Z switch the focused panel's axis when that axis exists for its field and reset to the first image; they also work while a field dropdown is focused. (The earlier main-page X/Y/Z handling belonged to the retired slot UI and was removed with it on 2026-10-02.)
 - A populated pressure-distribution sample is available in `0830_mk3/PressureDistributions`: six FW/UT/RW x/y groups with coordinate and pressure-coefficient columns. Empty station files are present and must be skipped by plot rendering; pressure plotting is now unblocked.
-- Browser-tested against the supplied data using in-memory file handles: FW/X at 2420 mm rendered 1,783 measurements. The EnSight Frontwing case rendered 1,780,500 triangles, exposed all five fields, and CpZ Auto range matched the data limits −3.319…+2.135. The native directory picker/permission flow was not exercised end-to-end.
+- Browser-tested against the supplied data using in-memory file handles: FW/X at 2420 mm rendered 1,783 measurements. The EnSight Frontwing case rendered 593,500 triangles (first reported as 1,780,500: the viewer label counted triangle corners; fixed 2026-10-02), exposed all five fields, and CpZ Auto range matched the data limits −3.319…+2.135. The native directory picker/permission flow was not exercised end-to-end.
 - Pressure-distribution group folders open their matching plot in an immersive workspace that hides the folder tree. Up to four cases overlay in distinct colors, with separate pressure-side and suction-side colors; positive Cp plots down and negative Cp up. Stations follow front-to-back file order and are stepped with keyboard arrows (no position dropdown). Optional Cp/Velocity/CpT/Lambda2 images stay linked to that pressure plane; one image gets the larger view, two stack vertically, and three/four use a two-by-two layout. Image labels and gaps are removed to maximize plot and image area.
 - Zoom uses explicit fit-relative dimensions inside scrollable image stages rather than CSS transforms, so enlarged images remain fully reachable. Zoom changes preserve the viewport center; reset returns all panels to fit. The 3D scene gallery uses the same scrollable zoom with drag-pan.
 - Image sequences are indexed without eagerly reading every file; frames within ±2 of the current one are decoded and kept, and farther frames are released so memory stays bounded. Removing or replacing a case releases its images. Viewer actions (arrow keys, field/axis/case changes) run one at a time; held arrow keys skip repeats while an image loads, and load errors appear in the viewer instead of only the console. A real Cp/X sequence opened with its first image ready in about 0.8 seconds; the next-frame step measured about 11 ms.
@@ -40,6 +40,15 @@ Last updated: 2026-10-02
 - Indexing uses `os.scandir`: two linked copies of `0830_mk3` scan in about 0.025 s (was 1.5 s with `Path.iterdir`).
 - Verified: API probes (traversal and hidden paths return 400; conditional GET returns 304); headless-Chrome end-to-end run against the real server with two junction-linked `0830_mk3` cases, 12/12 checks (auto-load, comparison window and stepping, pressure plot, scene gallery, 3D viewer from tree); browser-folder regression suite still 35/35. Not yet tried with the user's real `finished` folder.
 
+## Viewer, Stage 5 and tests (2026-10-02, overnight)
+
+- Comparison window layout is CSS-driven per case count: 1 = full, 2 = side by side, 3-4 = 2 x 2 with each panel at least 420 px tall; the window scrolls rather than shrinking images. Below 1000 px width, panels stack in one column.
+- `+` / `-` / `0` zoom in, out and reset in the comparison window and the scene gallery.
+- Stage 5 Downforce/Drag columns (see above), with hover explanations and sign-aware notes in the Δ view and monitor chart.
+- 3D viewer triangle count fixed (it showed index count = 3 x triangles).
+- Tests in the repo: `tests/test_serve.py` (15 unit tests) and `tests/run_browser_tests.py` (67 headless checks over generated data in `tests/fixture.py`). See `tests/README.md`; `AGENTS.md` asks every contributor to run them.
+- Planning files from the ChatGPT pipeline: `DECISIONS.md`, `TASK.md`, `CHANGELOG.md`.
+
 ## Open items
 
 - The actual `High-Voltage_white.png` logo is present at the project root and is used in the main-window header.
@@ -48,7 +57,7 @@ Last updated: 2026-10-02
 - Later 3D viewer improvement: part-level show/hide controls. Deferred because the user considers the full-car rendering sufficient for now.
 - User check pending: double-click `Start HoMo CFD.bat` and try **Working directory → Browse…** (both open desktop windows, so they were not automated).
 - Later improvement (distribution, decided 2026-10-02): for now teammates install Python 3 themselves. Later, bundle a portable Python with HoMo CFD so it is unzip-and-run like CFD-Tool, which shipped its own Java runtime.
-- Stage 5's raw monitor difference view is implemented, but it is not engineering-validated. The legacy CFD-Tool presets confirm labels/visibility only, not formulas, signs, or units. Confirm monitor definitions against an authoritative source before naming metrics downforce, drag, or front balance.
+- Stage 5: sign convention confirmed by the team (negative CzA = downforce, negative CxA = drag, CzA Front is a fraction); Downforce/Drag columns added. Further derived metrics (efficiency, component downforce, balance) only on request.
 - `.gitignore` now excludes the 1.75 GiB local result tree and both ZIP archives. `CFD-Tool.zip` contains a possible `p.ppk`; it was not extracted or inspected and remains ignored.
 
 ## How to run

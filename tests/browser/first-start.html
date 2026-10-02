@@ -1,0 +1,31 @@
+<!doctype html><html><head><meta charset="utf-8"><title>first start</title><script src="/test/harness.js"></script></head><body>
+<script>
+// No working directory yet: the app asks for one, rejects a wrong path, and
+// loads the results after the CFD-Tool working directory is chosen.
+runTests(async () => {
+  const workingDir = new URLSearchParams(location.search).get("dir");
+  const app = frame("/");
+  const card = await waitFor(() => app.contentDocument?.querySelector(".working-dir-card"));
+  check("first start shows Choose working directory", card, app.contentDocument?.getElementById("panels")?.textContent.slice(0, 200));
+  let doc = app.contentDocument;
+  check("chooser offers Browse…", [...doc.querySelectorAll(".working-dir-card button")].some((button) => button.textContent === "Browse…"));
+  check("sidebar button reads Working directory", doc.getElementById("open-results").textContent === "Working directory", doc.getElementById("open-results").textContent);
+  const useButton = () => [...doc.querySelectorAll(".working-dir-card button")].find((button) => button.textContent === "Use this folder");
+
+  doc.querySelector(".working-dir-input").value = "Z:/does/not/exist";
+  useButton().click();
+  await waitFor(() => !doc.querySelector(".working-dir-card .error").hidden);
+  check("wrong path is rejected", /Folder not found/.test(doc.querySelector(".working-dir-card .error").textContent), doc.querySelector(".working-dir-card .error").textContent);
+
+  doc.querySelector(".working-dir-input").value = workingDir;
+  useButton().click();
+  await waitFor(() => app.contentDocument?.querySelector(".data-table tbody tr"), 60000);
+  doc = app.contentDocument;
+  check("simulations load from the working directory's finished folder", rowNames(doc).join(",") === "caseA,caseB",
+    rowNames(doc).join(",") || doc.getElementById("panels").textContent.slice(0, 200));
+  check("sidebar tooltip shows the working directory", doc.getElementById("open-results").title.includes("CFD_tool"), doc.getElementById("open-results").title);
+  doc.getElementById("open-results").click();
+  const again = await waitFor(() => doc.querySelector(".working-dir-card"));
+  check("Working directory reopens the chooser with the current folder", again && /Current: .*CFD_tool.*finished/.test(again.textContent), again?.textContent.slice(0, 300));
+});
+</script></body></html>

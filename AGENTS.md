@@ -1,6 +1,6 @@
 # Contributor instructions
 
-Before changing this project, read `CHAT_HISTORY.md`, `SHARED_CONTEXT.md`, and `STATUS.md`.
+Before changing this project, read `CHAT_HISTORY.md`, `SHARED_CONTEXT.md`, and `STATUS.md`. `TASK.md` is the current task and `DECISIONS.md` explains why things are built the way they are.
 
 ## Required conversation log
 
@@ -16,3 +16,14 @@ Log only conversation content visible to the user. Do not include hidden reasoni
 ## Completion rule
 
 Do not finish a project task without updating `CHAT_HISTORY.md`. If an environment or permission prevents updating it, tell the user explicitly and provide the exact content they should append.
+
+## Tests
+
+Before finishing a code change, run both suites from the project folder (see `tests/README.md`) and report the results in `CHAT_HISTORY.md`:
+
+```text
+py -m unittest discover -s tests -v
+py tests/run_browser_tests.py
+```
+
+Add or update checks for behaviour you change. Record user-visible changes in `CHANGELOG.md`.

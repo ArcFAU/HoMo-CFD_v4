@@ -282,9 +282,10 @@ function renderComparisonFrame() {
   });
   imageStageObserver.disconnect();
   stage.replaceChildren(...panels);
-  const columnCount = panels.length === 1 ? 1 : 2;
-  stage.style.gridTemplateColumns = `repeat(${columnCount}, minmax(0, 1fr))`;
-  stage.style.gridTemplateRows = `repeat(${Math.ceil(panels.length / columnCount)}, minmax(0, 1fr))`;
+  // Layout per case count lives in CSS: 3-4 panels keep a minimum readable
+  // size and the window scrolls instead of shrinking the images.
+  stage.classList.remove("compare-count-1", "compare-count-2", "compare-count-3", "compare-count-4");
+  stage.classList.add(`compare-count-${Math.min(4, Math.max(1, panels.length))}`);
   stage.querySelectorAll(".compare-image-stage").forEach((imageStage) => imageStageObserver.observe(imageStage));
   caption.textContent = syncImages
     ? "Sync images is on: left/right arrow keys step every panel by frame index."
@@ -545,7 +546,7 @@ async function loadFolder() {
   }
   document.getElementById("viewer-title").textContent = is3DSceneGallery ? "3D reference scenes" : folderHandle.name;
   document.getElementById("viewer-path").textContent = is3DSceneGallery
-    ? `${target.path || folderHandle.name} · Use left/right arrow keys to step through scenes.`
+    ? `${target.path || folderHandle.name} · Use left/right arrow keys to step through scenes; + / − / 0 to zoom.`
     : `${target.path || folderHandle.name} · Use left/right arrow keys to step through images.`;
   document.title = `${is3DSceneGallery ? "3D reference scenes" : target.path || folderHandle.name} | HoMo CFD`;
   images = [];
@@ -561,7 +562,7 @@ async function loadFolder() {
     imageStageObserver.observe(stage);
   }
   if (is3DSceneGallery) {
-    document.getElementById("viewer-path").textContent = `${target.path || folderHandle.name} · ${images.length} scenes · Use left/right arrow keys to step through scenes.`;
+    document.getElementById("viewer-path").textContent = `${target.path || folderHandle.name} · ${images.length} scenes · Use left/right arrow keys to step through scenes; + / − / 0 to zoom.`;
   }
   renderFrame();
 }
@@ -593,7 +594,7 @@ async function loadComparison() {
   });
   document.getElementById("sync-images-control").hidden = false;
   document.getElementById("viewer-title").textContent = "Simulation comparison";
-  document.getElementById("viewer-path").textContent = "Each panel has independent field, axis, frame, and zoom controls. T: CpT · V: Velocity · P: Cp · L: Lambda2 · X/Y/Z: axis (focused panel).";
+  document.getElementById("viewer-path").textContent = "Each panel has independent field, axis, frame, and zoom controls. T: CpT · V: Velocity · P: Cp · L: Lambda2 · X/Y/Z: axis (focused panel) · + / − / 0: zoom.";
   document.title = "Simulation comparison | HoMo CFD";
   stage.classList.add("compare-stage");
   renderFrame();
@@ -646,6 +647,16 @@ zoomChannel?.addEventListener("message", (event) => {
 });
 document.addEventListener("keydown", (event) => {
   const target = event.target;
+  // + / - zoom every panel, 0 resets to fit (also on the number pad).
+  if (!event.ctrlKey && !event.altKey && !event.metaKey &&
+    !(target?.isContentEditable || ["INPUT", "TEXTAREA"].includes(target?.tagName))) {
+    const zoomStep = { "+": 1.2, "=": 1.2, "-": 1 / 1.2, "_": 1 / 1.2 }[event.key];
+    if (zoomStep || event.key === "0") {
+      event.preventDefault();
+      setZoom(zoomStep ? zoom * zoomStep : 1);
+      return;
+    }
+  }
   if (compareKey && !event.ctrlKey && !event.altKey && !event.metaKey) {
     const key = event.key.toLowerCase();
     const isTextEntry = target?.isContentEditable || ["INPUT", "TEXTAREA"].includes(target?.tagName);

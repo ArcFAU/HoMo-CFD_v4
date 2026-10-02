@@ -1109,12 +1109,37 @@ select {
 }
 
 .image-viewer-stage.compare-stage {
+  --compare-min-panel-height: 420px;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 480px), 1fr));
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   align-items: stretch;
-  grid-auto-rows: minmax(0, 1fr);
   gap: 8px;
   padding: 8px;
+}
+
+/* Two cases side by side, filling the window. */
+.image-viewer-stage.compare-stage.compare-count-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+/* Three or four cases: 2 x 2 grid. Panels never shrink below a readable
+   height; the window scrolls instead (images are never cropped). */
+.image-viewer-stage.compare-stage.compare-count-3,
+.image-viewer-stage.compare-stage.compare-count-4 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(var(--compare-min-panel-height), 1fr));
+}
+
+/* Narrow windows: one column, each panel at least the readable height. */
+@media (max-width: 1000px) {
+  .image-viewer-stage.compare-stage.compare-count-2,
+  .image-viewer-stage.compare-stage.compare-count-3,
+  .image-viewer-stage.compare-stage.compare-count-4 {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: none;
+    grid-auto-rows: minmax(var(--compare-min-panel-height), 1fr);
+  }
 }
 
 .compare-image-panel {
@@ -1416,4 +1441,10 @@ select {
 .working-dir-input {
   flex: 1;
   min-width: 260px;
+}
+
+/* Downforce / Drag columns computed by HoMo CFD from CzA / CxA. */
+.data-table th.derived-column {
+  color: var(--accent);
+  cursor: help;
 }

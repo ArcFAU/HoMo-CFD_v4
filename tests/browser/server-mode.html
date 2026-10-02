@@ -1,0 +1,86 @@
+<!doctype html><html><head><meta charset="utf-8"><title>server mode</title><script src="/test/harness.js"></script></head><body>
+<script>
+// The normal setup: serve.py with a working directory. Results load without
+// a picker; viewers, pressure plots, 3D viewer and Stage 5 columns work.
+const headerCells = (doc) => [...doc.querySelectorAll(".data-table thead th")].map((th) => th.textContent);
+const cellFor = (doc, rowName, header) => {
+  const index = headerCells(doc).indexOf(header);
+  const row = [...doc.querySelectorAll(".data-table tbody tr")].find((tr) => tr.cells[0].textContent === rowName);
+  return row?.cells[index]?.textContent;
+};
+
+runTests(async () => {
+  const app = frame("/", { captureOpen: true });
+  await waitFor(() => app.contentDocument?.querySelector(".data-table tbody tr"), 60000);
+  const doc = app.contentDocument;
+  check("results load without folder picker", rowNames(doc).join(",") === "caseA,caseB", rowNames(doc).join(",") || doc.getElementById("error").textContent);
+  check("tree root is the finished folder", doc.querySelector(".tree-root")?.textContent.startsWith("finished"), doc.querySelector(".tree-root")?.textContent);
+  check("no error or reconnect shown", doc.getElementById("error").hidden && doc.getElementById("reconnect-results").hidden, doc.getElementById("error").textContent);
+
+  // Stage 5: Downforce = -CzA and Drag = -CxA, right after Iteration.
+  const headers = headerCells(doc);
+  check("Downforce and Drag follow Iteration", headers.slice(1, 4).join("|") === "Iteration|Downforce (−CzA)|Drag (−CxA)", headers.slice(0, 5).join("|"));
+  check("Downforce = -CzA", cellFor(doc, "caseA", "Downforce (−CzA)") === "3.200" && cellFor(doc, "caseA", "CzA") === "-3.200",
+    `${cellFor(doc, "caseA", "Downforce (−CzA)")} / CzA ${cellFor(doc, "caseA", "CzA")}`);
+  check("Drag = -CxA", cellFor(doc, "caseB", "Drag (−CxA)") === "1.400" && cellFor(doc, "caseB", "CxA") === "-1.400",
+    `${cellFor(doc, "caseB", "Drag (−CxA)")} / CxA ${cellFor(doc, "caseB", "CxA")}`);
+  check("CzA Front stays a fraction", cellFor(doc, "caseA", "CzA Front(%)") === "0.450", cellFor(doc, "caseA", "CzA Front(%)"));
+  check("computed columns explained on hover", /−CzA \(negative CzA is downforce\)/.test(doc.querySelector(".data-table th.derived-column")?.title ?? ""), doc.querySelector(".data-table th.derived-column")?.title);
+  check("monitor chart defaults to Downforce", doc.querySelector(".monitor-chart-controls select")?.value === "Downforce (−CzA)", doc.querySelector(".monitor-chart-controls select")?.value);
+  [...doc.querySelectorAll(".table-mode-switch button")].find((button) => button.textContent === "Δ vs reference").click();
+  await waitFor(() => headerCells(doc).includes("Δ Downforce (−CzA)"));
+  check("Δ Downforce positive = more downforce", cellFor(doc, "caseB", "Δ Downforce (−CzA)") === "0.300" && cellFor(doc, "caseA", "Δ Downforce (−CzA)") === "0.000",
+    `caseB ${cellFor(doc, "caseB", "Δ Downforce (−CzA)")}, caseA ${cellFor(doc, "caseA", "Δ Downforce (−CzA)")}`);
+  check("Δ Drag positive = more drag", cellFor(doc, "caseB", "Δ Drag (−CxA)") === "0.150", cellFor(doc, "caseB", "Δ Drag (−CxA)"));
+  check("Δ note explains the signs", /positive Δ Downforce means more downforce/.test(doc.querySelector(".comparison-note")?.textContent ?? ""), doc.querySelector(".comparison-note")?.textContent);
+  [...doc.querySelectorAll(".table-mode-switch button")].find((button) => button.textContent === "Values").click();
+
+  // Comparison window: 1 → 4 panels, minimum readable panel height, zoom keys.
+  doc.querySelector('.tree-entry.image-folder[data-path="caseA/Cp_x-Section"]').click();
+  await waitFor(() => opened[0]?.contentDocument?.querySelector(".compare-image-panel img")?.naturalWidth, 30000);
+  const win = opened[0].contentWindow, viewer = win.document;
+  check("viewer opens with the server image", viewer.querySelector(".compare-image-panel img")?.naturalWidth > 0, viewer.getElementById("viewer-error").textContent);
+  const stage = viewer.getElementById("image-stage");
+  const addCase = async (name) => {
+    viewer.getElementById("add-case").click();
+    const count = viewer.querySelectorAll(".compare-image-panel").length;
+    const select = viewer.querySelectorAll(".compare-case-header select")[count - 1];
+    select.value = name;
+    select.dispatchEvent(new win.Event("change"));
+    await waitFor(() => viewer.querySelectorAll(".compare-image-panel img").length === count, 30000);
+    await idle(win);
+  };
+  await addCase("caseB");
+  check("two cases side by side", stage.classList.contains("compare-count-2") && Math.abs(viewer.querySelectorAll(".compare-image-panel")[0].getBoundingClientRect().top - viewer.querySelectorAll(".compare-image-panel")[1].getBoundingClientRect().top) < 2, stage.className);
+  for (let step = 0; step < 5; step++) { key(win, "ArrowRight"); await idle(win); }
+  check("arrow keys step the focused case", captionIndex(viewer, 1) === 6, viewer.querySelectorAll(".compare-image-caption")[1]?.textContent);
+  await addCase("caseA");
+  await addCase("caseB");
+  const heights = [...viewer.querySelectorAll(".compare-image-panel")].map((panel) => Math.round(panel.getBoundingClientRect().height));
+  check("four cases keep a readable height (≥ 420 px) and scroll", stage.classList.contains("compare-count-4") && heights.every((height) => height >= 419) && stage.scrollHeight > stage.clientHeight,
+    `${stage.className}; heights ${heights}; scroll ${stage.scrollHeight}/${stage.clientHeight}`);
+  key(win, "+");
+  check("+ zooms in", viewer.getElementById("zoom-level").textContent === "120%", viewer.getElementById("zoom-level").textContent);
+  key(win, "-"); key(win, "-");
+  check("- zooms out", viewer.getElementById("zoom-level").textContent === "83%", viewer.getElementById("zoom-level").textContent);
+  key(win, "0");
+  check("0 resets zoom", viewer.getElementById("zoom-level").textContent === "100%", viewer.getElementById("zoom-level").textContent);
+
+  // Pressure plot, scene gallery, 3D viewer from the tree.
+  doc.querySelector('summary.tree-entry[data-path="caseA/PressureDistributions/pd_FW_x-Section"]').click();
+  await waitFor(() => doc.querySelector("svg.pressure-chart"), 30000);
+  check("pressure plot renders", /2460 mm/.test(doc.querySelector(".pressure-chart-title")?.textContent ?? "") && /40 measurements/.test(doc.querySelector(".pressure-chart-details")?.textContent ?? ""),
+    `${doc.querySelector(".pressure-chart-title")?.textContent} | ${doc.querySelector(".pressure-chart-details")?.textContent}`);
+  doc.querySelector('.scene-gallery-folder[data-path="caseA/3D"]').click();
+  await waitFor(() => opened[1]?.contentDocument?.querySelector("#image-stage img")?.naturalWidth, 30000);
+  check("scene gallery loads", opened[1]?.contentDocument?.querySelector("#image-stage img")?.naturalWidth > 0);
+  const ensight = doc.querySelector('.ensight-folder[data-path="caseA/3D-data"]');
+  check("3D-data has a 3D viewer entry", ensight, [...doc.querySelectorAll(".ensight-folder")].map((entry) => entry.dataset.path).join(","));
+  ensight?.click();
+  await waitFor(() => /triangles/.test(opened[2]?.contentDocument?.getElementById("case-name")?.textContent ?? "") ||
+    opened[2]?.contentDocument?.getElementById("error")?.hidden === false, 60000);
+  const viewer3d = opened[2]?.contentDocument;
+  check("3D viewer loads the EnSight case from the tree", /Frontwing · 4 triangles/.test(viewer3d?.getElementById("case-name")?.textContent ?? ""),
+    viewer3d?.getElementById("error")?.hidden === false ? viewer3d.getElementById("error").textContent : viewer3d?.getElementById("case-name")?.textContent);
+});
+</script></body></html>
