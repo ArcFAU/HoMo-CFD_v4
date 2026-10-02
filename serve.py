@@ -362,7 +362,6 @@ class Handler(SimpleHTTPRequestHandler):
             "/api/cluster/downloads": self.api_cluster_downloads,
             "/api/cluster/new-case": self.api_new_case_tasks,
             "/api/alive": self.api_alive,
-            "/api/about": self.api_about,
         }
         route = routes.get(url.path)
         if route is None:
@@ -414,14 +413,6 @@ class Handler(SimpleHTTPRequestHandler):
         route(body)
 
     # --- running in the background ---------------------------------------
-
-    def api_about(self, _path):
-        """ABOUT.txt: version, purpose and maker, shown by the app's About button."""
-        try:
-            text = (HERE / "ABOUT.txt").read_text(encoding="utf-8")
-        except OSError:
-            text = "HoMo CFD"
-        self.send_json({"text": text})
 
     def api_alive(self, _path):
         """Heartbeat from open windows (see IDLE_MINUTES)."""

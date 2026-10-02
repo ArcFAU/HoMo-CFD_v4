@@ -1,6 +1,6 @@
 # HoMo CFD
 
-Made by Archit Paneliya (High Voltage Motorsports, archit.paneliya@voltages.de); version, background and the AI tools used are in [ABOUT.txt](ABOUT.txt), also shown by the **ⓘ** button in the app.
+Made by Archit Paneliya (High Voltage Motorsports, archit.paneliya@voltages.de); version, background and the AI tools used are in [ABOUT.txt](ABOUT.txt).
 
 Web viewer for Formula Student STAR-CCM+ postprocessing results. This is a modern replacement for the existing CFD-Tool (PNG sections + later CSV plots and four-case compare).
 

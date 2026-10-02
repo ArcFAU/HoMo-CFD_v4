@@ -62,4 +62,5 @@ User-visible changes, newest first. Detailed reasoning lives in
 - `DECISIONS.md`, `TASK.md`, `CHANGELOG.md`, `tests/README.md`; refreshed `HANDOFF_FOR_CHATGPT.md`.
 
 ### Removed
+- **About button (ⓘ)** and its About dialog, at the user's request. `ABOUT.txt` stays in the portable zip and the README still names the maker.
 - About 700 lines of unused legacy slot-UI code.

@@ -2402,25 +2402,6 @@ async function showClusterSettings() {
   });
 }
 
-// About: ABOUT.txt from the HoMo CFD folder (version, purpose, maker, contact).
-async function showAbout() {
-  const dialog = document.getElementById("about-dialog");
-  const box = document.getElementById("about-text");
-  let text = "HoMo CFD\n\nSee ABOUT.txt in the HoMo CFD folder.";
-  try {
-    const response = await fetch("/api/about");
-    if (response.ok) text = (await response.json()).text || text;
-  } catch {
-    // opened without serve.py
-  }
-  box.replaceChildren();
-  // Plain text; e-mail addresses become links.
-  text.split(/([\w.+-]+@[\w-]+(?:\.[\w-]+)+)/).forEach((part, index) => {
-    box.append(index % 2 ? Object.assign(document.createElement("a"), { href: `mailto:${part}`, textContent: part }) : part);
-  });
-  dialog.showModal();
-}
-
 // HoMo CFD runs without a window, so it is stopped from here (or stops by
 // itself a while after the last window closed).
 async function quitApp() {
@@ -2450,7 +2431,6 @@ async function startFilesystemWorkspace() {
   });
   clusterButton.addEventListener("click", () => showClusterSettings());
   document.getElementById("quit-app").addEventListener("click", quitApp);
-  document.getElementById("about-app").addEventListener("click", showAbout);
   document.getElementById("open-3d-viewer").addEventListener("click", () => {
     const popup = window.open("./3d-viewer.html", "homo-cfd-3d", `popup,width=${screen.availWidth},height=${screen.availHeight},left=0,top=0`);
     if (!popup) showError("The 3D viewer window was blocked. Allow pop-ups for this local app and try again.");

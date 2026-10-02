@@ -109,7 +109,7 @@ body {
   position: sticky;
   bottom: -16px;
   display: flex;
-  gap: 6px;
+  gap: 8px;
   margin: auto -16px -16px;
   padding: 10px 16px 16px;
   background: var(--panel);
@@ -118,55 +118,20 @@ body {
 
 .sidebar-footer button {
   flex: 1;
-  padding: 8px 6px;
+  padding: 8px 10px;
   font-weight: 600;
-  white-space: nowrap;
 }
 
 .sidebar-footer .quit-button {
   flex: none;
-  width: 32px;
+  width: 38px;
   padding: 8px 0;
   color: var(--muted);
-}
-
-.about-dialog {
-  width: min(620px, calc(100vw - 32px));
-  max-height: calc(100vh - 48px);
-  padding: 18px 20px;
-  color: var(--text);
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-}
-
-.about-dialog::backdrop {
-  background: #0009;
-}
-
-.about-dialog h2 {
-  margin: 0;
-  font-size: 18px;
-}
-
-.about-text {
-  margin-top: 12px;
-  font: 13px/1.55 Consolas, "Cascadia Mono", monospace;
-  white-space: pre-wrap;
-}
-
-.about-text a {
-  color: var(--accent);
 }
 
 .sidebar-footer .quit-button:hover {
   color: #ff8d8d;
   border-color: #7d3034;
-}
-
-.sidebar-footer #about-app:hover {
-  color: var(--accent);
-  border-color: var(--accent);
 }
 
 .hint {

@@ -4998,3 +4998,54 @@ The background watcher of the post job (job 4285206 in `exp`) finished; no new u
 > 3. Open `D:\HoMo-CFD` in VS Code (File → Open Folder) and continue from there.
 >
 > When you work with me again in `D:\HoMo-CFD`, everything we did is in the project notes (`CHAT_HISTORY.md`, `STATUS.md`), so nothing is lost. Python itself and HoMo's small settings file (17 KB) stay on C; that's normal.
+
+## 2026-10-02 — About button removed
+
+### User messages (verbatim)
+
+> hi
+
+> do you remember adding "about" button in project?
+
+> i want you to remove the button from the application.
+
+### Contributor messages (verbatim)
+
+> Hi! I'm in the HoMo CFD project on the `night-2026-10-02` branch, and the working tree is clean. What would you like to work on?
+
+> I don't keep memory between sessions, but the project records show it. It was added earlier today in commit `36caf4f`, "About HoMo CFD: ABOUT.txt in the zip and an About dialog". It has three parts:
+>
+> - **ⓘ button** in the sidebar footer, next to the power button ([web/index.html](web/index.html)).
+> - **About dialog**: the button calls `showAbout()` in [web/app.js](web/app.js). The dialog gets its text from a new `/api/about` endpoint in [serve.py](serve.py). If the app was opened without `serve.py`, it shows a short fallback message instead. Email addresses in the text open your mail program when clicked.
+> - **[ABOUT.txt](ABOUT.txt)**: this holds the text the dialog shows, and it's also included in the portable zip. It contains version 1.0 (2 October 2026), what the app is for, you as the maker with your contact email, the AI assistants used, and how to start and stop the app.
+>
+> The same commit also changed the styles, tests, README, CHANGELOG and CHAT_HISTORY. Do you want to change something about it?
+
+> I'll remove the ⓘ button, the About dialog and its code. `ABOUT.txt` stays in the zip, since it doesn't need the button.
+
+> Escaping in my script broke the match, so only `index.html` got changed. I'll use the Edit tool for the rest:
+
+> The blob hashes match the versions from before the About commit. I'll check that sed didn't change the line endings, then run both test suites:
+
+> Both suites pass: 82 unit tests (83 before, minus the removed `/api/about` test) and 139 browser checks (140 before, minus the About check). Next I'll rebuild the portable zip so it doesn't ship the button either:
+
+> Now the notes: CHANGELOG, STATUS and the chat log.
+
+### Work record
+
+- Removed the ⓘ button (`web/index.html`), the About dialog (`web/index.html`), `showAbout()` and its click handler (`web/app.js`), the About styles (`web/styles.css`; sidebar footer spacing back to before: gap 8px, button padding 8px 10px, no nowrap, round buttons 38px) and `GET /api/about` (`serve.py`; nothing else used it). These files are now identical to their versions before commit `36caf4f`.
+- Kept: `ABOUT.txt` in the portable zip (CRLF) and the README's maker line (no longer mentions the button).
+- Tests: removed `test_about` (`tests/test_serve.py`) and the About check in `tests/browser/first-start.html`; footer check now expects `3D viewer,Cluster,⏻`. `tests/README.md`, `CHANGELOG.md` (Removed), `STATUS.md` updated.
+- Checks: `py -m unittest discover -s tests` 82/82 OK; `py tests/run_browser_tests.py` 139/139 passed. `py tools/make_portable.py` rebuilt `dist/HoMo-CFD-portable.zip` (12.5 MB, 58 entries, includes `ABOUT.txt`, no `about-app` in any page or script).
+- Not committed (waiting for the user).
+
+### Final response (verbatim)
+
+> Done. The ⓘ button is gone, so the bottom of the sidebar shows **3D viewer**, **Cluster** and **⏻** again, spaced as before.
+>
+> - **Removed with it:** the About dialog, its code and styles, and the `/api/about` server call it used (nothing else used them), plus their two tests.
+> - **Kept:** `ABOUT.txt` in the portable zip and the maker line at the top of the README.
+>
+> All tests pass (82 unit tests, 139 browser checks). I rebuilt `dist\HoMo-CFD-portable.zip` without the button. Reload HoMo CFD in your browser to see the change.
+>
+> The changes aren't committed yet. Should I commit and push them?

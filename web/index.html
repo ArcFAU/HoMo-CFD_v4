@@ -31,7 +31,6 @@
         <div class="sidebar-footer">
           <button class="small-control" id="open-3d-viewer" type="button" title="Open the 3D viewer for an EnSight 3D-data folder">3D viewer</button>
           <button class="small-control" id="cluster-settings" type="button" title="Fritz cluster: connection, simulations, new simulations" hidden>Cluster</button>
-          <button class="small-control quit-button" id="about-app" type="button" title="About HoMo CFD: version, maker, contact" aria-label="About HoMo CFD">ⓘ</button>
           <button class="small-control quit-button" id="quit-app" type="button" title="Quit HoMo CFD (it runs in the background without a window)" aria-label="Quit HoMo CFD" hidden>⏻</button>
         </div>
       </aside>
@@ -40,15 +39,6 @@
         <div class="panels" id="panels"></div>
       </main>
     </div>
-    <dialog id="about-dialog" class="about-dialog" aria-labelledby="about-title">
-      <form method="dialog">
-        <header class="column-dialog-header">
-          <h2 id="about-title">About HoMo CFD</h2>
-          <button class="small-control" type="submit" aria-label="Close">×</button>
-        </header>
-        <div id="about-text" class="about-text"></div>
-      </form>
-    </dialog>
     <dialog id="column-dialog" class="column-dialog" aria-labelledby="column-dialog-title">
       <form method="dialog" class="column-dialog-content">
         <header class="column-dialog-header">
