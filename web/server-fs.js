@@ -52,6 +52,14 @@ class ServerDirectoryHandle {
     return serverListings.get(this.path);
   }
 
+  // All child handles at once (used for fast indexing).
+  async children() {
+    return (await this.entries()).map((entry) => {
+      const path = joinServerPath(this.path, entry.name);
+      return entry.kind === "directory" ? new ServerDirectoryHandle(path, entry.name) : new ServerFileHandle(path, entry.name);
+    });
+  }
+
   async *values() {
     for (const entry of await this.entries()) {
       const path = joinServerPath(this.path, entry.name);

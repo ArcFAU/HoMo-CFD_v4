@@ -163,59 +163,52 @@ const browserState = {
   pressureRefresh: null,
 };
 
-async function buildFolderNode(handle, path = "", isSection = false, sceneImageCount = 0) {
+// Natural order ("2" before "10"); one shared collator is much faster than
+// localeCompare for the tens of thousands of names in a large results folder.
+const naturalOrder = new Intl.Collator(undefined, { numeric: true });
+const IMAGE_FILE = /\.(png|jpe?g|webp)$/i;
+
+// All entries of a folder as an array: one await per folder instead of one
+// per entry (server folders come from the prefetched tree).
+async function listChildren(handle) {
+  if (typeof handle.children === "function") return handle.children();
+  const children = [];
+  for await (const child of handle.values()) children.push(child);
+  return children;
+}
+
+async function buildFolderNode(handle, path = "", isSection = false, sceneImageCount = 0, children = null) {
   const node = { name: handle.name, path, handle, isSection, sceneImageCount, isSceneGallery: sceneImageCount > 0, folders: [], files: [], csvFiles: [] };
-  if (isSection) {
-    for await (const child of handle.values()) {
-      if (child.kind !== "file" || !/\.csv$/i.test(child.name)) continue;
-      const file = { name: child.name, path: path ? `${path}/${child.name}` : child.name, handle: child };
-      node.files.push(file);
-      node.csvFiles.push(file);
-    }
-    return node;
-  }
   if (node.isSceneGallery) return node;
-  for await (const child of handle.values()) {
-    if (child.kind === "file") {
-      if (/^3d-data$/i.test(handle.name) && /\.case$/i.test(child.name)) node.isEnsightFolder = true;
-      if (/\.csv$/i.test(child.name)) {
-        const file = { name: child.name, path: path ? `${path}/${child.name}` : child.name, handle: child };
-        node.files.push(file);
-        node.csvFiles.push(file);
-      }
-      continue;
-    }
+  const entries = children ?? await listChildren(handle);
+  for (const child of entries) {
+    if (child.kind !== "file" || !/\.csv$/i.test(child.name)) continue;
+    const file = { name: child.name, path: path ? `${path}/${child.name}` : child.name, handle: child };
+    node.files.push(file);
+    node.csvFiles.push(file);
+  }
+  if (isSection) return node;
+  node.isEnsightFolder = /^3d-data$/i.test(handle.name) && entries.some((child) => child.kind === "file" && /\.case$/i.test(child.name));
+  for (const child of entries) {
     // Skip hidden folders such as .git or .vscode; they never hold results.
     if (child.kind !== "directory" || child.name.startsWith(".")) continue;
     const childPath = path ? `${path}/${child.name}` : child.name;
-    const childIsSection = await isImageSectionFolder(child);
-    const sceneImageCount = childIsSection ? 0 : await countStatic3DImages(child);
-    const folder = await buildFolderNode(child, childPath, childIsSection, sceneImageCount);
+    const grandchildren = await listChildren(child);
+    const hasImages = grandchildren.some((entry) => entry.kind === "file" && IMAGE_FILE.test(entry.name));
+    const childIsSection = SECTION_FOLDER.test(child.name) && hasImages;
+    // Folders named 3D holding images are static scene galleries.
+    const sceneImages = !childIsSection && /^3d$/i.test(child.name)
+      ? grandchildren.filter((entry) => entry.kind === "file" && IMAGE_FILE.test(entry.name)).length
+      : 0;
+    const folder = await buildFolderNode(child, childPath, childIsSection, sceneImages, grandchildren);
     node.folders.push(folder);
     node.csvFiles.push(...folder.csvFiles);
   }
   node.isCase = node.folders.some((folder) => folder.isSection);
-  node.folders.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
-  node.files.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
-  node.csvFiles.sort((a, b) => a.path.localeCompare(b.path, undefined, { numeric: true }));
+  node.folders.sort((a, b) => naturalOrder.compare(a.name, b.name));
+  node.files.sort((a, b) => naturalOrder.compare(a.name, b.name));
+  node.csvFiles.sort((a, b) => naturalOrder.compare(a.path, b.path));
   return node;
-}
-
-async function countStatic3DImages(handle) {
-  if (!/^3d$/i.test(handle.name)) return 0;
-  let count = 0;
-  for await (const child of handle.values()) {
-    if (child.kind === "file" && /\.(png|jpe?g|webp)$/i.test(child.name)) count++;
-  }
-  return count;
-}
-
-async function isImageSectionFolder(handle) {
-  if (!SECTION_FOLDER.test(handle.name)) return false;
-  for await (const child of handle.values()) {
-    if (child.kind === "file" && /\.(png|jpe?g|webp)$/i.test(child.name)) return true;
-  }
-  return false;
 }
 
 function renderFilesystemTree() {

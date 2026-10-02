@@ -15,6 +15,9 @@ User-visible changes, newest first. Detailed reasoning lives in
 - One-click **Reconnect** when a browser-picked folder needs permission again.
 - Tests: `tests/test_serve.py` and the headless browser suite `tests/run_browser_tests.py` on generated data.
 
+### Changed
+- Faster start-up with many simulations: 120 simulations load in about 4 s (was 5.7 s).
+
 ### Fixed
 - Choosing a single simulation folder as the results root broke image sections and named the simulation "plots".
 - Simulations nested below the results root were missing from Add case and pressure overlays.
