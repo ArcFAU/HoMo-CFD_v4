@@ -4832,3 +4832,17 @@ The background watcher of the post job (job 4285206 in `exp`) finished; no new u
 ### Work record
 
 - Answer only; no changes.
+
+## 2026-10-02 — No version marker for now
+
+### User message (verbatim)
+
+> okay, no worries then.
+
+### Final response (verbatim)
+
+> Alright, no marker then. Everything is in place: the zip in `dist` is ready to share, your HoMo runs without a window, and the 3D export is active in `SCRIPT_RANS`. Just tell me whenever something comes up.
+
+### Work record
+
+- The user declined the version/"modified" marker. No changes.
