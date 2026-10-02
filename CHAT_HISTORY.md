@@ -2352,3 +2352,205 @@ MEMORY.md:77-79|note=[grounded the next improvements in the existing CFD image a
 > - **Stage 7:** Fritz cluster integration (submit, monitor, download).
 >
 > My suggestion: do 1 now, then 2 and the tests from 3. Shall I commit, merge into `master` and push to GitHub?
+
+## 2026-10-02 — Overnight: Git, viewer, Stage 5 Downforce/Drag, tests, scale, Stage 7 design
+
+### User message (verbatim)
+
+> point wise responce...
+> 1. you have permission to do everything.
+> 2. i'll soon put more result folders.
+> 3. you could do that.
+> 4. no need.
+> 5. yes, negative means downforce and drag, keep it as it is. CzPrercent is fraction but no need to change that as well. you could show downforce and drag as well for sure.
+> 6. we could do later improvements after we are through every phase, unlees it is unavoidable. but stage 7 seems nice.
+>
+> do everything. i'm going to sleep now for 5 hr. but you can keep working till you want.
+
+### Contributor messages (verbatim)
+
+> Got it, thanks. Since you'll be asleep, here's my plan; I'll report everything when you're back:
+>
+> 1. Commit, merge into `master`, push to GitHub.
+> 2. Viewer: a minimum panel size with scrolling for 3–4 cases, and `+` / `-` / `0` zoom keys.
+> 3. Move the test harness into `tests/` and add the planning files.
+> 4. Stage 5: show **Downforce** (−CzA) and **Drag** (−CxA) next to the raw values, which stay unchanged.
+> 5. Stage 7: research and design only. Submitting or deleting jobs on Fritz needs your cluster login and acts on real compute, so I won't touch the cluster while you're away.
+>
+> Starting with Git. First, what's on GitHub right now:
+
+> GitHub's `master` is exactly where our branch started, so this will be a clean fast-forward. Committing today's second batch of work:
+
+> Now fast-forwarding `master` and pushing it to GitHub. I'll keep working on a separate branch and merge each finished piece.
+
+> Pushed: GitHub's `master` now has everything up to commit `3364cb0`. Continuing on a new branch:
+
+> Replacing the inline grid sizing with CSS classes. For 3–4 cases, each panel now keeps at least 420 px of height, and the window scrolls instead of squeezing. Narrow windows (under 1000 px) stack the panels in one column.
+
+> Now the `+` / `-` / `0` zoom keys, in both the comparison window and the scene gallery:
+
+> Now Stage 5. I'll look at where coefficient rows are loaded and where the explanatory notes are written:
+
+> Writing the Stage 5 change as a script file, since it involves Unicode minus signs and the shell kept mangling special characters:
+
+> The real CSV headers match what the derived columns expect: `CzA Monitor` and `CxA Monitor` are the totals.
+>
+> Next, moving the tests into the project. My scratchpad tests depend on `0830_mk3`, which is git-ignored and exists only on your PC. So the project tests will **generate a small synthetic results folder** (tiny PNGs, pressure CSVs, a coefficients file, a miniature EnSight case) and run against that. Anyone can then run them with one command and no data.
+>
+> First a small refactor in `serve.py`: the settings path should be looked up when it's used, rather than fixed at start-up, so tests can point it at a temporary profile.
+
+> Now the fixture generator. It writes a small but realistic CFD-Tool working directory: two simulations with image sections, a 3D scene gallery, pressure CSVs (including empty stations and one station missing from the second case), a coefficients history in the real column format, and a two-cell EnSight Gold binary case.
+
+> Now the test server and the runner. One command generates the fixture into a temporary folder, serves the app, drives headless Chrome or Edge through three test pages, and prints PASS/FAIL. It uses a temporary `APPDATA`, so your real settings are never touched.
+
+> Now the browser-side test files. First the mock folder handles, used for the without-`serve.py` mode:
+
+> A shared helper script for the three test pages:
+
+> Now the server-mode page: the app as teammates will use it, plus the new Stage 5 columns, the 3–4-panel layout and the zoom keys.
+
+> Now the picker-mode page, which carries over the 35 regression checks from the review fixes and is adapted to the synthetic data:
+
+> Running the new project test suite:
+
+> 66 of 67 on the first run. The failure is a real bug the synthetic data exposed. The 3D viewer reports **"12 triangles"** for a mesh with 4: it shows the number of triangle *corners* (3 per triangle). Your full Frontwing was reported as 1,780,500 triangles but actually has 593,500. Fixing the label:
+
+> Next, Python unit tests for `serve.py` itself: the working-directory precedence, path safety and request checks. These run in a second and need no browser.
+
+> All 15 unit tests pass. I'll silence the request log in those tests so failures stay readable, then rerun the browser suite with the triangle fix:
+
+> All green: 15 unit tests and 67 browser checks. I'll write a short `tests/README.md`, then the planning files from the ChatGPT pipeline.
+
+> `HANDOFF_FOR_CHATGPT.md` is out of date (it still says Chrome-only, shows the wrong triangle count, and lists Stage 5 as unconfirmed). I'll refresh it at the end. Now the planning files the ChatGPT pipeline asked for:
+
+> Now `AGENTS.md`, so every contributor (Copilot included) runs the tests and reads the new files:
+
+> Now refreshing `HANDOFF_FOR_CHATGPT.md`, which you paste into ChatGPT. I'll rewrite it to reflect the current state:
+
+> Checking exactly which test files would be committed, so no generated cache files slip in:
+
+> Committing this milestone, then merging and pushing:
+
+> Pushed: GitHub `master` is now at `fef550a`. I'll restart your server so it runs the latest code:
+
+> Now the scale check you'll need once more results arrive. I'll make a test folder with **120 simulations** by pointing directory junctions at your 8 real ones (no data copied), then time the folder scan and the full app load.
+
+> The server scan takes 1.3 s for 120 simulations, but sends a 15.8 MB folder listing. Now the full app load in a browser, which also reads every simulation's coefficients file:
+
+> The app loads 120 simulations in **5.7 s**. That's usable, but I'd like to know where the time goes before you add more results. Measuring the network share of it:
+
+> The breakdown for 120 simulations:
+>
+> - **1.6 s:** server scan plus download of the folder listing.
+> - **2.4 s:** the browser walking that listing to build the tree. It handles about 200,000 entries one at a time and lists each section folder twice.
+> - **0.3 s:** coefficient files.
+>
+> The browser walk is the biggest cost and the easiest to fix. I'll read each folder's entries once as a list (one step per folder instead of per file) and reuse that list instead of listing twice.
+
+> There's a second cost hidden here. Every folder re-sorts the CSV list of everything beneath it with `localeCompare`, so the root sorts about 83,000 pressure CSVs that way. That function is slow when called per comparison; a single shared `Intl.Collator` does the same natural sort much faster. Rewriting the indexing:
+
+> Measuring again with the same 120 simulations:
+
+> The browser's share dropped from 2.4 s to about 0.6 s. The folder-listing request (about 2.2 s) is now the largest cost, so I'll time the server's scan and the JSON encoding separately:
+
+> Running the scan on several threads made it slower (2.4 s instead of 1.3 s), because Python threads compete for one lock. I'm keeping the single-threaded scan. The remaining ~1.2 s is the disk listing about 200,000 files, and that can't be avoided without caching results. **Overall: 120 simulations now load in about 4 s instead of 5.7 s.** Rerunning both test suites after the indexing change:
+
+> All passing. I'll record the scale numbers in `STATUS.md` and `CHANGELOG.md`, then commit and push:
+
+> Python printed an escape-sequence warning again, so I'll check the STATUS line for a mangled path:
+
+> The shell is still mangling the backslashes. A script file avoids the shell entirely:
+
+> Now Stage 7 (Fritz). Research only: I'll study how CFD-Tool talked to the cluster, from its class constants and `javap` disassembly, without the key file. I won't run anything or contact the cluster. Listing its classes and cluster-related strings:
+
+> Very informative. CFD-Tool's cluster workflow was:
+>
+> - **Unsimulated:** it generates `mesh.sh`, `rans.sh` and `post.sh` from the `Settings` file, as SLURM job scripts. Each job submits the next one when it finishes (`sbatch rans.sh`, then `sbatch post.sh`). The STAR-CCM+ licence key is inserted into those scripts.
+> - **InProgress:** it writes a Windows batch file that runs **WinSCP** over SFTP with a PuTTY key (`p.ppk`, the file I've been avoiding). The script changes into the team's cluster folder, runs a remote `Pipeline/launchV3.sh`, and later downloads results with `get`.
+> - **ConfigFrame:** lets the user paste the "WinSCP line" and choose their PuTTY key.
+>
+> Disassembling `InProgress` to see the exact order of operations (constants only):
+
+> The batch-file text is assembled from string templates. Printing the class's string constants in order, to see the commands:
+
+> The flow is now clear:
+>
+> 1. **Upload:** `upload.bat` runs WinSCP: open an SFTP session (connection string plus PuTTY key, from CFD-Tool's settings), `put` the local `inProgress\<sim>` folder into the team's `Pipeline` folder on Fritz, then `call launchV3.sh` there.
+> 2. **Monitor:** `downloadPlots.bat` fetches each running simulation's `plots` folder. When `plots\DONE` exists, the simulation is finished, and CFD-Tool moves it from `inProgress` to `finished`.
+>
+> Next I'll check the job scripts in `0830_mk3`. They contain the STAR-CCM+ licence key, so I'll mask anything after `-podkey` and never copy it:
+
+> Two useful details in the job scripts:
+>
+> - The chain is `mesh.sh` → `rans.sh` → `post.sh`. Each job submits the next.
+> - `plots/DONE` is written right after RANS finishes, when post-processing has only been *submitted*. So "DONE" means "solver finished", not "images ready". HoMo CFD should treat it the same way.
+>
+> I masked the licence key and won't put it anywhere. One more check: whether Windows' built-in SSH tools are available, since that decides how HoMo CFD could connect without extra software:
+
+> Windows' built-in OpenSSH is present, as are WinSCP and PuTTY (which CFD-Tool needs). There's no `~/.ssh` folder, so you currently log in only through PuTTY's `.ppk` key. That's everything I need for the design document.
+
+> The design document is written. Before wrapping up, a safety cleanup: my scratch folders contain **directory junctions** that point at your real results (`D:\CFD_tool\finished` and `0830_mk3`). If a temp-folder cleanup tool ever deleted them recursively, it could follow the links into your real data. I'll remove the links themselves, which leaves the targets untouched, and stop my test servers:
+
+> All 122 links are removed and your real data is intact. The test servers are stopped, and your HoMo CFD server is still running. Last steps: point the project notes at the Stage 7 draft, write the log entry, then commit and push.
+
+> Now the log entry for tonight's work and the final summary:
+
+### Work record
+
+- Git: committed the working-directory work (`3364cb0`), the viewer/Stage 5/tests milestone (`fef550a`), faster indexing (`cf500ac`), a STATUS path fix (`8bf4c21`), and this final docs/log commit. Each was fast-forward merged into `master` and pushed to `origin` (`ArcFAU/HoMo-CFD_v4`). The work branch is `night-2026-10-02`.
+- Viewer (`web/image-viewer.js`, `web/styles.css`): CSS layout per case count (`compare-count-N`), minimum panel height 420 px for 3–4 cases with scrolling, one column below 1000 px; `+`/`=`, `-`/`_`, `0` keyboard zoom.
+- Stage 5 (`web/app.js`, `web/styles.css`): `Downforce (−CzA)` and `Drag (−CxA)` inserted after Iteration from the total monitors, with hover notes and sign-aware Δ/chart notes; the chart defaults to Downforce. Raw monitors and the CzA Front fraction are unchanged.
+- Performance (`web/app.js`, `web/server-fs.js`): `listChildren()`/`children()` read each folder once; shared `Intl.Collator`. 120 simulations: 5.7 s → about 4 s. A threaded server scan was tried and rejected (slower).
+- `web/3d-viewer.js`: triangle count label fixed (index count / 3).
+- `serve.py`: settings path resolved at use time (`settings_file()`).
+- Tests: `tests/fixture.py` (synthetic CFD-Tool working directory incl. EnSight binary case), `tests/test_serve.py` (15 unit tests), `tests/run_browser_tests.py` + `tests/browser/*` (67 headless checks), `tests/README.md`. Results: unit 15/15 OK; browser 67/67 after the triangle fix (first run 66/67 found that bug).
+- Docs: `DECISIONS.md`, `TASK.md`, `CHANGELOG.md`, `docs/STAGE7_FRITZ.md` (design draft from a read-only CFD-Tool study; `p.ppk` not opened; licence key masked and not copied; cluster user name not copied), `AGENTS.md` tests section, refreshed `HANDOFF_FOR_CHATGPT.md`, Stage 5/7 updates in `SHARED_CONTEXT.md` and `STATUS.md`.
+- Cluster: not contacted. Scratch junctions to real results removed (links only); real data verified present. User's server restarted on port 5173 with the latest code.
+
+### Final response (verbatim)
+
+> Good morning. Everything is done and pushed: GitHub `master` is at `8bf4c21`. Point by point:
+>
+> **1. Git:** committed, merged into `master` and pushed four times as each piece finished. The work branch `night-2026-10-02` matches `master`.
+>
+> **2. More result folders:** checked ahead of time with a 120-simulation test folder (links to your real 7, about 200,000 files).
+> - First version: 5.7 s to load.
+> - After two fixes, about **4 s**: each folder is now read once, and sorting is much faster.
+> - When you add real folders, just reload the page.
+>
+> **3. Done:**
+> - **Viewer:**
+>   - With 3–4 cases each panel keeps at least 420 px height, and the window scrolls instead of shrinking the images.
+>   - `+` / `-` / `0` zoom in, out and reset (also in the scene gallery).
+> - **Tests in the project:** they run anywhere, because they generate their own small fake results.
+>   - `py -m unittest discover -s tests`: 15 tests.
+>   - `py tests/run_browser_tests.py`: 67 browser checks.
+>   - Both pass. `AGENTS.md` now asks every contributor, Copilot included, to run them.
+> - **Planning files:** `DECISIONS.md`, `TASK.md`, `CHANGELOG.md`, `tests/README.md`, and a refreshed `HANDOFF_FOR_CHATGPT.md` to paste into ChatGPT.
+>
+> **5. Downforce and Drag:** the table now shows **Downforce (−CzA)** and **Drag (−CxA)** right after Iteration.
+> - All raw columns stay exactly as exported, and CzA Front stays a fraction.
+> - In **Δ vs reference**, a positive Δ Downforce means more downforce than the reference.
+> - The monitor chart now starts on Downforce.
+> - Hover over a column heading to see how it's calculated.
+>
+> **6. Stage 7 (Fritz):** a **design draft** only, in `docs/STAGE7_FRITZ.md`. I worked out exactly how CFD-Tool does it:
+>
+> - It uploads with WinSCP and your PuTTY key, then runs `Pipeline/launchV3.sh` on Fritz.
+> - It downloads `plots` and watches for `plots/DONE`, then moves the case from `inProgress` to `finished`.
+>
+> The draft proposes a safe, step-by-step design. I didn't connect to the cluster: that needs your login, and submitting or deleting acts on real compute. Before I build it, I need answers to the six questions at the end of that file. The main ones:
+> - Built-in Windows SSH or WinSCP/PuTTY?
+> - What does `launchV3.sh` do?
+> - When should results be downloaded?
+>
+> **Bugs found and fixed along the way:**
+> - The 3D viewer showed **three times** the real triangle count. Your Frontwing has 593,500 triangles, not 1,780,500.
+> - A small wording fix in `STATUS.md`.
+>
+> **Still for you to try:**
+> - Double-click `Start HoMo CFD.bat`.
+> - Try **Working directory → Browse…** (both open desktop windows, so I couldn't automate them).
+> - Answer the Stage 7 questions.
+>
+> Your HoMo CFD server is running with the latest code at http://127.0.0.1:5173. I removed the temporary test links that pointed at your real results; your data is untouched.

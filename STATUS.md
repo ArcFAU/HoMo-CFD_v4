@@ -52,6 +52,8 @@ Last updated: 2026-10-02
 
 ## Open items
 
+- Stage 7 (Fritz): design draft in `docs/STAGE7_FRITZ.md`, based on how CFD-Tool uploads with WinSCP + PuTTY key, runs `Pipeline/launchV3.sh`, polls `plots/DONE`, and moves cases inProgress → finished. Needs the team's answers (connection method, `launchV3.sh`, when to download, remote clean-up, licence key location) before implementation.
+
 - The actual `High-Voltage_white.png` logo is present at the project root and is used in the main-window header.
 - Pop-ups must be allowed for http://127.0.0.1:5173. With `serve.py` any modern browser works; only the fallback without `serve.py` (Open folder) needs Chrome or Edge.
 - Later 3D viewer improvements: add an orientation axis widget and additional angled view presets. These are deferred; the user has confirmed the signed-axis view fix works.

@@ -23,3 +23,6 @@ the cluster, no credentials in the repo.
 
 **Acceptance:** the user reviews the design and confirms the workflow and the
 authentication approach before any implementation starts.
+
+**Status (2026-10-02):** draft written — `docs/STAGE7_FRITZ.md`. Waiting for the
+team's answers to its section 3 questions. Nothing contacts the cluster yet.

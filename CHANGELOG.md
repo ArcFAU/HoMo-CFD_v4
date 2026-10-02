@@ -29,5 +29,9 @@ User-visible changes, newest first. Detailed reasoning lives in
 - Server refused some requests during bursts (pressure stations) on Windows.
 - `.git` and other hidden folders were indexed.
 
+### Docs
+- `docs/STAGE7_FRITZ.md`: how CFD-Tool talks to Fritz and a proposed design for Stage 7 (draft for review).
+- `DECISIONS.md`, `TASK.md`, `CHANGELOG.md`, `tests/README.md`; refreshed `HANDOFF_FOR_CHATGPT.md`.
+
 ### Removed
 - About 700 lines of unused legacy slot-UI code.
