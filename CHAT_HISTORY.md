@@ -4802,3 +4802,33 @@ The background watcher of the post job (job 4285206 in `exp`) finished; no new u
 > 4. For Fritz: WinSCP with their own saved session, then **Cluster** at the bottom of the sidebar. For the automatic 3D export, the `starccm` folder in the zip has the two macros and a short README.
 >
 > Quit with the **⏻** button at the bottom of the sidebar.
+
+## 2026-10-02 — Can teammates change the code?
+
+### User message (verbatim)
+
+> will they be able to change the code without permission?
+
+### Final response (verbatim)
+
+> Yes, they can change their own copy. You can't stop that, but what they change stays with them.
+>
+> **Why they can:** HoMo is plain-text code (Python, JavaScript, HTML). Anyone with the zip can open those files in an editor and change them. No software on someone else's PC can be fully protected; even compiled programs can be modified.
+>
+> **What they can't do:**
+> - **Change your copy, or anyone else's.** Each person runs their own unzipped folder, so an edit affects only their PC.
+> - **Change the GitHub repository.** It's private, and only you can push to it.
+> - **Get at your Fritz account.** Everyone uses their own WinSCP session and key; the zip contains none of yours.
+> - **Pass their changes on unnoticed.** Updates come from you: you rebuild the zip, and they unzip it over their folder, which replaces any changes they made.
+>
+> **Two things worth adding, if you want:**
+> 1. **A version and "modified" marker.** The build would record a fingerprint (checksum) of every file, and HoMo would show its version in the sidebar, with a **"modified"** warning when files no longer match. When a teammate reports a problem, you'd see at once whether they run an unchanged, current copy. It's small to build.
+> 2. **A short note in the README**, for example "Team tool, please don't change the files; send requests to …", so teammates know changes should go through you.
+>
+> Hiding or compiling the code isn't worth it: it adds complexity, antivirus programs often flag such packed programs, and it still doesn't stop a determined person.
+>
+> Should I add the version and "modified" marker?
+
+### Work record
+
+- Answer only; no changes.
