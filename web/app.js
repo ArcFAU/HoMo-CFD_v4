@@ -2402,6 +2402,23 @@ async function showClusterSettings() {
   });
 }
 
+// HoMo CFD runs without a window, so it is stopped from here (or stops by
+// itself a while after the last window closed).
+async function quitApp() {
+  if (!window.confirm("Quit HoMo CFD? Its windows stop working until you start it again.")) return;
+  try {
+    await postServerJson("quit");
+    serverWasReachable = false;  // stopped on purpose: no "not running" notice
+  } catch (err) {
+    showError(err?.message || "HoMo CFD could not be stopped.");
+    return;
+  }
+  document.body.replaceChildren(Object.assign(document.createElement("div"), {
+    className: "workspace-empty",
+    textContent: "HoMo CFD has stopped. Start it again with the desktop shortcut or Start HoMo CFD.bat. You can close this tab.",
+  }));
+}
+
 async function startFilesystemWorkspace() {
   const openResults = document.getElementById("open-results");
   const clusterButton = document.getElementById("cluster-settings");
@@ -2413,6 +2430,7 @@ async function startFilesystemWorkspace() {
     else chooseResultsRoot();
   });
   clusterButton.addEventListener("click", () => showClusterSettings());
+  document.getElementById("quit-app").addEventListener("click", quitApp);
   document.getElementById("open-3d-viewer").addEventListener("click", () => {
     const popup = window.open("./3d-viewer.html", "homo-cfd-3d", `popup,width=${screen.availWidth},height=${screen.availHeight},left=0,top=0`);
     if (!popup) showError("The 3D viewer window was blocked. Allow pop-ups for this local app and try again.");
@@ -2432,6 +2450,7 @@ async function startFilesystemWorkspace() {
     if (config) {
       document.getElementById("working-dir-label").textContent = config.workingDir || "Choose working directory";
       clusterButton.hidden = false;
+      document.getElementById("quit-app").hidden = false;
       openResults.title = config.workingDir ? `Working directory: ${config.workingDir} — click to change` : "Choose the folder that holds your results";
       if (!config.resultsRoot) {
         showWorkingDirectoryChooser(config);

@@ -99,6 +99,43 @@ async function prefetchServerTree(handle) {
   fill(handle.path, await serverJson("tree", handle.path));
 }
 
+// Every HoMo CFD window tells serve.py once a minute that it is open; started
+// without a console, serve.py stops itself when no window has been open for a
+// while. If it is gone (stopped, or Quit), the window says so.
+const HEARTBEAT_MS = 60 * 1000;
+let serverWasReachable = false;
+
+function showServerStopped() {
+  if (document.getElementById("server-stopped")) return;
+  const notice = document.createElement("div");
+  notice.id = "server-stopped";
+  notice.setAttribute("role", "alert");
+  notice.style.cssText = "position:fixed;left:50%;top:12px;transform:translateX(-50%);z-index:10000;max-width:min(560px,calc(100vw - 32px));" +
+    "padding:10px 14px;border-radius:8px;background:#3b1719;border:1px solid #7d3034;color:#ffd7d3;font:14px 'Segoe UI',system-ui,sans-serif;" +
+    "box-shadow:0 6px 20px #0008";
+  notice.textContent = "HoMo CFD is not running any more. Start it again (desktop shortcut or Start HoMo CFD.bat), then reload this page.";
+  document.body.appendChild(notice);
+}
+
+async function heartbeat() {
+  try {
+    const response = await fetch("/api/alive", { cache: "no-store" });
+    if (response.ok) {
+      serverWasReachable = true;
+      document.getElementById("server-stopped")?.remove();
+      return;
+    }
+  } catch {
+    // not reachable
+  }
+  if (serverWasReachable) showServerStopped();
+}
+
+if (location.protocol.startsWith("http")) {
+  heartbeat();
+  setInterval(heartbeat, HEARTBEAT_MS);
+}
+
 // serve.py's working-directory settings ({ workingDir, source, resultsRoot,
 // resultsPath, canBrowse }), or null when the page isn't served by serve.py.
 async function getServerConfig() {

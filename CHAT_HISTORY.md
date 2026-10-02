@@ -4684,3 +4684,93 @@ The background watcher of the post job (job 4285206 in `exp`) finished; no new u
 > The small black console window that stays open while HoMo runs still shows the standard Windows console icon; Windows doesn't let a batch file change that.
 >
 > The zip is rebuilt (`dist\HoMo-CFD-portable.zip`), and the build now leaves only the zip in `dist`. All tests pass (71 unit tests, 137 browser checks), and the changes are on GitHub `master`. The 3D export test on Fritz is at 35 minutes; I'll report when it's done.
+
+## 2026-10-02 — HoMo CFD without a console window; 3D export test passed
+
+### User message (verbatim)
+
+> one thing, everytime i launch the application the terminal stays active on the screen
+
+### Contributor messages (verbatim)
+
+> Doing this properly takes four pieces:
+> - **No window:** HoMo starts with `pythonw` (the window-less Python, which the bundled Python has too), and the desktop shortcut starts it directly, so no console appears at all.
+> - **A way to stop it:** without the window there's nothing to close, so HoMo needs its own way to end. I'd add a small **Quit** button. HoMo will also stop by itself 30 minutes after its last browser window closed, but never while a download or upload runs.
+> - **No double starts:** opening HoMo again while it already runs just opens the browser on the running one.
+> - **Errors still visible:** whatever the console used to show goes to a log file.
+>
+> Reading how `serve.py` starts today:
+
+> A single-instance check already exists: if HoMo is running, a second start just opens the browser. Not yet handled: the server writes its request log to the console, and without a console that would fail. So in window-less mode, the output goes to a log file.
+>
+> Writing the server side: a `--background` mode (log file, stopping by itself when no window has been open for 30 minutes), a `/api/alive` heartbeat, and `/api/quit`:
+
+> `serve.py` doesn't import `sys` yet, and the log redirection needs it. Adding it:
+
+> Now the page side:
+> - **Heartbeat:** every HoMo window (main, image viewer, 3D viewer) tells the server once a minute that it's still open. If the server has stopped, the window shows a clear notice instead of failing silently.
+> - **Quit button** (⏻) next to "3D viewer" and "Cluster". It asks first, and refuses while a download or upload is running.
+
+> In `quitApp`, after a deliberate quit the "not running" notice would be redundant. I'm suppressing it there, then updating the two launchers:
+> - **`Start HoMo CFD.bat`** starts HoMo window-less and closes its own window right away. It only stays open, with a message, if no Python can be found.
+> - **The desktop shortcut** starts the window-less Python directly, so not even a brief flash appears.
+
+> Updating the portable test and adding server tests: the idle rule, the heartbeat, and Quit (refused while a download runs, accepted otherwise; the test doesn't actually stop its server).
+
+> All 82 unit tests pass; the count went up because the new test class reuses the API test setup. Adding browser checks for the Quit button: visible with `serve.py`, hidden without it:
+
+> The one failure is my older check, which expected exactly two buttons at the bottom; now there are three. Updating it:
+
+> All 139 browser checks pass. Now a real test of the window-less mode on a spare port, with a temporary settings folder so your own settings and log stay untouched. It starts HoMo with `pythonw`, checks that it answers and writes its log, then quits it through `/api/quit` and checks that the process has really ended:
+
+> The safety check blocked the whole command because of the clean-up step (it couldn't tell what `$tmp` would be), so nothing ran. Running it again with a fixed folder in my scratch area, and no deletion step:
+
+> It works as intended: no window at all, the page and heartbeat answer, the log file fills, and Quit really ends the process.
+>
+> Your own HoMo is still running the old way: I restarted it earlier with a minimised console window, which is probably part of what you saw. I'm switching it to window-less, without opening a new browser tab, and re-running the shortcut script so your desktop shortcut starts HoMo without a window:
+
+> Your HoMo now runs without a window, and the desktop shortcut starts it the same way. On your PC it uses the installed Python's window-less launcher; in the portable version it uses the bundled `pythonw.exe`.
+>
+> Rebuilding the zip, then checking that the bundled `pythonw.exe` of the portable version also runs window-less:
+
+> The portable version works too: no window, page and icon served, and Quit ends it.
+>
+> The Fritz test job has also just finished. Reading the watcher's report:
+
+> **The 3D export now works completely.** Job 4285535 finished after 57 minutes without errors:
+> - **Car:** 17 surfaces with all 10 fields (74 MB). The "Cells deleted" leftovers are gone; the first test had 566 surfaces.
+> - **Flow parts:** `Lambda2` (vortices) and `Bad_Cells` with 4 fields, written separately (12.5 MB). There was no floating-point error this time.
+>
+> To be sure, I'm downloading it (read-only, about 150 MB, into my scratch folder) and opening it in the 3D viewer, with the vortices colored by velocity:
+
+> **Confirmed in the viewer.** The car loads together with the **vortex cores**: at the front-wing endplates, the rear-wing tips, the suspension and the wheels, colored by velocity (0–16.5 m/s). The **Vortices (λ2)** and **Bad cells** checkboxes appear, and all 10 fields are listed. The rotating wheels show their circumferential speed.
+>
+> Now the docs for the window-less mode and the test result:
+
+> Updating the README, changelog and notes for the window-less mode and the successful export test:
+
+> Writing the log entry and committing:
+
+### Work record
+
+- `serve.py`: `--background` (stdout/stderr → `%APPDATA%\HoMo-CFD\homo-cfd.log`; watchdog thread stops the server when `should_stop()`: 30 min without a request from a window and not `Handler.busy()`), `Handler.last_seen` updated on every API request, `GET /api/alive`, `POST /api/quit` (409 while a download/upload runs), `import sys`.
+- `web/server-fs.js`: heartbeat every minute on all pages; "HoMo CFD is not running any more" notice when it fails after having worked. `web/index.html`, `web/app.js`, `web/styles.css`: ⏻ Quit button in the sidebar footer (server mode only), confirmation, stopped message.
+- Launchers (CRLF): `Start HoMo CFD.bat` → `start "" python\pythonw.exe | pyw -3 | pythonw serve.py --open --background`, message only if no Python; `Create desktop shortcut.bat` → shortcut targets the window-less Python directly (bundled, else `pyw -3`, else `pythonw`, else the .bat).
+- Real checks: installed `pythonw` and the portable `python\pythonw.exe` on spare ports with a scratch `APPDATA`: MainWindowHandle 0, page/heartbeat/icon 200, log written, `/api/quit` → process exited, port closed. User's server on 5173 restarted window-less (no new tab); user's desktop shortcut now `pyw.exe -3 serve.py --open --background`, icon unchanged.
+- Fritz test job 4285535 (export3D v3): 17 car surfaces with 10 fields, flow parts [Lambda2, Bad_Cells] with 4 fields, no errors, 57 min. `3D-data` downloaded read-only to the scratch folder and opened in the viewer (6,490,481 triangles; vortex cores coloured by velocity 0–16.5 m/s).
+- Tests: `tests/test_serve.py` `BackgroundTests` (idle rule, heartbeat, quit refused/accepted), `tests/test_portable.py` (start script uses pythonw + --background), browser checks for the Quit button (first-start, picker-mode) and the 3-button footer. Docs: `README.md`, `CHANGELOG.md`, `STATUS.md`, `DECISIONS.md`, `tests/README.md`. Portable zip rebuilt.
+- Checks: `py -m unittest discover -s tests` 82/82 OK; `py tests/run_browser_tests.py` 139/139 passed.
+
+### Final response (verbatim)
+
+> Fixed: HoMo CFD now runs without any console window.
+>
+> - **Starting:** the desktop shortcut (or `Start HoMo CFD.bat`) opens HoMo straight in the browser. No black window, not even briefly when you use the shortcut. Starting it again while it runs just brings it up in the browser.
+> - **Stopping:** click the new **⏻** button at the bottom right of the sidebar. Otherwise it stops by itself 30 minutes after you close its last browser window. It never stops while a download or upload to Fritz is running.
+> - **If something goes wrong:** what the console used to show is now in `%APPDATA%\HoMo-CFD\homo-cfd.log`. If HoMo has stopped while a window is still open, that window tells you so.
+>
+> Your running HoMo already works this way (I restarted it without a window), and your desktop shortcut is updated. Part of what you saw was probably my doing: when I restarted HoMo during our work, I left a minimised console window open.
+>
+> **And the 3D export test on Fritz passed:** the car with all 10 fields, plus the λ2 vortices and bad cells, without errors. In the viewer you can now see the vortex cores at the front-wing endplates, the rear-wing tips and the wheels, colored by velocity. The macros in `SCRIPT_RANS` are this version, so new simulations get it automatically.
+>
+> The portable zip is rebuilt with all of this (teammates should rerun `Create desktop shortcut.bat` once). All tests pass (82 unit tests, 139 browser checks), and the changes are on GitHub `master`.

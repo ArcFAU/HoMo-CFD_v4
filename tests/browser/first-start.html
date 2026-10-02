@@ -31,7 +31,8 @@ runTests(async () => {
   check("the HoMo CFD icon is linked and served", doc.querySelector('link[rel="icon"][href="./favicon.svg"]') &&
     doc.querySelector('link[rel="icon"][href="./homo-cfd.ico"]') && icons.every((line) => / 200 image\//.test(line)), icons.join(" | "));
   const footer = [...doc.querySelectorAll(".sidebar-footer button")].map((button) => button.textContent);
-  check("3D viewer and Cluster sit at the bottom of the sidebar", footer.join(",") === "3D viewer,Cluster" &&
+  check("Quit button shown when served by serve.py", !doc.getElementById("quit-app").hidden && doc.querySelector(".sidebar-footer #quit-app"));
+  check("3D viewer and Cluster sit at the bottom of the sidebar", footer.join(",") === "3D viewer,Cluster,⏻" &&
     doc.querySelector(".sidebar").lastElementChild.classList.contains("sidebar-footer"), footer.join(","));
   doc.getElementById("open-results").click();
   const again = await waitFor(() => doc.querySelector(".working-dir-card"));

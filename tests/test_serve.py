@@ -174,6 +174,43 @@ class ApiTests(ServeTestCase):
 
 
 
+class BackgroundTests(ApiTests):
+    """Without a console HoMo CFD stops itself when idle, or with Quit; never during a transfer."""
+
+    def tearDown(self):
+        serve.Handler.downloads.clear()
+        super().tearDown()
+
+    def test_idle_rule(self):
+        minute = 60
+        self.assertFalse(serve.should_stop(0, 29 * minute, busy=False))
+        self.assertTrue(serve.should_stop(0, 31 * minute, busy=False))
+        self.assertFalse(serve.should_stop(0, 300 * minute, busy=True), "never while a download or upload runs")
+
+    def test_open_windows_keep_it_alive(self):
+        serve.Handler.last_seen = 0
+        status, data = self.request("GET", "/api/alive")
+        self.assertEqual((status, json.loads(data)), (200, {"ok": True}))
+        self.assertGreater(serve.Handler.last_seen, 0)
+
+    def test_quit(self):
+        stopped = []
+        original = serve.Handler.stop_server
+        serve.Handler.stop_server = lambda handler: stopped.append(True)
+        try:
+            download = type("Running", (), {"state": "running"})()
+            serve.Handler.downloads["caseC"] = download
+            status, data = self.request("POST", "/api/quit", "{}", {"Content-Type": "application/json"})
+            self.assertEqual(status, 409)
+            self.assertIn("still running", json.loads(data)["error"])
+            self.assertEqual(stopped, [])
+            download.state = "done"
+            status, data = self.request("POST", "/api/quit", "{}", {"Content-Type": "application/json"})
+            self.assertEqual((status, json.loads(data), stopped), (200, {"ok": True}, [True]))
+        finally:
+            serve.Handler.stop_server = original
+
+
 class ClusterApiTests(ApiTests):
     """/api/cluster with a fake WinSCP: the real sessions and Fritz are never used."""
 

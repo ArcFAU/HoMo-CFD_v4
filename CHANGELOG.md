@@ -28,6 +28,7 @@ User-visible changes, newest first. Detailed reasoning lives in
 - Tests: `tests/test_serve.py` and the headless browser suite `tests/run_browser_tests.py` on generated data.
 
 ### Changed
+- **No console window:** `Start HoMo CFD.bat` and the desktop shortcut start HoMo CFD in the background (`pythonw`, `serve.py --background`, log in `%APPDATA%\HoMo-CFD\homo-cfd.log`). Stop it with the new **⏻** (Quit) button at the bottom of the sidebar; it also stops 30 minutes after the last window closed (every window reports once a minute), never during a download or upload. If it has stopped, open windows say so.
 - The portable build deletes its unpacked folder after writing the zip, so `dist/` holds only the zip and the cached Python download.
 - **Sidebar:** the **HoMo CFD** title is now the working-directory button and shows the folder underneath (replaces the separate Working directory button); **3D viewer** and **Cluster** (renamed from Open 3D Cp viewer and Fritz cluster) sit side by side at the bottom of the sidebar and stay visible when the folder tree scrolls.
 - Portable zip for teammates: now includes the STAR-CCM+ macros (`starccm/`, with instructions for their own template) and no longer the changelog; `starccm/README.md` rewritten for teammates.

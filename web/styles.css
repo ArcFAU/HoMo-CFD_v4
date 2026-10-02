@@ -122,6 +122,18 @@ body {
   font-weight: 600;
 }
 
+.sidebar-footer .quit-button {
+  flex: none;
+  width: 38px;
+  padding: 8px 0;
+  color: var(--muted);
+}
+
+.sidebar-footer .quit-button:hover {
+  color: #ff8d8d;
+  border-color: #7d3034;
+}
+
 .hint {
   color: var(--muted);
   font-size: 13px;

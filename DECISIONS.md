@@ -66,6 +66,16 @@ change with speed; the hover note says so.
 The force columns are computed when the table is drawn, not stored with the
 cached CSV rows, so changing the speed or density only redraws the table.
 
+## 2026-10-02 — HoMo CFD runs without a console window
+
+The console window confused users. HoMo CFD now starts with `pythonw` and
+logs to a file. Without a window there is nothing to close, so it stops via a
+Quit button, or by itself 30 minutes after the last browser window closed
+(windows send a heartbeat every minute; the long timeout allows for browsers
+slowing background tabs). It never stops during a download or upload. A tray
+icon was not used: it would need extra libraries beyond Python's standard
+library.
+
 ## 2026-10-02 — Image viewer: speed over memory
 
 The user prefers speed and reliability to a small memory footprint. Image

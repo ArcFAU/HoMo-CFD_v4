@@ -32,6 +32,7 @@ import os
 import atexit
 import shutil
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -288,6 +289,16 @@ def scan_tree(directory):
     return {"d": folders, "f": files}
 
 
+# Without a console (--background), HoMo CFD stops by itself once no window has
+# been open for this long (pages report every minute), unless a download or
+# upload is still running.
+IDLE_MINUTES = 30
+
+
+def should_stop(last_seen, now, busy, idle_minutes=IDLE_MINUTES):
+    return not busy and now - last_seen > idle_minutes * 60
+
+
 class Server(ThreadingHTTPServer):
     # On Windows SO_REUSEADDR lets a second server bind a port that is
     # already in use; without it, a second start fails cleanly instead.
@@ -309,6 +320,16 @@ class Handler(SimpleHTTPRequestHandler):
     submitted = {}          # case name → SLURM job id, for this server run
     remote_info = {}        # case name → case from the last status check
     remote_cases = set()    # case names from the last status check
+    last_seen = time.monotonic()  # last request from an open HoMo CFD window
+
+    @classmethod
+    def busy(cls):
+        """A WinSCP download or new-simulation upload is running."""
+        return any(task.state == "running" for task in [*cls.downloads.values(), *cls.creating.values()])
+
+    def stop_server(self):
+        # shutdown() waits for serve_forever, so it must run in another thread.
+        threading.Thread(target=self.server.shutdown, daemon=True).start()
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(WEB), **kwargs)
@@ -340,12 +361,14 @@ class Handler(SimpleHTTPRequestHandler):
             "/api/cluster": self.api_cluster,
             "/api/cluster/downloads": self.api_cluster_downloads,
             "/api/cluster/new-case": self.api_new_case_tasks,
+            "/api/alive": self.api_alive,
         }
         route = routes.get(url.path)
         if route is None:
             return super().do_GET()
         if not self.local_request():
             return
+        Handler.last_seen = time.monotonic()
         query = parse_qs(url.query)
         route((query.get("path") or [""])[0])
 
@@ -368,6 +391,7 @@ class Handler(SimpleHTTPRequestHandler):
             "/api/cluster/browse-sim": self.api_browse_sim,
             "/api/cluster/new-case": self.api_new_case,
             "/api/cluster/submit": self.api_submit,
+            "/api/quit": self.api_quit,
         }
         route = routes.get(urlsplit(self.path).path)
         if route is None:
@@ -385,7 +409,21 @@ class Handler(SimpleHTTPRequestHandler):
             body = None
         if not isinstance(body, dict):
             return self.send_json({"error": "Invalid request."}, HTTPStatus.BAD_REQUEST)
+        Handler.last_seen = time.monotonic()
         route(body)
+
+    # --- running in the background ---------------------------------------
+
+    def api_alive(self, _path):
+        """Heartbeat from open windows (see IDLE_MINUTES)."""
+        self.send_json({"ok": True})
+
+    def api_quit(self, _body):
+        if self.busy():
+            return self.send_json({"error": "A download or upload to Fritz is still running. Wait for it or cancel it first."},
+                                  HTTPStatus.CONFLICT)
+        self.send_json({"ok": True})
+        self.stop_server()
 
     # --- working directory ---------------------------------------------
 
@@ -779,7 +817,15 @@ def main() -> None:
     parser.add_argument("--results", dest="working_dir", help=argparse.SUPPRESS)  # older name
     parser.add_argument("--port", type=int, default=5173)
     parser.add_argument("--open", action="store_true", help="open the app in the default browser")
+    parser.add_argument("--background", action="store_true",
+                        help=f"no console window: log to {user_config_dir() / 'homo-cfd.log'} and stop "
+                             f"{IDLE_MINUTES} min after the last HoMo CFD window closed")
     args = parser.parse_args()
+    if args.background:
+        # pythonw has no console (sys.stdout/stderr are None); keep the output in a log file.
+        log = user_config_dir() / "homo-cfd.log"
+        log.parent.mkdir(parents=True, exist_ok=True)
+        sys.stdout = sys.stderr = open(log, "w", encoding="utf-8", buffering=1)
 
     path, source = find_working_dir(args.working_dir)
     # Stop WinSCP downloads when HoMo CFD stops; they resume next time.
@@ -800,7 +846,17 @@ def main() -> None:
         print(f"Results folder:    {results_folder(path)}")
     else:
         print("No working directory yet: choose one in the app.")
-    print("Stop with Ctrl+C")
+    print("Stop with Ctrl+C" if not args.background else
+          f"Running in the background; stops {IDLE_MINUTES} min after the last window closed, or with Quit in the app.")
+    if args.background:
+        def watch():
+            while True:
+                time.sleep(30)
+                if should_stop(Handler.last_seen, time.monotonic(), Handler.busy()):
+                    print("No HoMo CFD window for a while; stopping.")
+                    server.shutdown()
+                    return
+        threading.Thread(target=watch, daemon=True).start()
     if args.open:
         webbrowser.open(url)
     try:
