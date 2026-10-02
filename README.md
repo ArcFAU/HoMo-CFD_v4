@@ -2,17 +2,21 @@
 
 Web viewer for Formula Student STAR-CCM+ postprocessing results. This is a modern replacement for the existing CFD-Tool (PNG sections + later CSV plots and four-case compare).
 
-## Run
+## Run (each person on their own computer, offline)
 
-This machine does not need Node. Python 3 is enough.
+You need **Python 3** (free from python.org; tick "Add python.exe to PATH" when installing). Nothing else: no internet, no Node, no installation step for HoMo CFD itself.
 
-```bash
-py serve.py
-```
+1. Copy the HoMo CFD folder anywhere on your computer.
+2. Double-click **`Start HoMo CFD.bat`**. A small window opens (keep it open while you work; close it to stop HoMo CFD) and the app opens in your browser at http://127.0.0.1:5173.
+3. First start only: choose your **working directory**, the same folder CFD-Tool uses (the one with `finished`, `inProgress`, `archive` inside). Click **Browse…** or paste the path. HoMo CFD lists the simulations in its `finished` folder. A folder without `finished` is used as the results folder itself (one simulation, a folder of simulations, or a deeper tree all work).
 
-Open http://127.0.0.1:5173 in Chrome or Edge. Choose the results root once with **Open folder**; HoMo CFD remembers it when browser permissions allow. The workspace shows one collective table with each simulation's final coefficients iteration; coefficient values use three decimal places. Use **Customize columns** to rename, hide, or reorder columns. **Δ vs reference** compares exported monitor values to a selected simulation; the collapsible monitor chart visualizes one raw monitor at a time. Differences are current minus reference, with no sign or unit conversion. Click an image section to open a new comparison window seeded with that simulation. Use **Add case** inside the window to bring in more simulations; each panel has independent field and axis controls. Zoom and pan are synchronized automatically; **Sync images** synchronizes frame stepping. The Pressure plots view overlays populated FW/UT/RW X/Y stations. Allow pop-ups for the local app.
+Like CFD-Tool, the choice is saved per user, outside the app folder (`%APPDATA%\HoMo-CFD\settings.json`), so everyone can keep results on a different path and updating the app keeps the setting. If you already use CFD-Tool, HoMo CFD picks up CFD-Tool's working directory automatically and skips step 3. Change it any time with **Working directory** in the sidebar. Reload the page to rescan after new results arrive.
 
-The main window also has **Open 3D Cp viewer** for a separate experimental EnSight Gold surface view. The current `0830_mk3/3D-data` sample is the Frontwing surface with per-element `CpX`, `CpZ`, `CpZCpX`, `PressureCoefficient`, and `TotalPressureCoefficient` fields. The viewer supports `tria3`, `quad4`, and `nsided` faces, field and color-range selection, an **Auto range** action based on the selected surface field, and isometric plus signed-axis view presets. Folders named `3D` that contain static images appear in the results tree as a scene gallery; open one and use the left/right arrow keys to browse its reference scenes. An earlier 4.58 GB volume export is not suitable for the current interactive viewer.
+From a terminal: `py serve.py --open` does the same as the batch file; `py serve.py --working-dir "D:\CFD_tool"` uses another folder for one run. If the page is opened without `serve.py`, Chrome or Edge can still pick a folder with **Open folder**.
+
+The workspace shows one collective table with each simulation's final coefficients iteration; coefficient values use three decimal places. Use **Customize columns** to rename, hide, or reorder columns. **Δ vs reference** compares exported monitor values to a selected simulation; the collapsible monitor chart visualizes one raw monitor at a time. Differences are current minus reference, with no sign or unit conversion. Click an image section to open a new comparison window seeded with that simulation. Use **Add case** inside the window to bring in more simulations; each panel has independent field and axis controls. Zoom and pan are synchronized automatically; **Sync images** synchronizes frame stepping. The Pressure plots view overlays populated FW/UT/RW X/Y stations. Allow pop-ups for the local app.
+
+The main window also has **Open 3D Cp viewer** for a separate experimental EnSight Gold surface view; `3D-data` folders that contain a `.case` file also appear in the results tree as **3D-data · 3D viewer** and open it directly. The current `0830_mk3/3D-data` sample is the Frontwing surface with per-element `CpX`, `CpZ`, `CpZCpX`, `PressureCoefficient`, and `TotalPressureCoefficient` fields. The viewer supports `tria3`, `quad4`, and `nsided` faces, field and color-range selection, an **Auto range** action based on the selected surface field, and isometric plus signed-axis view presets. Folders named `3D` that contain static images appear in the results tree as a scene gallery; open one and use the left/right arrow keys to browse its reference scenes. An earlier 4.58 GB volume export is not suitable for the current interactive viewer.
 
 ## Project history
 

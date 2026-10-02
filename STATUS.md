@@ -28,24 +28,32 @@ Last updated: 2026-10-02
 - 3D viewer: non-finite cell values are ignored when averaging onto points (points with no finite value render grey); reversed Range min/max are applied swapped and flagged; the legend shows limits to three decimals; only the latest field request updates the mesh.
 - Verified with a headless-Chrome harness using mock folder handles over the real `0830_mk3` files (single-simulation root, several simulations with an unreadable CSV and a hidden folder, nested simulations, reconnect, 3D Frontwing): 35/35 checks passed on three of four runs; one earlier run missed a pressure-legend check once (not reproduced). The native folder picker and real permission prompts were not exercised.
 
+## Working directory, CFD-Tool style (2026-10-02)
+
+- CFD-Tool (inspected read-only: `Config.class` via `javap`, no execution) stores one per-user working directory in `%APPDATA%\CFD-Tool\resources\workingDir` (here `D:\CFD_tool`), asks with a "Choose Working Directory" dialog on first start, and reads results from `<working dir>\finished`.
+- HoMo CFD now does the same: `serve.py` uses `--working-dir` (one run), else `%APPDATA%\HoMo-CFD\settings.json`, else CFD-Tool's saved working directory, else the app shows **Choose working directory** (Browse… opens a native folder dialog through tkinter; a pasted path also works). Results come from `finished` inside it when present. The sidebar **Working directory** button changes it. `Start HoMo CFD.bat` starts everything with a double-click; a second start just opens the browser. Fully offline; no external URLs in `web/`.
+- Safety: API answers only requests addressed to 127.0.0.1/localhost (Host check), settings changes require a JSON POST (blocks cross-site requests), working directory must be an existing absolute folder. Listen backlog raised to 128 after bursts of station-file requests were refused on Windows.
+- The earlier `homo-cfd.config.json` / `--results` approach was replaced (`--results` still works as an alias).
+- Verified: precedence and validation with a temporary APPDATA (fresh user → chooser; saved setting reused after restart; CFD-Tool-only → `D:\CFD_tool\finished`; missing/relative path 400; foreign Host 403; form POST 415; second start exits cleanly); headless first-start flow 8/8; end-to-end 12/12; browser-folder suite 35/35 three times. Not exercised: the tkinter Browse dialog and the batch file (both open windows on the desktop).
+- Read-only API: `/api/config`, `/api/tree` (whole folder tree in one request), `/api/list`, `/api/file` (with Last-Modified/304). Bound to 127.0.0.1; rejects `..`, drive letters, backslashes and hidden entries. `web/server-fs.js` wraps it in File System Access-style handles, revived after IndexedDB hand-off to viewer windows.
+- `3D-data` folders containing a `.case` file appear in the tree as **3D-data · 3D viewer** and open the 3D viewer without a picker.
+- Indexing uses `os.scandir`: two linked copies of `0830_mk3` scan in about 0.025 s (was 1.5 s with `Path.iterdir`).
+- Verified: API probes (traversal and hidden paths return 400; conditional GET returns 304); headless-Chrome end-to-end run against the real server with two junction-linked `0830_mk3` cases, 12/12 checks (auto-load, comparison window and stepping, pressure plot, scene gallery, 3D viewer from tree); browser-folder regression suite still 35/35. Not yet tried with the user's real `finished` folder.
+
 ## Open items
 
 - The actual `High-Voltage_white.png` logo is present at the project root and is used in the main-window header.
-- The browser File System Access API and pop-ups require a Chromium browser (Chrome or Edge) and local-app permissions.
+- Pop-ups must be allowed for http://127.0.0.1:5173. With `serve.py` any modern browser works; only the fallback without `serve.py` (Open folder) needs Chrome or Edge.
 - Later 3D viewer improvements: add an orientation axis widget and additional angled view presets. These are deferred; the user has confirmed the signed-axis view fix works.
 - Later 3D viewer improvement: part-level show/hide controls. Deferred because the user considers the full-car rendering sufficient for now.
-- Verify the static 3D gallery and native directory picker in the user's browser. Automated checks used the actual files with an in-memory directory handle.
+- User check pending: double-click `Start HoMo CFD.bat` and try **Working directory → Browse…** (both open desktop windows, so they were not automated).
+- Later improvement (distribution, decided 2026-10-02): for now teammates install Python 3 themselves. Later, bundle a portable Python with HoMo CFD so it is unzip-and-run like CFD-Tool, which shipped its own Java runtime.
 - Stage 5's raw monitor difference view is implemented, but it is not engineering-validated. The legacy CFD-Tool presets confirm labels/visibility only, not formulas, signs, or units. Confirm monitor definitions against an authoritative source before naming metrics downforce, drag, or front balance.
 - `.gitignore` now excludes the 1.75 GiB local result tree and both ZIP archives. `CFD-Tool.zip` contains a possible `p.ppk`; it was not extracted or inspected and remains ignored.
 
 ## How to run
 
-```text
-cd C:\Users\Archit\Downloads\HoMo-CFD
-py serve.py
-```
-
-Open http://127.0.0.1:5173
+Double-click `Start HoMo CFD.bat` (or `py serve.py --open`). The app opens at http://127.0.0.1:5173 and uses the saved working directory (CFD-Tool's on this PC: `D:\CFD_tool`). See `README.md` for first-start setup.
 
 ## Recent pressure plot refinement
 

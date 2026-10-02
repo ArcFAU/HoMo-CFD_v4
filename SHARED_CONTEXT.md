@@ -6,6 +6,7 @@ This file is the single source of truth. Paste it into ChatGPT when starting a t
 
 - Owner: Sem (mechanical engineering / Formula Student aero, not a software engineer).
 - Product: **HoMo CFD** — a modern replacement for the existing Java **CFD-Tool**, then a real analysis platform.
+- Distribution: once finished, HoMo CFD will be shared with other people (teammates). Keep setup simple (Python stdlib, no build step), keep machine-specific settings out of the app folder (the working directory is saved per user in `%APPDATA%\HoMo-CFD\settings.json`), work fully offline, and write setup docs for non-programmers. Each person runs HoMo CFD on their own computer against their own results, which may live on any path. `serve.py` currently listens on 127.0.0.1 only; serving teammates over a network would need an explicit opt-in and a security review first.
 - Cluster: NHR FAU Fritz. Solver: STAR-CCM+. Current remote flow: laptop `.sim` → WinSCP → mesh / RANS / post macros → download images/plots → CFD-Tool.
 
 ## Current production workflow (do not throw away)
@@ -78,7 +79,8 @@ The legacy `CFD-Tool.zip` `resources/tables` presets confirm display aliases for
 
 ### Stage 3, revised: filesystem-first CSV browser and image windows
 
-- Choose the results root once. Store its File System Access API handle in IndexedDB and restore it on later visits when permission is still granted.
+- Preferred (mirrors CFD-Tool): `serve.py` holds a per-user **working directory**, like CFD-Tool's `%APPDATA%\CFD-Tool\resources\workingDir`. Precedence: `--working-dir` for one run, then HoMo's saved setting in `%APPDATA%\HoMo-CFD\settings.json`, then CFD-Tool's saved working directory, else the app shows **Choose working directory** on first start (native folder dialog via tkinter, or a pasted path). Results are read from `<working dir>\finished` when present (CFD-Tool layout: finished/inProgress/unsimulated/archive/Settings), else from the folder itself. `Start HoMo CFD.bat` starts the server and opens the browser. The server indexes the results folder on start-up and serves listings and files read-only through `/api/tree`, `/api/list`, and `/api/file` (127.0.0.1 only; `..`, drive letters, and hidden entries rejected). `web/server-fs.js` exposes these as File System Access-style handles, so the rest of the app is unchanged. Agreed in the ChatGPT design conversation ("predetermined results folder, no picker every time"); implemented 2026-10-02.
+- Fallback when no root is configured: choose the results root once in Chrome/Edge. Store its File System Access API handle in IndexedDB and restore it on later visits when permission is still granted (one-click Reconnect otherwise).
 - The left panel is a searchable filesystem tree. Selecting the root or a simulation filters the collective coefficient summary to the corresponding subtree.
 - The main area contains exactly one collective table: final coefficients iteration per simulation. Do not render other CSVs as tables.
 - **Customize columns** lets users rename, hide, and reorder coefficient columns; preferences persist per browser. Rendered values must be resolved from original CSV headers, never by the display label or current column position.
@@ -96,7 +98,7 @@ The legacy `CFD-Tool.zip` `resources/tables` presets confirm display aliases for
 - 3D: Three.js / R3F only after PNG viewer works.
 - Interactive 3D first step: a separate WebGL2 surface viewer reads STAR-CCM+ EnSight Gold geometry plus a per-element scalar from a selected `3D-data` folder. Initial preview scope is Cp on `tria3` / `quad4` surfaces; volume cuts and broader format support remain later work.
 - The workspace's `0830_mk3/3D-data` folder currently contains a manageable EnSight Gold Frontwing surface case with five per-element fields: `CpX`, `CpZ`, `CpZCpX`, `PressureCoefficient`, and `TotalPressureCoefficient`. The viewer triangulates `tria3`, `quad4`, and `nsided` faces, offers field and editable range controls, **Auto range** based on the rendered surface values, and signed-axis orthographic presets (+/−X, +/−Y, +/−Z) plus isometric. The user confirmed their selected full-car export renders and considers that sufficient; do not block work on re-exporting it. The workspace Frontwing sample has ranges CpX −2.751…+2.343, CpZ −3.319…+2.135, CpZCpX −4.507…+2.957, and PressureCoefficient/TotalPressureCoefficient −3.720…+1.305. The +1 maximum therefore clips positive values in this local sample, but the interface can be adjusted or auto-ranged. The `0830_mk3/3D/` folder contains 21 static reference scenes (Cp/CpT/directional Cp/SFC/flow pattern); these open in a standalone image gallery from the searchable filesystem tree, with left/right arrow navigation. The user also supplied X/Y/Z sequences, Lambda2 X images, pressure CSVs, component coefficient histories, and job/report reference files in this case folder; inspect/use them when their workflow feature is next in scope. A previously inspected 4.58 GB volume export with an `Air` part was superseded; it should not be treated as the current sample.
-- Local-first: user points the app at a result folder on disk (no cluster upload in V1).
+- Local-first: user points the app at a result folder on disk (no cluster upload in V1), preferably by configuring it in `serve.py`.
 
 ## Cooperation rules (Cursor + ChatGPT)
 

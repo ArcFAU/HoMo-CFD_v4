@@ -2064,3 +2064,291 @@ MEMORY.md:77-79|note=[grounded the next improvements in the existing CFD image a
 > Before committing I scanned every file for passwords, licence keys and email addresses, and found none. Your `0830_mk3` data and `CFD-Tool.zip` remain excluded.
 >
 > I used a branch rather than committing straight to `master`, so you can look the change over first. When you're happy, I can merge it into `master` and push it to GitHub (`ArcFAU/HoMo-CFD_v4`). Just say the word.
+
+## 2026-10-02 — Server-configured results folder
+
+### User message (verbatim)
+
+> let's move further.
+
+### Contributor messages (verbatim)
+
+> Next on the list is the step ChatGPT and Claude agreed on but never built: let `serve.py` index a configured results folder automatically. The app would then open with all simulations already loaded, with no folder picker and no permission prompts, and it would work in any browser, including VS Code's Simple Browser. I'll keep working on the `baseline-2026-10-02` branch. First, a look at how the current server and docs describe this:
+
+> Plan: `serve.py` gets a configurable results root, set with `--results PATH` or a git-ignored `homo-cfd.config.json`. It exposes three read-only endpoints: tree, list and file. They are path-checked and bound to 127.0.0.1 only. A small `web/server-fs.js` presents those folders to the app through the same folder-handle interface the browser picker returns, so the existing tree, comparison, pressure and 3D code keeps working unchanged. Writing the server:
+
+> Now `web/server-fs.js`, the browser side that presents server folders as folder handles:
+
+> Now `app.js`. Three changes: on start-up, load the server's results folder before trying the saved browser folder; prefetch the folder tree in one request; and add a tree entry that opens `3D-data` folders directly in the 3D viewer, so it no longer needs the browser picker either.
+
+> The regexes were written correctly. Next, the image viewer has to restore server handles read back from IndexedDB:
+
+> Checking that the new global names in `server-fs.js` don't collide with names in the other scripts:
+
+> No collisions. Next: keep the local config file out of Git and add an example config.
+
+> The backslashes were lost in the example file. Rewriting it with the Write tool, using forward slashes, which Python accepts on Windows:
+
+> Now testing. I'll build a small results tree in the scratchpad: `caseA` and `caseB` as directory junctions to the real `0830_mk3`, plus a hidden `.git` folder. Then I'll start the new `serve.py` on a spare port and check the API, including path-traversal attempts.
+
+> The API behaves, and every traversal and hidden-folder attempt is rejected with 400. Two follow-ups:
+>
+> - The full-tree scan took 1.5 s for just two cases, which is too slow for 100+ simulations. `Path.iterdir()` plus `is_dir()` stats every entry on Windows; `os.scandir` reuses the directory listing's cached file type. Switching to it.
+> - My `If-Modified-Since` check accidentally used HEAD, which the API rejects, so I'll redo it with GET.
+
+> The tree scan dropped from 1.5 s to 0.025 s, so about 1–2 s for 100 cases. Conditional requests return 304. Now an end-to-end browser test against the real server, with no mocks: the app should load the results tree on its own, then open comparison windows, pressure plots, the 3D scene gallery and the 3D viewer from the tree. A wrapper imports `serve.py` and adds a `/test/` route for the runner page.
+
+> The new server mode passes all 12 end-to-end checks: the results tree loads on its own, and comparison windows, pressure plots, the scene gallery and the 3D viewer all work from the tree. Now I'm re-running the earlier 35-check suite to make sure the browser-folder mode didn't regress.
+
+> Both modes pass: 12/12 end-to-end and 35/35 for the browser-folder suite. Next I'll update the docs, then restart your server on port 5173 with the new code.
+
+> The README example path lost a backslash (`\f` was read as an escape). Fixing it:
+
+> Quoting got in the way again, so I'll do this replacement from a script file:
+
+> README fixed. Now stopping the old server and my test servers. I'll also quickly look for your `finished` results folder, which earlier notes mention, so I can suggest configuring it.
+
+> Found two candidates: `D:\CFD\finished` and `D:\CFD_tool\finished`. Taking a quick look at what's in each:
+
+> `D:\CFD_tool\finished` looks like your CFD-Tool results folder: 8 simulations, including `0830_mk3`, updated most recently. I'll configure it in the git-ignored `homo-cfd.config.json`, which is easy to change later, and restart the server with it.
+
+> The server is up with your 8 simulations. Indexing takes about 1.3–2.3 s. A final check that the real app loads them in a browser:
+
+> The page snapshot was taken before loading finished: Chrome's `--dump-dom` doesn't wait for network requests. I'll use the runner approach instead, pointed at your real folder:
+
+> Your real folder works: 7 simulations load in 1.3 s with no click, and there are no read or page errors. Adding the log entry now.
+
+### Work record
+
+- `serve.py`: rewritten with `--results`/`--port` options and `homo-cfd.config.json`; read-only `/api/config`, `/api/tree`, `/api/list`, `/api/file` (Last-Modified/304); `os.scandir` listing; rejects `..`, drive letters, backslashes and hidden entries; still bound to 127.0.0.1 and still serves `web/`.
+- New `web/server-fs.js`: File System Access-style `ServerDirectoryHandle`/`ServerFileHandle`, whole-tree prefetch, `getServerResultsRoot()`, `reviveHandle()`. Loaded by `index.html`, `image-viewer.html`, `3d-viewer.html`.
+- `web/app.js`: server folder loaded first on start-up; tree prefetch; `3D-data` folders with a `.case` file get a **3D viewer** tree entry (`openEnsightViewer`). `web/image-viewer.js`: handles revived after IndexedDB hand-off. `web/3d-viewer.js`: `openFolder(directory)` split from `chooseFolder()`; `?folder=key` opens a handed-over folder.
+- `.gitignore`: `homo-cfd.config.json`. New `homo-cfd.config.example.json`. Local (ignored) `homo-cfd.config.json` set to `D:/CFD_tool/finished` (8 subfolders, chosen over `D:\CFD\finished`, which holds 2 simulation-like folders).
+- Docs: `README.md` run instructions, `SHARED_CONTEXT.md` Stage 3/stack, `STATUS.md` new section.
+- Checks: curl probes (traversal/hidden paths 400, conditional GET 304); headless-Chrome end-to-end against the real server with junction-linked `0830_mk3` cases 12/12; browser-folder regression suite 35/35; real `D:\CFD_tool\finished` load 6/6 (7 rows in 1.3 s, no errors). Restarted the user's server on port 5173 with the new code (detached). Not committed.
+
+### Final response (verbatim)
+
+> HoMo CFD now opens your results automatically. I set it to **`D:\CFD_tool\finished`**, the folder with your 8 CFD-Tool simulations. Reload http://127.0.0.1:5173 and all of them are there after about 1–2 seconds, with no **Open folder** click and no permission prompt. Because the browser folder picker is no longer needed, this also works in VS Code's Simple Browser and in any other browser.
+>
+> **What's new**
+> - **The server reads your results folder directly.** `serve.py` reads the folder set in `homo-cfd.config.json`, or you can pass `py serve.py --results "path"`. To use a different folder, edit that file and restart the server. The file is git-ignored because the path is specific to your PC; `homo-cfd.config.example.json` shows the format. After new results arrive, reload the page to rescan.
+> - **3D-data folders open the 3D viewer from the tree.** For example, `0823_upsi/3D-data` now shows as **3D-data · 3D viewer**, so the 3D viewer no longer needs the picker either.
+> - **The server is read-only and local.** It only answers on 127.0.0.1, and it rejects `..`, drive letters and hidden folders. I checked that attempts to read files outside the results folder are refused.
+> - **Without a configured folder, the old browser-picker mode still works.**
+>
+> **Checks:**
+>
+> - End-to-end against the real server: 12/12, covering the comparison window, stepping, pressure plot, scene gallery and 3D viewer.
+> - Earlier browser-folder suite: still 35/35.
+> - Your real folder: 7 simulations load in 1.3 s, with no errors. `asdf` has no coefficients file, so it doesn't appear as a row.
+>
+> I updated `README.md`, `SHARED_CONTEXT.md` and `STATUS.md`. These changes aren't committed yet; they're on the `baseline-2026-10-02` branch as uncommitted edits.
+>
+> Want me to commit this? Or should I tackle the remaining items from the ChatGPT plan next: a minimum panel size with scrolling for 3–4 cases, and `+` / `-` / `0` zoom keys?
+
+## 2026-10-02 — Record that the app will be shared
+
+### User message (verbatim)
+
+> remember that i need to share this web application with other people once it is finished.
+
+### Contributor message (verbatim)
+
+> Saved to my memory. ChatGPT and Copilot read the project files, not my memory, so I'll also add this requirement to `SHARED_CONTEXT.md`:
+
+### Work record
+
+- Saved a Claude Code project memory that HoMo CFD must be shareable with teammates once finished.
+- Added a "Distribution" line to `SHARED_CONTEXT.md` (People and goal) so every contributor sees the requirement. No code changed.
+
+### Final response (verbatim)
+
+> Noted. It's saved in my memory, and I added it to `SHARED_CONTEXT.md` so ChatGPT and Copilot see it too.
+>
+> The current setup already fits sharing well:
+>
+> - It needs only Python, with no install steps or build tools.
+> - Each person sets their own results folder in `homo-cfd.config.json`, which stays out of Git, so your `D:\CFD_tool\finished` path won't reach anyone else.
+>
+> One decision is still ahead: how people will reach the app.
+>
+> - **Each person runs it on their own PC** against their own results. This works today.
+> - **One machine serves the whole team** over the network. That needs an explicit opt-in setting, because the server currently only listens on your own PC, and a security check first.
+>
+> No need to decide now; I'll keep both options open as we build. When we get close to finishing, I can write a simple setup guide for teammates.
+
+## 2026-10-02 — Per-user working directory, CFD-Tool style
+
+### User message (verbatim)
+
+> it's very simple. everyone should be able to open it on their own computer even with out internet, using their own results and may be that result folder is saved on different path. it would be nice if you understand how previous tool, CFD-Tool used to handle this.
+
+### Contributor messages (verbatim)
+
+> I'll look at how CFD-Tool found its results. You have a working copy at `D:\CFD_tool`, and its `finished` folder sits right next to it, which is already a hint. I'll check its layout and config files, and stay away from `p.ppk`.
+
+> `D:\CFD_tool` turns out to be a data folder, not the program: it has `archive`, `finished`, `inProgress`, `unsimulated` and `Settings`. The program itself is in `CFD-Tool.zip`. Checking the `Settings` folder and the zip's contents, still skipping `p.ppk`:
+
+> The `Config` class gives it away: names like `workingDir`, `loadWorkingDir`, `openWorkingDirSelectionFrame`, `user.home` / `user.dir` and `JFileChooser`. I'll read that class more closely to see where it stores the path. Only its constants, nothing executed:
+
+> A JDK is installed, so I can disassemble the two relevant methods with `javap` (read-only, nothing runs). I'll also check whether CFD-Tool left its saved path on this PC, listing file names only:
+
+> CFD-Tool's approach is now clear:
+>
+> - It keeps one per-user setting, the **working directory**, in `%APPDATA%\CFD-Tool\resources\workingDir`. On your PC that file contains `D:\CFD_tool`.
+> - On the first start, when that file doesn't exist yet, it opens a **"Choose Working Directory"** folder dialog (starting in your home folder), saves the choice, and copies its `Settings` templates into that folder.
+> - The working directory has a fixed layout: `finished`, `inProgress`, `unsimulated`, `archive` and `Settings`. The tool reads results from `<working dir>\finished`.
+>
+> So the program folder holds no paths. Each person picks their own folder once, and the setting lives in their own user profile.
+>
+> I'll make HoMo CFD work the same way. Before designing, a check that the web app doesn't rely on the internet anywhere (fonts, CDNs):
+
+> No internet dependencies: the app is fully offline already. Python's built-in `tkinter` is available, so `serve.py` can show a real Windows folder dialog, just as CFD-Tool did.
+>
+> The plan, mirroring CFD-Tool:
+>
+> 1. A per-user setting in `%APPDATA%\HoMo-CFD\settings.json`, so updating the app folder never loses it.
+> 2. **If you've used CFD-Tool before, HoMo CFD reuses its working directory automatically.** Teammates who already use CFD-Tool need zero setup.
+> 3. On a first start with neither setting, the app shows a **Choose working directory** screen. It has a **Browse…** button that opens the Windows folder dialog, plus a box to paste a path.
+> 4. Results come from `<working dir>\finished` when that folder exists, otherwise from the chosen folder itself.
+> 5. A double-click `Start HoMo CFD.bat` that starts the server and opens the browser.
+>
+> The repo-local `homo-cfd.config.json` becomes unnecessary, so I'll drop it. Updating `serve.py`:
+
+> I'll rewrite `serve.py` as a whole, since the configuration logic changes throughout:
+
+> One Windows-specific catch: Python's HTTP server sets `SO_REUSEADDR`, and on Windows that lets a second copy bind the same port silently instead of failing. Without a fix, double-clicking the launcher twice would leave two servers fighting over one port. Fixing that:
+
+> Now the browser side. In `server-fs.js`, I'll replace `getServerResultsRoot()` with `getServerConfig()` and add a helper for the working-directory calls:
+
+> Now `app.js`: the start-up flow, the **Choose working directory** screen, and the sidebar button, which becomes **Working directory** when the app runs from `serve.py`.
+
+> Next, a double-click launcher for teammates. It starts the server, opens the browser, and tells the user to keep the window open:
+
+> Batch files need Windows line endings even if someone clones the repo on another system, so I'll pin that in `.gitattributes`. Then I'll test the server's settings logic with a temporary `APPDATA`, so your real settings aren't touched.
+
+> Every case behaves as intended:
+>
+> - A fresh user gets no folder, so the app will ask.
+> - Choosing a folder saves it to `%APPDATA%\HoMo-CFD\settings.json`, and a restart reuses it.
+> - With only CFD-Tool installed, HoMo CFD picks up CFD-Tool's working directory (`D:\CFD_tool`) and reads results from its `finished` folder.
+> - Missing or relative paths are rejected.
+> - Requests from other websites are blocked (403 for a foreign host, 415 for non-JSON posts).
+> - A second start reports that HoMo CFD is already running instead of starting a duplicate.
+>
+> Now the browser flow for the first-start screen, with a fresh temporary profile: type a path, click **Use this folder**, and the simulations should appear.
+
+> Two problems in my test setup, not in the app:
+>
+> - The wrapper's catch-all POST handler swallowed the app's `/api/working-dir` request.
+> - The mock server for the browser-folder suite was stopped during earlier cleanup.
+>
+> Fixing both and rerunning:
+
+> The chooser flow passes 8/8, and the setting is saved to the per-user file. The browser-folder suite failed, though, and that one is a real (small) bug I introduced. The **Open folder** click handler is now attached only after the server check finishes, so a click during the first moment after loading does nothing. The test clicks immediately and caught it. Fix: attach the handler right away and let it wait for the check.
+
+> 33/35. The pressure-legend check failed again: the same one that was flaky earlier. This time the page shows the cause, **"Failed to fetch"**. When a second case is added, the app checks up to 150 station files at once. Python's HTTP server accepts only 5 waiting connections by default, so under that burst Windows refuses some. The real `serve.py` has the same limit, so this would hit you too. Raising the queue size in `serve.py` (and in my mock server, to confirm the cause):
+
+> The station-file "Failed to fetch" problem is gone: no pressure failures in three runs. A different warning showed up in two of them: Chrome's harmless but noisy *"ResizeObserver loop"* notice in the 3D scene gallery. It comes from my new gallery zoom, which resizes the frame inside the resize callback. Deferring that resize to the next animation frame:
+
+> All passing: 35/35 three times in a row, 12/12 end-to-end and 8/8 for the chooser. Now the docs: README setup for teammates, plus `SHARED_CONTEXT.md` and `STATUS.md`.
+
+> Docs are done. Next: updating my memory note, which still mentions the old config file, and restarting your server with the new code. With no arguments it should pick up CFD-Tool's working directory by itself.
+
+> Your server picked up `D:\CFD_tool` from CFD-Tool's saved setting by itself, with no HoMo setting file needed. Last step: the log entry.
+
+### Work record
+
+- Inspected CFD-Tool read-only: `D:\CFD_tool` layout, `CFD-Tool.zip` listing and text resources (skipping `p.ppk`), `Config.class` constants and `javap -c` disassembly, and the file names plus `workingDir` content under `%APPDATA%\CFD-Tool\resources`. Nothing was executed or extracted to the project.
+- `serve.py`: per-user working directory (`--working-dir` > `%APPDATA%\HoMo-CFD\settings.json` > CFD-Tool `workingDir` > first-start chooser); results from `finished` when present; `POST /api/working-dir` and `/api/working-dir/browse` (tkinter dialog); Host-header check and JSON-only POSTs; `--open`; graceful exit if the port is already in use; `allow_reuse_address` off on Windows; `request_queue_size = 128`; `--results` kept as an alias.
+- `web/server-fs.js`: `getServerConfig()`, `postServerJson()`. `web/app.js`: **Choose working directory** screen, sidebar **Working directory** button, early-click-safe handler. `web/image-viewer.js`: ResizeObserver refit deferred to the next frame. `web/styles.css`: chooser styles.
+- New `Start HoMo CFD.bat` (CRLF) and `.gitattributes` (`*.bat eol=crlf`). Removed `homo-cfd.config.json`, `homo-cfd.config.example.json` and their `.gitignore` line.
+- Docs: `README.md` setup for teammates, `SHARED_CONTEXT.md` (distribution and Stage 3 notes), `STATUS.md`. Claude Code project memory updated.
+- Checks: temporary-APPDATA server tests (precedence, saving, CFD-Tool fallback, 400/403/415, duplicate start); headless first-start flow 8/8; end-to-end 12/12; browser-folder suite 35/35 three times in a row. Not exercised: the tkinter Browse dialog and the batch file. Restarted the user's server on port 5173; it reports `D:\CFD_tool` from CFD-Tool. Not committed.
+
+### Final response (verbatim)
+
+> Done. HoMo CFD now handles results folders the same way CFD-Tool did.
+>
+> **How CFD-Tool did it** (I read its program files without running anything): it saves one personal setting, the **working directory**, in your Windows user profile (`%APPDATA%\CFD-Tool\resources\workingDir`). On your PC that's `D:\CFD_tool`. On the first start it shows a "Choose Working Directory" dialog, and it reads results from the `finished` folder inside.
+>
+> **HoMo CFD now does the same:**
+> - **Starting it:** teammates copy the HoMo CFD folder anywhere and double-click **`Start HoMo CFD.bat`**. It runs completely offline; the only requirement is Python 3.
+> - **First start:** a **Choose working directory** screen appears. **Browse…** opens a normal Windows folder dialog, or they can paste a path. The choice is saved to their own user profile (`%APPDATA%\HoMo-CFD\settings.json`), so everyone can keep results on a different path, and updating the HoMo CFD folder never loses it.
+> - **CFD-Tool users need no setup:** if someone already used CFD-Tool, HoMo CFD picks up CFD-Tool's working directory automatically. That's what happened on your PC: your server now reads `D:\CFD_tool\finished` without any HoMo setting.
+> - **Folder layout:** results come from `finished` inside the working directory. A folder without `finished` is used as the results folder itself.
+> - **Changing it:** the sidebar's **Working directory** button changes the folder at any time.
+> - **Starting twice:** a second start just opens the browser instead of launching a duplicate server.
+>
+> **Two fixes found while testing:**
+> - When you added a second case to a pressure plot, the server dropped some of the station-file requests. This would have hit you too; it's fixed.
+> - A harmless browser warning from the gallery zoom is gone.
+>
+> **Checks:**
+>
+> - Settings logic, tested with a temporary profile so your real settings weren't touched: the folder is saved and reused after a restart, CFD-Tool's setting is found, and bad paths and requests from other websites are rejected.
+> - First-start flow in the browser: 8/8.
+> - End-to-end: 12/12.
+> - The earlier suite: 35/35, three runs in a row.
+>
+> **Not tested:** the **Browse…** dialog and the batch file themselves, because both open windows on your desktop. Please double-click `Start HoMo CFD.bat` once to try it.
+>
+> **One thing to decide later:** teammates need Python 3 installed, whereas CFD-Tool shipped its own Java. If that's a hurdle, I can later bundle a portable Python so it's truly unzip-and-run.
+>
+> Nothing is committed yet; all of this is uncommitted on the `baseline-2026-10-02` branch.
+
+## 2026-10-02 — Record Python decision; list remaining work
+
+### User message (verbatim)
+
+> let's stick with that plan and add that to later improvement or implitation. now tell me what needs to be done.
+
+### Contributor messages (verbatim)
+
+> I'll record the decision in `STATUS.md` under open items, and fix two stale lines there along the way:
+
+> Also updating my memory note: the open question is now a decision.
+
+### Work record
+
+- `STATUS.md`: added the later improvement "bundle a portable Python" (teammates install Python 3 for now); replaced the stale Chromium-only line and the native-picker verification line; rewrote "How to run" for `Start HoMo CFD.bat`.
+- Updated the Claude Code project memory with the decision. No code changed.
+
+### Final response (verbatim)
+
+> Recorded. For now, teammates install Python 3 themselves. A bundled portable Python is listed in `STATUS.md` as a later improvement. I also fixed two outdated lines there: the browser requirement and the "How to run" section.
+>
+> Here's what remains, in the order I'd do it:
+>
+> **1. Lock in what we have (quick)**
+> - **Commit:** all of today's work since the baseline is uncommitted, including the working directory, server mode and launcher.
+> - **Merge and push:** merge the `baseline-2026-10-02` branch into `master` and push it to GitHub. That needs your go-ahead.
+> - **Your 2-minute check:** double-click `Start HoMo CFD.bat` and try **Working directory → Browse…**. I couldn't automate these because they open windows on your desktop.
+>
+> **2. Finish the viewer (Phase 1 in the ChatGPT plan)**
+> - **Readable panels:** with 3–4 cases the panels currently shrink to fit the window. The plan was a minimum panel size and scrolling instead.
+> - **Zoom keys:** `+` / `-` / `0` as keyboard zoom shortcuts.
+> - **Large result sets:** a test with 100+ simulations. Your folder has 8; a timing check with many copies will show whether loading stays fast.
+>
+> **3. Make it safe to change (for the team)**
+> - **Tests in the project:** the browser test harness lives only in my temporary folder. Moving it into a `tests/` folder lets anyone, Copilot included, rerun the 55 checks before changing things.
+> - **Planning files:** optionally add `DECISIONS.md` / `TASK.md` / `CHANGELOG.md`, as the ChatGPT pipeline suggests.
+>
+> **4. Match the rest of CFD-Tool's results workflow**
+> - **Other result folders:** CFD-Tool's working directory also has `inProgress`, `unsimulated` and `archive`, and the old tool showed them and could archive finished cases. HoMo CFD only shows `finished`. Do you want the others visible? Archiving would change files, so it needs its own design.
+>
+> **5. Needs your input before I can build**
+> - **Stage 5, named aero metrics:**
+>   - Does negative `CzA` mean downforce?
+>   - Does negative `CxA` mean drag?
+>   - Is `CzPercentageFront` a fraction (0.48) or a percent (48)?
+>   
+>   With those answers I can show downforce, drag and balance instead of raw monitor values.
+>
+> **6. Later improvements (already recorded)**
+> - **Distribution:** a bundled portable Python and a short setup guide for teammates.
+> - **3D viewer:** an orientation axis widget, angled view presets, and show/hide for individual parts.
+> - **Stage 7:** Fritz cluster integration (submit, monitor, download).
+>
+> My suggestion: do 1 now, then 2 and the tests from 3. Shall I commit, merge into `master` and push to GitHub?

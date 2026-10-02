@@ -177,6 +177,7 @@ async function buildFolderNode(handle, path = "", isSection = false, sceneImageC
   if (node.isSceneGallery) return node;
   for await (const child of handle.values()) {
     if (child.kind === "file") {
+      if (/^3d-data$/i.test(handle.name) && /\.case$/i.test(child.name)) node.isEnsightFolder = true;
       if (/\.csv$/i.test(child.name)) {
         const file = { name: child.name, path: path ? `${path}/${child.name}` : child.name, handle: child };
         node.files.push(file);
@@ -256,6 +257,16 @@ function renderFolderNode(node) {
     button.textContent = node.name;
     button.title = `Open ${node.path} in image viewer`;
     button.addEventListener("click", () => openImageFolder(node));
+    return button;
+  }
+  if (node.isEnsightFolder) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "tree-entry image-folder ensight-folder";
+    button.dataset.path = node.path;
+    button.textContent = `${node.name} · 3D viewer`;
+    button.title = `Open ${node.path} in the interactive 3D viewer`;
+    button.addEventListener("click", () => openEnsightViewer(node));
     return button;
   }
   if (node.isSceneGallery) {
@@ -1435,6 +1446,26 @@ async function openSceneGallery(node) {
   }
 }
 
+async function openEnsightViewer(node) {
+  const popup = window.open(
+    "about:blank",
+    `homo-cfd-3d-${crypto.randomUUID()}`,
+    `popup,width=${screen.availWidth},height=${screen.availHeight},left=0,top=0`,
+  );
+  if (!popup) {
+    showError("The 3D viewer window was blocked. Allow pop-ups for this local app and try again.");
+    return;
+  }
+  const key = crypto.randomUUID();
+  try {
+    await saveViewerHandle(key, node.handle, node.path);
+    popup.location.href = `./3d-viewer.html?folder=${encodeURIComponent(key)}`;
+  } catch (err) {
+    popup.close();
+    showError(err?.message || "Could not open the 3D viewer");
+  }
+}
+
 async function openComparisonWindow(nodes, initialSectionPath = "") {
   const popup = window.open(
     "about:blank",
@@ -1466,6 +1497,7 @@ async function loadResultsRoot(handle) {
     className: "workspace-empty",
     textContent: `Indexing folders in ${handle.name}…`,
   }));
+  if (handle.homoServer) await prefetchServerTree(handle);
   browserState.root = await buildFolderNode(handle);
   browserState.selectedFolder = null;
   browserState.selectedFile = null;
@@ -1518,8 +1550,101 @@ function offerReconnect(handle) {
   };
 }
 
+// --- working directory (served by serve.py) ---------------------------
+
+// Like CFD-Tool, the working directory is chosen once per user and saved
+// by serve.py (outside the app folder). Results come from its finished/.
+function showWorkingDirectoryChooser(config, message = "") {
+  browserState.pressureRequestToken++;
+  el.panels.classList.remove("pressure-workspace-layout", "pressure-workspace-with-images");
+  el.panels.closest(".app")?.classList.remove("pressure-fullscreen");
+  el.summary.hidden = true;
+
+  const card = document.createElement("section");
+  card.className = "working-dir-card";
+  const title = document.createElement("h1");
+  title.textContent = "Choose working directory";
+  const intro = document.createElement("p");
+  intro.textContent = "Select the folder that holds your CFD results — the same working directory CFD-Tool uses " +
+    "(with finished, inProgress and archive inside). HoMo CFD lists the simulations in its finished folder; " +
+    "a folder without finished is used as the results folder itself. The choice is saved for your user account on this computer.";
+  card.append(title, intro);
+
+  if (config.workingDir) {
+    const current = document.createElement("p");
+    current.className = "hint";
+    current.textContent = `Current: ${config.workingDir} (from ${config.source}) · results from ${config.resultsPath}`;
+    card.appendChild(current);
+  }
+
+  const status = document.createElement("p");
+  status.className = "error";
+  status.hidden = !message;
+  status.textContent = message;
+
+  const apply = async (request) => {
+    status.hidden = true;
+    card.querySelectorAll("button, input").forEach((control) => { control.disabled = true; });
+    try {
+      const result = await request();
+      if (result?.cancelled) {
+        card.querySelectorAll("button, input").forEach((control) => { control.disabled = false; });
+        return;
+      }
+      location.reload();
+    } catch (err) {
+      status.textContent = err?.message || "Could not use that folder.";
+      status.hidden = false;
+      card.querySelectorAll("button, input").forEach((control) => { control.disabled = false; });
+    }
+  };
+
+  const actions = document.createElement("div");
+  actions.className = "working-dir-actions";
+  if (config.canBrowse) {
+    const browse = document.createElement("button");
+    browse.type = "button";
+    browse.className = "primary";
+    browse.textContent = "Browse…";
+    browse.title = "Opens a folder dialog on this computer (it may appear behind the browser window)";
+    browse.addEventListener("click", () => apply(() => postServerJson("working-dir/browse")));
+    actions.appendChild(browse);
+  }
+  const pathInput = document.createElement("input");
+  pathInput.type = "text";
+  pathInput.className = "working-dir-input";
+  pathInput.placeholder = "or paste a folder path, e.g. D:\\CFD_tool";
+  pathInput.setAttribute("aria-label", "Working directory path");
+  pathInput.value = config.workingDir ?? "";
+  const usePath = document.createElement("button");
+  usePath.type = "button";
+  usePath.className = "small-control";
+  usePath.textContent = "Use this folder";
+  usePath.addEventListener("click", () => apply(() => postServerJson("working-dir", { path: pathInput.value })));
+  pathInput.addEventListener("keydown", (event) => { if (event.key === "Enter") usePath.click(); });
+  actions.append(pathInput, usePath);
+  card.append(actions, status);
+
+  if (config.resultsRoot) {
+    const back = document.createElement("button");
+    back.type = "button";
+    back.className = "small-control";
+    back.textContent = "Keep current folder";
+    back.addEventListener("click", () => location.reload());
+    card.appendChild(back);
+  }
+  el.panels.replaceChildren(card);
+}
+
 async function startFilesystemWorkspace() {
-  document.getElementById("open-results").addEventListener("click", chooseResultsRoot);
+  const openResults = document.getElementById("open-results");
+  // Attached before the server check so an early click isn't lost.
+  const serverConfig = getServerConfig();
+  openResults.addEventListener("click", async () => {
+    const config = await serverConfig;
+    if (config) showWorkingDirectoryChooser(config);
+    else chooseResultsRoot();
+  });
   document.getElementById("open-3d-viewer").addEventListener("click", () => {
     const popup = window.open("./3d-viewer.html", "homo-cfd-3d", `popup,width=${screen.availWidth},height=${screen.availHeight},left=0,top=0`);
     if (!popup) showError("The 3D viewer window was blocked. Allow pop-ups for this local app and try again.");
@@ -1533,8 +1658,21 @@ async function startFilesystemWorkspace() {
     textContent: "Open an image section from the results tree to start a comparison, then add cases in its viewer.",
   }));
   try {
+    if (window.indexedDB) await pruneViewerEntries().catch(() => {});
+    // Served by serve.py: the saved working directory needs no picker or permission.
+    const config = await serverConfig;
+    if (config) {
+      openResults.textContent = "Working directory";
+      openResults.title = config.workingDir ? `${config.workingDir} — click to change` : "Choose the folder that holds your results";
+      if (!config.resultsRoot) {
+        showWorkingDirectoryChooser(config);
+        return;
+      }
+      await loadResultsRoot(new ServerDirectoryHandle("", config.resultsRoot));
+      return;
+    }
+    // Opened without serve.py: choose a folder in the browser (Chrome/Edge).
     if (!window.showDirectoryPicker || !window.indexedDB) return;
-    await pruneViewerEntries().catch(() => {});
     const handle = await getSavedResultsRoot();
     if (!handle) return;
     if (await handle.queryPermission({ mode: "read" }) !== "granted") {

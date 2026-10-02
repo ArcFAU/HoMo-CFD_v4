@@ -23,8 +23,10 @@ let syncingPan = false;
 let syncFrameIndex = 0;
 const viewerId = crypto.randomUUID();
 const zoomChannel = typeof BroadcastChannel === "undefined" ? null : new BroadcastChannel("homo-cfd-image-zoom");
+// Refit on the next frame: resizing inside the callback (e.g. when zoom adds
+// scrollbars) would trigger a "ResizeObserver loop" error.
 const imageStageObserver = new ResizeObserver((entries) => {
-  entries.forEach((entry) => fitZoomedImage(entry.target));
+  requestAnimationFrame(() => entries.forEach((entry) => fitZoomedImage(entry.target)));
 });
 
 function openSettingsDb() {
@@ -42,7 +44,7 @@ async function getViewerTarget(key) {
     const store = transaction.objectStore(STORE_NAME);
     const handleRequest = store.get(`viewer:${key}`);
     const pathRequest = store.get(`viewer-path:${key}`);
-    transaction.oncomplete = () => resolve({ handle: handleRequest.result, path: pathRequest.result });
+    transaction.oncomplete = () => resolve({ handle: reviveHandle(handleRequest.result), path: pathRequest.result });
     transaction.onerror = () => reject(transaction.error);
   });
   db.close();
@@ -57,7 +59,7 @@ async function getViewerSet(key) {
     request.onerror = () => reject(request.error);
   });
   db.close();
-  return targets;
+  return Array.isArray(targets) ? targets.map((target) => ({ ...target, handle: reviveHandle(target.handle) })) : targets;
 }
 
 async function getViewerCatalog(key) {
@@ -68,7 +70,7 @@ async function getViewerCatalog(key) {
     request.onerror = () => reject(request.error);
   });
   db.close();
-  return catalog;
+  return Array.isArray(catalog) ? catalog.map((target) => ({ ...target, handle: reviveHandle(target.handle) })) : catalog;
 }
 
 function showError(message) {
