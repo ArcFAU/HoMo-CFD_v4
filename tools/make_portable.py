@@ -28,8 +28,9 @@ PYTHON_URL = f"https://www.python.org/ftp/python/{PYTHON_VERSION}/{PYTHON_ZIP}"
 PYTHON_SHA256 = "a93abe456ab01bd96d7a085b3cdb6566b3063f4241360d114142fbdb07f0a310"
 
 # What a teammate needs to run the app; never tests, notes, data or secrets.
-APP_FILES = ["serve.py", "cluster.py", "Start HoMo CFD.bat", "README.md", "CHANGELOG.md"]
-APP_FOLDERS = ["web"]
+APP_FILES = ["serve.py", "cluster.py", "Start HoMo CFD.bat", "README.md"]
+# starccm/: the STAR-CCM+ macros for the 3D export, which teammates add to their own template.
+APP_FOLDERS = ["web", "starccm"]
 
 
 def sha256(path):

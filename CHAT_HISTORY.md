@@ -4436,3 +4436,59 @@ The background watcher of the post job (job 4285206 in `exp`) finished; no new u
 ### Work record
 
 - Job 4285535 running (5:08 elapsed at 21:13). No changes.
+
+## 2026-10-02 — How to share HoMo with teammates
+
+### User message (verbatim)
+
+> okay, regarding sharing with teammates, what would be the ideal way. i don't want to share unnecessary files.
+
+### Contributor messages (verbatim)
+
+> The portable zip is meant for exactly this. To give you a definite answer, I'm checking what's in the current zip and whether any file in it contains your personal details (user name, paths):
+
+> Your personal details aren't in the zip. The only matches are the public NHR host names, used in HoMo's help texts, and `D:\CFD_tool` as an example path in the README. It contains 15 app files plus Python and is 12.5 MB.
+>
+> The ideal way:
+> - **What to share:** only the zip, `dist\HoMo-CFD-portable.zip`.
+> - **Not the project folder or the GitHub repo.** They also hold our conversation log, notes about your Fritz setup, tests, `CFD-Tool.zip` and `RANS.html`. The repo is private, and giving someone access would expose all of that.
+> - **Where:** a team drive (FAUbox, Teams or OneDrive) or a USB stick. Teammates unzip it anywhere and double-click `Start HoMo CFD.bat`. Each person's settings live in their own Windows profile, so nothing of yours travels with it.
+> - **Updates:** after changes, I rebuild the zip and you share it again. Teammates unzip it over their old folder and keep their settings.
+>
+> Two adjustments make the zip fit that purpose better:
+> - **Drop `CHANGELOG.md`.** It's our development history, which teammates don't need.
+> - **Add the `starccm` folder** (`export3D.java`, `postprocessing.java` and a short README, 40 KB). Teammates have their own Fritz accounts and templates, so they need these two macros for the automatic 3D export. They contain nothing personal; I removed the one personal path earlier.
+>
+> Applying both:
+
+> The zip's `starccm` README still describes *your* setup ("installed in `SCRIPT_RANS` on 2026-10-02") and our test-run history. For teammates, it should say what to do with their own template. Reading it to reword those parts:
+
+> This README now goes to teammates, so I'm rewriting it for them: what the macros do, how to install them in their own template, and how to try them. Your test-run history stays in the project notes (`STATUS.md`).
+
+> The zip now holds 54 files: the app, Python and the `starccm` folder, without `CHANGELOG.md`. Next I'm adding the sharing advice to the README and the notes, then running both test suites:
+
+> Both suites pass (71 unit tests, 134 browser checks), and the zip is rebuilt with the new README. Writing the log entry and committing:
+
+### Work record
+
+- Checked the portable zip: 52 files (15 app files + Python, 24 MB unpacked); no personal data in the app files (only `csnhr` / `fritz.nhr.fau.de` in help texts and `D:\CFD_tool` as a README example).
+- `tools/make_portable.py`: `APP_FILES` without `CHANGELOG.md`; `APP_FOLDERS` adds `starccm`. Zip now 54 files: `Start HoMo CFD.bat`, `serve.py`, `cluster.py`, `README.md`, `web/`, `starccm/`, `python/` (12.5 MB).
+- `starccm/README.md` rewritten for teammates (install into their own template, manual merge if their macro differs, try by hand, what the export writes); test history stays in `STATUS.md`.
+- Docs: `README.md` (share only the zip; settings stay per user), `CHANGELOG.md`, `STATUS.md`, `tests/README.md`; `tests/test_portable.py` expects `starccm/` and no changelog.
+- Job 4285535 still running; result pending.
+- Checks: `py -m unittest discover -s tests` 71/71 OK; `py tests/run_browser_tests.py` 134/134 passed.
+
+### Final response (verbatim)
+
+> **Share only the zip:** `dist\HoMo-CFD-portable.zip` (12.5 MB), for example via FAUbox, Teams, OneDrive or a USB stick. It contains just what a teammate needs:
+> - `Start HoMo CFD.bat`: the only file they double-click,
+> - `serve.py`, `cluster.py`, `web\`: the app,
+> - `python\`: its own Python, so nothing to install,
+> - `starccm\`: the two macros for the automatic 3D export, with a short README on adding them to their own template on Fritz,
+> - `README.md`: setup instructions.
+>
+> **Not included,** and don't share: the project folder or the GitHub repo. They hold our conversation log, your Fritz notes, tests, `CFD-Tool.zip` and `RANS.html`. I checked the zip for your user name, paths and the licence key; none are in it. Settings are stored per person in Windows, so nothing of yours goes along.
+>
+> **For teammates:** unzip anywhere, double-click `Start HoMo CFD.bat`, pick their working directory. For the Fritz features they need WinSCP with their own saved session, as with CFD-Tool. When HoMo changes, I rebuild the zip and they unzip the new one over the old folder; their settings stay.
+>
+> I changed two things for this: the changelog (our development history) is no longer in the zip, and the macros folder now is. All tests pass (71 unit tests, 134 browser checks), and the changes are on GitHub `master`. The 3D export test on Fritz is still running; I'll report when it's done.
