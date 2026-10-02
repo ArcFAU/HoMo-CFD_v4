@@ -100,3 +100,34 @@ things on Fritz and come last.
    CFD-Tool's preparation step), or keep using CFD-Tool / existing scripts for
    that for now?
 6. OK to move the licence key out of the job scripts into a file on Fritz?
+
+## 4. Answers so far (user, 2026-10-02)
+
+- **Accounts (Q1, part):** usually everyone uses their **own Fritz account**.
+  So connection settings are per user and per PC (host alias / user name in
+  `%APPDATA%\HoMo-CFD\settings.json`, keys in the user's own SSH/PuTTY
+  setup). The OpenSSH (B) vs WinSCP/PuTTY (A) choice is still open.
+- **Download timing (Q3):** download **after post-processing** has finished
+  (images ready), not at `plots/DONE`.
+  - Finding: `rans.sh` writes `plots/DONE` right after the solver, *before*
+    `post.sh` runs, and `post.sh` writes no completion marker. So `plots/DONE`
+    alone cannot be the trigger.
+  - Options: (a) ask SLURM whether the case's `post` job has finished
+    (`squeue` / `sacct` over SSH; needs option B or PuTTY's `plink`);
+    (b) have `post.sh` write a marker such as `plots/POST_DONE` as its last
+    step (needs the job scripts to change, see Q5); (c) look for post-processing
+    output (section folders, `RANS.html`) — fragile, as a run can stop half-way.
+  - Proposal: (a) as the main signal, plus (b) once HoMo CFD writes the job
+    scripts.
+- **`launchV3.sh` (Q2):** the user did not know this script. Where it comes
+  from: CFD-Tool's `InProgress` class (in `CFD-Tool.jar`) builds `upload.bat`
+  with `set LAUNCH_SCRIPT=/home/…/Pipeline/launchV3.sh` and
+  `call %LAUNCH_SCRIPT%`, so CFD-Tool runs it on Fritz after every upload. It
+  is a cluster-side file, probably set up by whoever wrote CFD-Tool; it is
+  not in the project or the result folders. Next step: look for
+  `Pipeline/launchV3.sh` in the team's Fritz folder or ask CFD-Tool's author.
+  If it cannot be found, HoMo CFD can start the chain itself with
+  `sbatch mesh.sh` in the uploaded case folder.
+
+Still open: Q1 connection method, Q2 (what `launchV3.sh` does, if it
+exists), Q4 remote clean-up, Q5 job-script generation, Q6 licence key.

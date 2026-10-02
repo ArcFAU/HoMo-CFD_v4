@@ -22,6 +22,12 @@ runTests(async () => {
   const headers = headerCells(doc);
   check("force columns follow Iteration, no sign-flipped columns", headers.slice(1, 4).join("|") === "Iteration|Downforce [N]|Drag [N]" &&
     !headers.some((header) => header.startsWith("−")), headers.slice(0, 5).join("|"));
+  check("L/D and balance follow the forces", headers.slice(4, 7).join("|") === "L/D|Balance [% front]|CzA Front(%)", headers.slice(4, 7).join("|"));
+  check("L/D = CzA / CxA", cellFor(doc, "caseA", "L/D") === "2.56" && cellFor(doc, "caseB", "L/D") === "2.50", `${cellFor(doc, "caseA", "L/D")} / ${cellFor(doc, "caseB", "L/D")}`);
+  check("Balance = CzA Front × 100", cellFor(doc, "caseA", "Balance [% front]") === "45.0" && cellFor(doc, "caseA", "CzA Front(%)") === "0.450",
+    `${cellFor(doc, "caseA", "Balance [% front]")} / ${cellFor(doc, "caseA", "CzA Front(%)")}`);
+  check("L/D and balance explained on hover", /CzA ÷ CxA/.test([...doc.querySelectorAll(".data-table th")].find((th) => th.textContent === "L/D")?.title ?? "") &&
+    /front share of the downforce/.test([...doc.querySelectorAll(".data-table th")].find((th) => th.textContent === "Balance [% front]")?.title ?? ""));
   check("raw CzA / CxA unchanged", cellFor(doc, "caseA", "CzA") === "-3.200" && cellFor(doc, "caseB", "CxA") === "-1.400",
     `CzA ${cellFor(doc, "caseA", "CzA")}, CxA ${cellFor(doc, "caseB", "CxA")}`);
   check("CzA Front stays a fraction", cellFor(doc, "caseA", "CzA Front(%)") === "0.450", cellFor(doc, "caseA", "CzA Front(%)"));
@@ -32,6 +38,8 @@ runTests(async () => {
   check("Δ Downforce [N] positive = more downforce", cellFor(doc, "caseB", "Δ Downforce [N]") === (0.3 * dynamicPressure(60)).toFixed(1) && cellFor(doc, "caseA", "Δ Downforce [N]") === "0.0",
     `caseB ${cellFor(doc, "caseB", "Δ Downforce [N]")}, caseA ${cellFor(doc, "caseA", "Δ Downforce [N]")}`);
   check("Δ Drag [N] positive = more drag", cellFor(doc, "caseB", "Δ Drag [N]") === (0.15 * dynamicPressure(60)).toFixed(1), cellFor(doc, "caseB", "Δ Drag [N]"));
+  check("Δ L/D and Δ Balance", cellFor(doc, "caseB", "Δ L/D") === "-0.06" && cellFor(doc, "caseB", "Δ Balance [% front]") === "3.0",
+    `${cellFor(doc, "caseB", "Δ L/D")} / ${cellFor(doc, "caseB", "Δ Balance [% front]")}`);
   check("Δ CzA keeps the exported sign", cellFor(doc, "caseB", "Δ CzA") === "-0.300", cellFor(doc, "caseB", "Δ CzA"));
   check("Δ note explains the signs", /positive Δ there means more downforce/.test(doc.querySelector(".comparison-note")?.textContent ?? ""), doc.querySelector(".comparison-note")?.textContent);
   [...doc.querySelectorAll(".table-mode-switch button")].find((button) => button.textContent === "Values").click();

@@ -66,6 +66,15 @@ change with speed; the hover note says so.
 The force columns are computed when the table is drawn, not stored with the
 cached CSV rows, so changing the speed or density only redraws the table.
 
+## 2026-10-02 — L/D and aero balance
+
+Requested by the user. `L/D` = CzA ÷ CxA (the same as Downforce ÷ Drag, so
+it does not depend on the speed or density). `Balance [% front]` = the
+exported `CzA Front (percentage)` fraction × 100; the raw fraction column stays.
+**Why from CzA Front:** it is the team's own front-axle share from STAR-CCM+.
+The component monitors (FW, UT, RW, …) are per part, not per axle, so a
+balance cannot be derived from them without moments.
+
 ## 2026-10-02 — Filenames are not parsed for navigation (except pressure linking)
 
 Image sections are stepped by natural filename order, not by an mm position

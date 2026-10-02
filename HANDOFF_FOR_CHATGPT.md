@@ -10,7 +10,7 @@ HoMo CFD is a local, offline web replacement for the team's Java CFD-Tool. `SHAR
 
 ## What works
 
-- Results tree with search; one collective coefficient table (final iteration per simulation) with **Downforce [N]** and **Drag [N]** computed columns (forces at a speed and air density set in the toolbar), Values / Δ-vs-reference modes, customizable columns and a monitor bar chart. CzA/CxA are the downforce/drag coefficients × reference area (not forces); negative CzA = downforce, negative CxA = drag; CzA Front is a fraction.
+- Results tree with search; one collective coefficient table (final iteration per simulation) with **Downforce [N]**, **Drag [N]**, **L/D** and **Balance [% front]** computed columns (forces at a speed and air density set in the toolbar), Values / Δ-vs-reference modes, customizable columns and a monitor bar chart. CzA/CxA are the downforce/drag coefficients × reference area (not forces); negative CzA = downforce, negative CxA = drag; CzA Front is a fraction.
 - Comparison windows for image sections: up to four cases, each with its own field/axis/frame; synchronized zoom and pan; keys ←/→ (frames), T/V/P/L (field), X/Y/Z (axis), + / − / 0 (zoom). With 3–4 cases panels keep a readable size and the window scrolls.
 - Pressure distributions (FW/UT/RW × x/y): up to four cases overlaid, stations stepped with ←/→, optional linked scene images; a case or image from a different station is labelled.
 - 3D: static scene galleries from `3D` folders; an interactive EnSight Gold surface viewer (tria3/quad4/nsided, per-element fields, auto range, axis presets) opened from `3D-data` tree entries. The user's full-car export renders.
@@ -18,6 +18,6 @@ HoMo CFD is a local, offline web replacement for the team's Java CFD-Tool. `SHAR
 
 ## Next
 
-1. Stage 7 (Fritz cluster: submit, monitor, download, delete) — design first, see `TASK.md`; needs the team's choice of authentication before any implementation.
+1. Stage 7 (Fritz cluster: submit, monitor, download, delete) — design first, see `TASK.md`; needs the team's choice of authentication before any implementation. Answered: own Fritz account per user; download after post-processing (`plots/DONE` is too early).
 2. The user will add more result folders; check loading speed with 100+ simulations.
 3. Later improvements (after the main phases): bundled Python, 3D orientation widget, angled presets, part show/hide.

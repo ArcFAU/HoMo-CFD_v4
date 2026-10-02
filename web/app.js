@@ -997,18 +997,30 @@ function numericCell(raw) {
 
 // Confirmed by the team (2026-10-02): CzA and CxA are the downforce and drag
 // coefficients times the reference area; negative means downforce / drag.
-// The exported monitors stay unchanged; HoMo CFD adds the forces
-// F = ½ · ρ · v² · (−CzA or −CxA) at the speed and density set above the
-// table, so downforce and drag are positive. Assumes CzA and CxA do not
-// change with speed.
-const FORCE_COLUMNS = [
-  { header: "Downforce [N]", name: "Downforce", coefficient: "CzA", meaning: "downforce" },
-  { header: "Drag [N]", name: "Drag", coefficient: "CxA", meaning: "drag" },
+// CzA Front (percentage) is the front share of the downforce, as a fraction.
+// The exported monitors stay unchanged; HoMo CFD adds these columns from the
+// total monitors. Forces use the speed and density set above the table and
+// assume CzA and CxA do not change with speed.
+const COMPUTED_COLUMNS = [
+  { header: "Downforce [N]", sources: ["CzA"], decimals: 1,
+    value: (monitor, pressure) => -monitor.CzA * pressure,
+    note: () => forceColumnNote("Downforce", "CzA", "downforce") },
+  { header: "Drag [N]", sources: ["CxA"], decimals: 1,
+    value: (monitor, pressure) => -monitor.CxA * pressure,
+    note: () => forceColumnNote("Drag", "CxA", "drag") },
+  { header: "L/D", sources: ["CzA", "CxA"], decimals: 2,
+    value: (monitor) => monitor.CzA / monitor.CxA,
+    note: () => "Lift-to-drag ratio = Downforce ÷ Drag = CzA ÷ CxA. It does not depend on the speed or density. " +
+      "Higher means more downforce for the same drag." },
+  { header: "Balance [% front]", sources: ["CzA Front(%)"], decimals: 1,
+    value: (monitor) => monitor["CzA Front(%)"] * 100,
+    note: () => "Aero balance: front share of the downforce = CzA Front (percentage) × 100 (the monitor is exported as a fraction). " +
+      "50 % is an even front/rear split; higher means more front-biased." },
 ];
 
 function derivedAeroColumn(header) {
-  const force = FORCE_COLUMNS.find((column) => column.header === header);
-  return force ? { ...force, note: forceColumnNote(force) } : undefined;
+  const column = COMPUTED_COLUMNS.find((candidate) => candidate.header === header);
+  return column ? { ...column, note: column.note() } : undefined;
 }
 
 function validForceSetting(value) {
@@ -1032,12 +1044,12 @@ function dynamicPressure({ speedKmh, density }) {
   return 0.5 * density * speed * speed;
 }
 
-function forceColumnNote(column) {
+function forceColumnNote(name, coefficient, meaning) {
   const settings = browserState.forceSettings;
-  return `${column.name} = ½ · ρ · v² · (−${column.coefficient}), where ${column.coefficient} is the ${column.meaning} coefficient × reference area ` +
-    `(negative ${column.coefficient} is ${column.meaning}, so higher means more ${column.meaning}). v = ${settings.speedKmh} km/h ` +
+  return `${name} = ½ · ρ · v² · (−${coefficient}), where ${coefficient} is the ${meaning} coefficient × reference area ` +
+    `(negative ${coefficient} is ${meaning}, so higher means more ${meaning}). v = ${settings.speedKmh} km/h ` +
     `(${(settings.speedKmh / 3.6).toFixed(2)} m/s) and ρ = ${settings.density} kg/m³, so ½ · ρ · v² = ${dynamicPressure(settings).toFixed(1)} Pa. ` +
-    `Change the speed and density above the table. Assumes ${column.coefficient} does not change with speed.`;
+    `Change the speed and density above the table. Assumes ${coefficient} does not change with speed.`;
 }
 
 function forceSettingInput(labelText, unit, key) {
@@ -1069,30 +1081,34 @@ function forceSettingInput(labelText, unit, key) {
   return label;
 }
 
-// Adds Downforce [N] / Drag [N] right after Iteration, from the total CzA and
-// CxA monitors. Done at render time (not in the cached CSV rows) so speed and
-// density can change.
-function withForceColumns(data) {
+// Adds the computed columns right after Iteration, from the total monitors
+// of the final row. Done at render time (not in the cached CSV rows) so speed
+// and density can change.
+function withComputedColumns(data) {
   const row = data.rows[data.rows.length - 1];
   if (!row) return data;
   const pressure = dynamicPressure(browserState.forceSettings);
+  const monitor = {};
+  data.headers.forEach((header, index) => {
+    const kind = classifyHeader(header);
+    if (kind && !(kind in monitor)) monitor[kind] = numericCell(row[index]);
+  });
   const headers = [...data.headers];
   const values = [...row];
   let insertAt = data.headers.findIndex((header) => /^iteration$/i.test(header)) + 1;
-  FORCE_COLUMNS.forEach(({ header, coefficient }) => {
-    const sourceIndex = data.headers.findIndex((candidate) => classifyHeader(candidate) === coefficient);
-    if (sourceIndex < 0) return;
-    const value = numericCell(row[sourceIndex]);
-    headers.splice(insertAt, 0, header);
-    values.splice(insertAt, 0, Number.isFinite(value) ? String(-value * pressure) : "");
+  COMPUTED_COLUMNS.forEach((column) => {
+    if (!column.sources.every((source) => source in monitor)) return;
+    const value = column.value(monitor, pressure);
+    headers.splice(insertAt, 0, column.header);
+    values.splice(insertAt, 0, Number.isFinite(value) ? String(value) : "");
     insertAt++;
   });
   return { ...data, headers, rows: [...data.rows.slice(0, -1), values] };
 }
 
-// Forces in newtons get one decimal; coefficients keep three.
+// Forces and balance get one decimal, L/D two; coefficients keep three.
 function valueDecimals(header) {
-  return FORCE_COLUMNS.some((column) => column.header === header) ? 1 : 3;
+  return COMPUTED_COLUMNS.find((column) => column.header === header)?.decimals ?? 3;
 }
 
 async function loadCsvTable(file) {
@@ -1160,7 +1176,7 @@ function coefficientReadErrors(coefficientRows) {
 }
 
 function renderCsvTables(coefficientRows) {
-  const validRows = coefficientRows.filter((data) => Array.isArray(data.headers) && Array.isArray(data.rows)).map(withForceColumns);
+  const validRows = coefficientRows.filter((data) => Array.isArray(data.headers) && Array.isArray(data.rows)).map(withComputedColumns);
   const readErrors = coefficientReadErrors(coefficientRows);
   browserState.columnHeaders = [...new Set(validRows.flatMap((data) => data.headers))];
   const customizeButton = el.summary.querySelector(".customize-columns");
@@ -1190,7 +1206,7 @@ function renderCsvTables(coefficientRows) {
     note.className = "comparison-note";
     note.textContent = "Δ = this simulation minus the reference. Downforce [N] and Drag [N] are positive for downforce and drag, so a positive Δ " +
       "there means more downforce or more drag. Other columns are the exported monitors, unchanged: for CzA and CxA a negative Δ means " +
-      "more downforce or more drag.";
+      "more downforce or more drag. A positive Δ L/D means more downforce per unit of drag; a positive Δ Balance means more front-biased.";
     collective.appendChild(note);
   }
 
@@ -1259,7 +1275,7 @@ function renderMonitorChart(coefficientRows, referenceRow) {
   select.setAttribute("aria-label", "Monitor to chart");
   orderedColumnDefinitions(columns).forEach((column) => select.add(new Option(column.label, column.key)));
   if (!columns.includes(browserState.monitorChartHeader)) {
-    browserState.monitorChartHeader = columns.find((header) => derivedAeroColumn(header)?.coefficient === "CzA") ??
+    browserState.monitorChartHeader = columns.find((header) => header === "Downforce [N]") ??
       columns.find((header) => classifyHeader(header) === "CzA") ?? columns[0] ?? "";
   }
   select.value = browserState.monitorChartHeader;

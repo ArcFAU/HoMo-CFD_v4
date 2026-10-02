@@ -2763,3 +2763,56 @@ MEMORY.md:77-79|note=[grounded the next improvements in the existing CFD image a
 > **Optional extras**, only if you want them: lift-to-drag ratio (Downforce/Drag), forces per component (FW/UT/RW in N), aero balance. Also the later improvements we parked: bundled Python, the 3D orientation widget, part show/hide.
 >
 > My suggestion: do step 1 now, then start the Stage 7 questions while a teammate tries it.
+
+## 2026-10-02 — Stage 7 answers; L/D and aero balance columns
+
+### User message (verbatim)
+
+> 1. yes it opens the browser, and everything looks good.
+> 2. i would do it later, since i don't want tospoil the fun.
+> 3. useualy everyone uses their own fritz accoutnt. download happens after postprocessing is done. and i don't know where you saw launchV3.sh.
+>
+> also do this:
+> Lift-to-drag ratio (Downforce / Drag), Aero balance
+
+### Contributor messages (verbatim)
+
+> Recording your Stage 7 answers, then checking two things: where I saw `launchV3.sh`, and how CzA Front is defined, which the aero balance column will be based on.
+
+> Found both answers. `launchV3.sh` is mentioned inside CFD-Tool itself: the upload batch file it writes contains `call …/Pipeline/launchV3.sh`. Also, `rans.sh` writes `plots/DONE` *before* post-processing runs, and `post.sh` writes no "finished" marker. So "after post-processing" needs a different signal, which I'll note in the design. Now the code for the new columns:
+
+> I'll merge the force columns into one list of computed columns, so L/D and balance work the same way (hover notes, Δ view, chart, decimals):
+
+> All 78 browser checks pass, 5 of them new. Checking against your real results:
+
+> Values check out: 0823_upsi has L/D = 5.244 ÷ 1.582 = 3.32 and balance 47.9 % front. Now recording your Stage 7 answers in the design document:
+
+### Work record
+
+- `web/app.js`: `FORCE_COLUMNS` / `withForceColumns` generalised to `COMPUTED_COLUMNS` / `withComputedColumns` (each column: sources, decimals, value, hover note). New `L/D` = CzA ÷ CxA (2 decimals) and `Balance [% front]` = CzA Front (percentage) × 100 (1 decimal), after Drag [N]. Δ note mentions both. Chart default stays Downforce [N].
+- `web/styles.css`: comment only. Tests: `tests/browser/server-mode.html` +5 checks (column order, L/D values, balance value with raw fraction unchanged, hover notes, Δ L/D and Δ Balance).
+- Stage 7 research (read-only): `CFD-Tool.jar` was read from inside `CFD-Tool.zip` in memory (`p.ppk` not touched); `InProgress.class` holds `set LAUNCH_SCRIPT=/home/<masked>/Pipeline/launchV3.sh` and `"call %LAUNCH_SCRIPT%"`. Job scripts (licence key, home paths and mail masked): `rans.sh` runs `sbatch post.sh` then `> plots/DONE`; `post.sh` writes no completion marker.
+- Docs: `docs/STAGE7_FRITZ.md` new section 4 (answers: own Fritz account per user; download after post-processing with signal options; where `launchV3.sh` comes from; still-open questions), `TASK.md` status, `STATUS.md` (Stage 7, Stage 5, launcher check), `SHARED_CONTEXT.md`, `CHANGELOG.md`, `DECISIONS.md` (L/D and balance definitions), `HANDOFF_FOR_CHATGPT.md`.
+- Real results via the user's server: e.g. 0823_upsi L/D 3.32, balance 47.9; 0830_mk3 L/D 2.99, balance 41.4.
+- Checks: `py -m unittest discover -s tests` 15/15 OK; `py tests/run_browser_tests.py` 78/78 passed.
+
+### Final response (verbatim)
+
+> Done. The table now reads:
+>
+> `Simulation | Iteration | Downforce [N] | Drag [N] | L/D | Balance [% front] | CzA Front(%) | CzA | …`
+>
+> - **L/D** = Downforce ÷ Drag = CzA ÷ CxA, 2 decimals. It doesn't depend on the speed or density. Your best is 0830_mk2.2_10AoA at **3.43**.
+> - **Balance [% front]** = CzA Front × 100, 1 decimal. For example, 0823_upsi is 47.9 % front and 0830_mk3 is 41.4 %. The raw CzA Front fraction stays as it is.
+> - Both have hover explanations and work in **Δ vs reference** (Δ Balance is in percentage points) and in the monitor chart.
+>
+> I based the balance on your CzA Front monitor, since that's STAR-CCM+'s front-axle share. The component monitors (FW, UT, RW…) are per part, not per axle, so they can't give a balance on their own. Tell me if you meant something different by aero balance.
+>
+> **Stage 7:** I added your answers to `docs/STAGE7_FRITZ.md`.
+> - **Own Fritz accounts:** each person's connection settings stay on their own PC.
+> - **Download after post-processing:** one catch. `rans.sh` writes `plots/DONE` right after the solver, *before* post-processing starts, and `post.sh` writes nothing when it finishes. So HoMo needs another signal. Best option: ask the cluster (SLURM) whether the `post` job has finished. Later, `post.sh` could also write its own "done" file.
+> - **`launchV3.sh`:** it's built into CFD-Tool. The upload batch file it writes ends with `call …/Pipeline/launchV3.sh`, so every CFD-Tool upload runs that script on Fritz. The script lives on the cluster, probably set up by whoever wrote CFD-Tool. When you're next logged in to Fritz, check whether there's a `Pipeline` folder with `launchV3.sh` in it, or ask CFD-Tool's author. If it doesn't exist, HoMo can simply start the jobs itself with `sbatch mesh.sh`.
+>
+> Still open for Stage 7: built-in Windows SSH or WinSCP/PuTTY, whether to delete the case on Fritz after download, whether HoMo should write the job scripts, and the licence key location.
+>
+> All tests pass (15 unit tests, 78 browser checks). Committed and pushed to GitHub `master`. Reload http://127.0.0.1:5173 to see it.
