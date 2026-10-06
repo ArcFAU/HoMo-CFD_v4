@@ -58,6 +58,33 @@ runTests(async () => {
   check("invalid speed is rejected", !speed.validity.valid && cellFor(doc, "caseA", "Downforce [N]") === (3.2 * dynamicPressure(100)).toFixed(1), cellFor(doc, "caseA", "Downforce [N]"));
   speed.value = "60";
   speed.dispatchEvent(new app.contentWindow.Event("change"));
+
+  // Sorting rows: a header click sorts ascending, again descending, a third time back to the original order.
+  const sortBy = (label) => [...doc.querySelectorAll(".data-table thead .sort-button")].find((button) => button.textContent === label).click();
+  const sortState = () => [...doc.querySelectorAll(".data-table thead th")].filter((th) => th.getAttribute("aria-sort") !== "none")
+    .map((th) => `${th.textContent}:${th.getAttribute("aria-sort")}`).join(",");
+  sortBy("Simulation");
+  check("a header click sorts ascending", rowNames(doc).join(",") === "caseA,caseB" && sortState() === "Simulation:ascending", `${rowNames(doc)} ${sortState()}`);
+  sortBy("Simulation");
+  check("a second click sorts descending, header text unchanged", rowNames(doc).join(",") === "caseB,caseA" && sortState() === "Simulation:descending" &&
+    headerCells(doc)[0] === "Simulation", `${rowNames(doc)} ${sortState()} ${headerCells(doc)[0]}`);
+  [...doc.querySelectorAll(".table-mode-switch button")].find((button) => button.textContent === "Δ vs reference").click();
+  await waitFor(() => headerCells(doc).includes("Δ Downforce [N]"));
+  check("the sort stays when the view changes", rowNames(doc).join(",") === "caseB,caseA", rowNames(doc).join(","));
+  sortBy("Δ Downforce [N]");
+  check("Δ view sorts by the difference", rowNames(doc).join(",") === "caseA,caseB" && sortState() === "Δ Downforce [N]:ascending", `${rowNames(doc)} ${sortState()}`);
+  sortBy("Δ Downforce [N]");
+  [...doc.querySelectorAll(".table-mode-switch button")].find((button) => button.textContent === "Values").click();
+  await waitFor(() => headerCells(doc).includes("Downforce [N]"));
+  check("the sort is remembered", rowNames(doc).join(",") === "caseB,caseA" && sortState() === "Downforce [N]:descending" &&
+    JSON.parse(app.contentWindow.localStorage.getItem("homo-cfd-coefficient-table-sort-v1") || "{}").direction === "desc", `${rowNames(doc)} ${sortState()}`);
+  const sorted = app.contentWindow.eval(`(() => { const row = (name, value) => ({ path: name + "/plots/Coefficients_49.csv", headers: ["K"], rows: [[value]] });
+    const rows = [row("a", "2"), row("b", ""), row("c", "1")], names = (sort) => sortCoefficientRows(rows, sort).map((data) => data.path[0]).join("");
+    return names({ key: "K", direction: "asc" }) + " " + names({ key: "K", direction: "desc" }); })()`);
+  check("empty cells sort last both ways", sorted === "cab acb", sorted);
+  sortBy("Downforce [N]");
+  check("a third click restores the original order", rowNames(doc).join(",") === "caseA,caseB" && sortState() === "" &&
+    app.contentWindow.localStorage.getItem("homo-cfd-coefficient-table-sort-v1") === null, `${rowNames(doc)} ${sortState()}`);
   await waitFor(() => cellFor(doc, "caseA", "Downforce [N]") === (3.2 * dynamicPressure(60)).toFixed(1), 5000);
 
   // Comparison window: 1 → 4 panels, minimum readable panel height, zoom keys.
@@ -136,7 +163,7 @@ runTests(async () => {
   await waitFor(() => /triangles/.test(opened[2]?.contentDocument?.getElementById("case-name")?.textContent ?? "") ||
     opened[2]?.contentDocument?.getElementById("error")?.hidden === false, 60000);
   const viewer3d = opened[2]?.contentDocument;
-  check("3D viewer loads the EnSight case from the tree", /Frontwing, Lambda2 · 5 triangles/.test(viewer3d?.getElementById("case-name")?.textContent ?? ""),
+  check("3D viewer loads the EnSight case from the tree", /Frontwing, Lambda2, Streamlines · 5 triangles/.test(viewer3d?.getElementById("case-name")?.textContent ?? ""),
     viewer3d?.getElementById("error")?.hidden === false ? viewer3d.getElementById("error").textContent : viewer3d?.getElementById("case-name")?.textContent);
   // Stage 7 step 1: Fritz cluster settings (fake WinSCP on the test server).
   const clusterButton = doc.getElementById("cluster-settings");

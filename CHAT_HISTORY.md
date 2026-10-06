@@ -5096,3 +5096,470 @@ The background watcher of the post job (job 4285206 in `exp`) finished; no new u
 > I'd suggest doing 1 and 2 together, because both fit the existing export. Option 3 could come later if you want to explore freely.
 >
 > What did you have in mind with "and stuff"? And where should the streamlines start: in front of the front wing, around the wheels, at the rear wing?
+
+## 2026-10-06 — Streamlines and surface flow (options 1 and 2)
+
+### User messages (verbatim)
+
+> the streamlines should start at few cm infront of the car and go all the way back to car (1 meter behind the car.) let's go with 1 and 2 then.
+
+### Contributor messages (verbatim)
+
+> I'll start by reading the export macro and the 3D viewer code.
+
+> The viewer code is compact and dense, so I'll read all of it:
+
+> Before designing this I need two facts: whether STAR-CCM+ is installed on this PC (to check its Java API for streamline parts), and how earlier macro checks were done.
+
+> I'm checking STAR-CCM+'s own Java library to see how the macro can create streamlines with a seed rake in front of the car. Next I'll look up the calls for creating the streamline part, limiting its length, and measuring the car's size.
+
+> The STAR-CCM+ library has what I need: streamline parts with a line seed (a row of start points), a maximum length, and min/max reports to measure the car. Next I'll check what an existing export looks like, so I know how STAR names the fields:
+
+> STAR-CCM+ strips punctuation from field names (`Wall Y+` became `WallY`), so for the wall shear direction I'll give the three components fixed names of my own. There are also `.sim` files on this PC, which might allow a local test. I'll check their size and whether a STAR-CCM+ licence is set up here:
+
+> The `.sim` here is 10 GB and the licence is the team's online one, so a local test run would be slow and would use licence time. I'll build and compile everything first, then test on Fritz as with the 3D export before. Checking the remaining STAR calls:
+
+> I've confirmed every STAR-CCM+ call the macro needs. Next I'll look at how the tests build their 3D sample data, so I can add streamlines and wall shear components to it:
+
+> The tests generate a small synthetic EnSight case, so I'll add a streamline part and the three wall shear components to it. One more check before writing the macro: whether the team's `postprocessing.java` saves the `.sim` afterwards, which would matter for the temporary parts the macro creates:
+
+> The macro never saves the `.sim`. The new parts are still removed afterwards, so playing it by hand leaves the simulation unchanged. Now I'll write the macro changes:
+
+> Bash couldn't parse that heredoc, so I'll write the edit script to a file and run it from there:
+
+> I'll use the Edit tool directly instead:
+
+> The editor's errors are only because VS Code can't see STAR-CCM+'s libraries. The real check is compiling against them with STAR's own Java compiler:
+
+> The macro compiles against STAR-CCM+ 2506. Now the viewer. Checking which viewer functions the tests call directly, so I keep them compatible:
+
+> I'll make the viewer changes in sections. First, reading values into any slot (Cp or shear components) and the mesh builder with streamlines:
+
+> Now the renderer: lines for streamlines, a second small shader for the surface flow lines, and surfaces drawn slightly behind lines that lie on them.
+
+> Now the checkboxes: one per kind of part (Vortices, Bad cells, Streamlines) instead of one per part, plus **Surface flow** when the export has the wall shear components:
+
+> Now the folder loading: the shear components stay out of the Field list and only turn on the **Surface flow** checkbox:
+
+> With ten streamline parts, the title bar would list "Streamlines 1, Streamlines 2, …". I'll show each kind once instead:
+
+> Next, the test data. I'll add a streamlines case to the synthetic 3D folder: one line that runs further back than 1 m behind the car (so the cut-off gets tested) and a second short one. I'll also add wall shear components to the car, including one cell where the flow runs backwards:
+
+> Ordering the cases as car, flow parts, then streamlines:
+
+> Now the browser tests: I'll update the ones that change and add checks for the new behaviour.
+
+> Running both test suites:
+
+> A unit test failed in the first run and passed in the next two, so something is flaky. I'll rerun a few times to catch which test it is:
+
+> I couldn't reproduce that failure in six more runs, and the only test-side change was the fixture, so I'll note it and keep going. The browser checks cover the logic, but not whether the lines actually appear on screen. Next I'll look at how the tests drive Chrome, so I can render a real car with streamlines and take a screenshot:
+
+> I'll take a screenshot with the real car from `exp/3D-data`, adding synthetic streamlines and synthetic wall shear stress, since no real export with either exists yet. A small script in my scratch folder will build that demo folder and serve the viewer on a separate port, so your running HoMo isn't touched. A page then snapshots the WebGL canvas.
+
+> I'm writing the script that builds the demo folder and takes the screenshot.
+
+> Top-level `let` and `class` in the viewer aren't properties of `window`, so the harness has to go through `eval` the way the browser tests do. Fixing that:
+
+> The screenshots are done. One number doesn't add up, though: I expected about 70,800 streamline segments, but the viewer drew 87,040. Something in the real car geometry seems to contain line elements, which the viewer used to ignore. Checking which parts:
+
+> Part 12 is `Bad_Cells`: its iso-surface also contains 16,840 short edge elements, which explains the difference. They're only drawn when **Bad cells** is ticked, which is off by default. Now the screenshots:
+
+> The streamlines render as lines, are hidden behind the car where they should be, and follow the selected field's colours. The paths are synthetic, so they pass straight through the car; real ones from STAR-CCM+ will flow around it. Now the surface flow:
+
+> The surface flow lines render on every car surface and follow its shape (see the vertical sidepod faces in the zoomed shot). They're a bit short to read easily, so I'll make them 50% longer, so they overlap into streaks like real oil flow. Then I'll check the zoomed shot again:
+
+> I made the surface flow lines longer and I'm checking the new screenshot.
+
+> Longer lines read better: with real data they'll bend with the flow and show where it separates. Next the documentation: the macro README, CHANGELOG, STATUS, DECISIONS and the tests README.
+
+> Updating tests README, STATUS, DECISIONS and CHANGELOG:
+
+> Final test runs after all changes, plus a few extra unit runs to try to catch the earlier one-off failure:
+
+> All checks pass: 149/149 browser checks (10 new) and 82 unit tests in three more runs. Now the log entry:
+
+> Bash rejected the long heredoc again. I'll write the entry to a file with the Write tool and append it from there:
+
+### Work record
+
+- STAR-CCM+ 2506 API checked with `javap` on the `modules/ext` jars of `C:\Program Files\Siemens\20.04.007\STAR-CCM+20.04.007`: `PartManager.createStreamPart()`, `StreamPart.setMode(SeedMode.LINE)`, `getLineSeed()` (`setPoint1/2(DoubleVector)`, `setResolution`), `getIntegrator()` (`setDirection(IntegrationDirection.FORWARD)`, `setMaxPropagation`, `setMaximumNumberOfSteps`), `Part.getInputParts()`, `ReportManager.createReport(MinReport/MaxReport.class)`, `ScalarReport.setFieldFunction`, `AnalysisReport.getParts()`, `FieldFunction.getComponentFunction(int)`, `FieldFunctionManager.createFieldFunction()` → `UserFieldFunction`.
+- `starccm/export3D.java` (v4): `<sim>_streamlines.case` (10 rows × 20 seeds, 5 cm in front of the car; car bounds from temporary min/max reports of `Position`; forward; max propagation 2 × (seed x − (rear − 1 m)); 50,000 steps; flow fields), `WallShearStressX/Y/Z` on the car (temporary user field functions), new Settings keys, all temporary parts/reports/field functions removed in `finally`, a third separate export. Compiles with STAR's javac (only the existing deprecation note in `postprocessing.java`). Not run in STAR-CCM+ yet.
+- `web/3d-viewer.js`: `readValues(buffer, parts, key)` (`readCp` kept); bar2 lines in `toMesh` (cut where x < car rear − `WAKE_LENGTH` 1 m, per-vertex values, `lineIx`/`lineRanges`); bounds and radius from surface vertices; `CAMERA_GLSL`/`makeProgram`/`setCamera`; lines drawn after polygon-offset surfaces; surface flow program (`surfaceStreaks`: one line per radius/150 grid cell, shear projected on the cell plane, length 1.2 × spacing, alpha 0.12 → 0.95); one checkbox per part kind (`data-kind`) plus **Surface flow** (reads the three components on first use); shear fields hidden from the Field list; case order car → flow → streamlines; the title names "Streamlines" once.
+- Tests: `tests/fixture.py` (shear components; `test_streamlines` case with two rows, one past the cut-off), `tests/browser/picker-mode.html` (3 checks updated, 10 new), `tests/browser/server-mode.html` (title). Docs: `starccm/README.md`, `CHANGELOG.md`, `STATUS.md`, `DECISIONS.md`, `TASK.md`, `tests/README.md`.
+- Visual check (scratch only, not in the repo): the `exp` car geometry with synthetic streamlines and uniform synthetic shear, served by a separate `serve.py` instance on a free port; screenshots of streamlines (front-left, left) and surface flow (overview, zoom) look right. The `exp` export's `Bad_Cells` part has 16,840 bar2 edges (drawn only with Bad cells ticked).
+- Checks: `py tests/run_browser_tests.py` 149/149 passed. `py -m unittest discover -s tests`: 82 tests OK in 9 of 10 runs; the first run reported one failure whose details were not captured, and it did not recur in 9 further runs (not identified).
+- Not committed; portable zip not rebuilt (waiting for the user and the Fritz test).
+
+### Final response (verbatim)
+
+> Both are built, but they haven't run in STAR-CCM+ yet. One test run on Fritz is needed before the macro goes into the team template.
+>
+> **1. Streamlines**
+> - `export3D.java` now creates 200 streamlines: 10 rows over the car's height, each with 20 start points across its width, 5 cm in front of the nose. The macro measures the car itself and traces the lines downstream with the flow.
+> - The 3D viewer draws them coloured by the selected field and cuts them off 1 m behind the car. One **Streamlines** checkbox switches them all on or off.
+> - For more or fewer lines, set `3D-Data/Streamline Rows` and `3D-Data/Streamlines Per Row` in the case's `Settings`.
+>
+> **2. Surface flow**
+> - The export also writes the direction of the wall shear stress on the car.
+> - The new **Surface flow** checkbox (off at first) draws short lines along the surface, light upstream and dark downstream. They show where the air goes, where it separates, and where it flows backwards.
+>
+> I checked both on screen using your `exp` car with made-up flow data: the lines render, sit on the surfaces and hide correctly behind the car. The real flow pattern will only show after a run.
+>
+> **Checks:**
+> - The macro compiles against STAR-CCM+ 2506.
+> - Browser tests: 149/149 pass, including 10 new checks.
+> - Unit tests: all 82 pass, but one of ten runs reported a failure I couldn't reproduce or identify. The only test-side change was the 3D sample data, so it's probably an existing timing issue.
+>
+> **Test on Fritz:** copy the new `starccm\export3D.java` into the `exp` folder on Fritz, replacing the old one, and rerun its post-processing as last time (about an hour). Two things are still unknown: whether STAR-CCM+'s EnSight export writes streamline parts, and how much time the streamlines add. If the streamlines fail, the car and vortex data still export, and the log line starting with `export3D: streamlines` says what happened. Then open `exp`'s new `3D-data` in the viewer.
+>
+> Nothing is committed yet, and the portable zip isn't rebuilt. Should I commit and push now, and rebuild the zip after the Fritz test?
+
+## 2026-10-06 — Streamlines confirmed on Fritz; checking the real export
+
+### User messages (verbatim)
+
+> okay, streamline is working
+
+### Contributor messages (verbatim)
+
+> That's good news. I'll check what arrived locally, so I can record the real numbers:
+
+> The streamlines export works: 10 parts of line segments (41,481 in total), 0.9 MB, with the four flow fields. Two things in the numbers are worth checking:
+> - The lines run all the way to the domain outlet at x = −24 m, so the length limit in the macro didn't stop them. The viewer cuts them at 1 m behind the car anyway, so this only costs a little file size.
+> - The lines' largest x is 2.500 m, the same as the car's nose, where I'd expect them to start 5 cm ahead of it.
+>
+> Checking where the lines actually start:
+
+> The segment chains are broken into many pieces (about 700 in row 1, for 20 start points), probably split where the lines cross region boundaries or parallel partitions. That doesn't matter for drawing. Checking the front end:
+
+> The rows sit where intended in height: rows 5–10 start at exactly the planned heights (0.49 to 1.04 m). Rows 1–4 show lower values because the lines bend down near the front wing.
+>
+> But all rows start at x = 2.500 m, which is the nose itself, not 5 cm in front of it. The macro adds 5 cm to the car's maximum x, so STAR's max report must have returned 2.45 m rather than 2.50 m. The log line `export3D: car x … to … m` would show which.
+>
+> Before chasing that, I'll render your real export, including **Surface flow**, which you haven't mentioned yet:
+
+> The folder path replacement didn't match. Fixing it directly:
+
+> I rendered your real export. Both features work:
+> - **Streamlines** flow around the car, over the rear wing and into the wake, and are cut off 1 m behind the car.
+> - **Surface flow** shows real oil-flow patterns: swirls and separation lines on the sidepod and floor.
+>
+> I noticed two things on the way, which I'll record in STATUS and the log:
+
+### Work record
+
+- Checked `D:\CFD_tool\finished\exp\3D-data` (written 2026-10-06 20:46): `_streamlines.case` with 10 parts `Streamlines 1…10` of bar2 (41,481 segments; geometry 0.9 MB; PressureCoefficient, TotalPressureCoefficient, VelocityMagnitude, VorticityMagnitude) and `WallShearStressX/Y/Z` in the car case. Seeds at x = 2.500 m for every row (planned: car front + 0.05 m); row heights match the plan; lines reach the outlet at x = −24 m; polylines are split into many pieces.
+- Rendered the real export with the scratch harness (copy of `shot.py` pointed at the `exp` folder; read-only): 31,555 streamline segments kept after the cut-off; surface flow shows swirl and separation patterns. Streamlines and vortices show grey because the viewer opens on CpX, which they don't have.
+- `STATUS.md` updated with these results and the open points. No code changed; nothing committed.
+
+### Final response (verbatim)
+
+> I checked your export in `exp\3D-data` and both features work. The streamlines go around the car and into the wake, and **Surface flow** shows real oil-flow patterns, such as swirls and separation lines on the sidepod and floor.
+>
+> **Two small things to fix:**
+> 1. **The lines start at the nose (x = 2.50 m), not 5 cm in front of it.** The macro adds 5 cm to the car's front as measured by STAR-CCM+, so that measurement came out 5 cm short. The post-processing log has a line starting `export3D: car x`. Could you paste it here, or let me read the log on Fritz (read-only)? Then I can find the cause.
+> 2. **Streamlines and vortices appear grey at first.** The viewer opens on the first field, CpX, which only exists on the car's walls; choosing PressureCoefficient or VelocityMagnitude colours them. I can make the viewer open on PressureCoefficient instead. Do you want that?
+>
+> Also minor: the lines run all the way to the outlet (x = −24 m) because STAR-CCM+ ignored the length limit. The viewer cuts them 1 m behind the car, so it only adds a little file size (0.9 MB in total).
+>
+> Nothing is committed yet. Should I commit and push now? I'd rebuild the zip after the start position is fixed.
+
+## 2026-10-06 — Choosing streamlines in the viewer; mm fix; streamline values per point
+
+### User messages (verbatim)
+
+> [screenshot: the 3D viewer, left side view, yellow car with grey streamlines running from the nose to the right edge] this is how it looks right now. i like the lenght but i want to control the number of lines (positions as well). also i have put the post log file in homo folder as requested.
+
+### Clarifications (question tool; the user's answers verbatim)
+
+- Where do you want to control the number and positions of the streamlines? → "In the viewer (Recommended)"
+- What kind of positions do you mean? → "A range in front"
+
+### Contributor messages (verbatim)
+
+> You've put the log in the project folder. These logs print the licence key, so first I'll check it's git-ignored, then read only the `export3D` lines:
+
+> Found the cause of the start position: this simulation works in **millimetres**. The report returned the car's front as 2499.7 (mm), and the macro added "0.05" to that, so the gap was 0.05 mm instead of 5 cm. The same mix-up made the length limit useless. That's easy to fix by setting metres explicitly. The whole post-processing took 16 minutes.
+>
+> Now your request. Before I build it, I need to know where you want to control the lines:
+
+> Got it: STAR-CCM+ exports a denser grid, and the viewer lets you choose how many lines to show and a height and width range in front of the car.
+>
+> For that, the viewer has to know where each line starts. STAR-CCM+ writes each line in many pieces, so I'll check whether the pieces can be joined back into whole lines by their shared end points:
+
+> Joining works. Each row comes back as 21 whole lines with start points evenly spread across the car's width (0 to 0.76 m), apart from one piece in row 10 that doesn't connect. So the viewer can tell where every line starts and filter by that.
+>
+> Plan:
+> - **Macro:** fix the millimetre mix-up (start 5 cm ahead), and export a denser grid by default: 20 rows × 40 lines.
+> - **Viewer:** a streamlines bar with **Lines** (all, every 2nd, every 3rd, every 4th), **Height** from–to and **Width** from–to in metres, plus a count such as "200 of 800 lines". Your choice is remembered.
+>
+> Checking the STAR calls for setting units explicitly:
+
+> I have everything I need. Macro first: metres set explicitly for the car measurement and the start points, a length limit that works, and 20 rows × 40 lines by default. A line seed with resolution N gives N+1 points, which is why each row had 21 lines; I'll make it give exactly the number asked for.
+
+> I've changed the macro to use metres and export the denser grid. Compiling it against STAR-CCM+:
+
+> The macro compiles. Now the viewer, starting with joining the pieces into whole lines and finding each line's start point:
+
+> Now recording which line each drawn segment belongs to, and the filter itself:
+
+> Wiring it into folder loading and field switching:
+
+> Now the bar in the page and its style:
+
+> Now the test data: four lines per row, one line split into two pieces at a shared point, and one with a small gap, like the real export:
+
+> Updating the browser checks for the new counts and adding checks for the line chooser:
+
+> The viewer script doesn't load at all, so there's a syntax error. Checking:
+
+> No duplicate declarations. I'll load the script in headless Chrome to get the exact error message:
+
+> My insertion split an existing comment: its first half now sits on its own and the rest continues on my last code line. Fixing that:
+
+> The script parses now; the remaining error is only because that bare test page has no canvas. Running the browser tests again:
+
+> All 156 browser checks pass. Next, a screenshot of your real export with the new bar: first the default (every 2nd line), then all lines with only the lowest starts (height up to 0.3 m):
+
+> The field switch didn't finish. Checking whether the viewer showed an error:
+
+> This is a real bug: STAR-CCM+ wrote the streamline values in a form the viewer doesn't read. In your screenshot the lines are grey for that reason, not because of the CpX field as I thought. Looking at the file's structure:
+
+> Each streamline part's values come as a `coordinates` block with 3 × (number of points) values, where the viewer expects one value per segment. Checking what the three thirds contain:
+
+> Found it. STAR-CCM+ writes the streamline values per point, as (value, 0, 0) for each point, under `coordinates`, even though the case file says "per element". The first third holds the real values (velocity 1.6–24.4 m/s, Cp −3.9…0.4); the rest is zeros.
+>
+> The fix: the viewer reads those point values, skips the zeros, and gives each segment the mean of its two points. I'll also make the test data use the same layout as STAR-CCM+:
+
+> Running the browser tests, then the real-data screenshots again:
+
+> Streamlines are now coloured by the selected field (velocity here), and the chooser works on your real data:
+> - **Every 2nd** shows 55 of your 210 lines.
+> - **Height up to 0.3 m** with **All** leaves the three lowest rows (63 lines), which run under the front wing, along the floor and past the wheels.
+>
+> Unit tests, then the docs:
+
+> I've updated the docs. Last come the task note and the log entry:
+
+### Work record
+
+- Read only the `export3D` lines and the runtime of `post.o4310170` (project root, git-ignored by `*.o[0-9]*`; it contains the licence key, not copied anywhere): `export3D: car x -445.000 to 2499.742, y 0.056 to 760.000, z 0.017 to 1089.928 m; 10 rows of 20 streamlines from x = 2499.792 m`; elapsed 00:16:16.
+- `starccm/export3D.java` (v5): `Units metres = getUnitsManager().getObject("m")`; `Report.setUnits(metres)` in `extreme(...)`; seeds via `getPoint1/2Coordinate().setCoordinate(metres, metres, metres, ...)`; `setResolution(perRow - 1)` (at least 2 per row); max propagation 3 × straight distance (m); defaults 20 rows × 40. Compiles with STAR's javac. Not yet run.
+- `web/3d-viewer.js`: `readValues` reads per-point `coordinates` blocks (skips STAR's two zero thirds) and gives cells the mean of their points; `indexStreamlines` (join pieces at identical points, start = most upstream point, orphan pieces join the nearest line, rows by height, columns by width); `lineOf` per segment in `toMesh`; `applyStreamlineFilter` rebuilds the line index buffer and per-part ranges; `showStreamlineControls`, localStorage `homo-cfd-3d-streamlines-v1`. A first edit split an existing comment (syntax error, found with headless Chrome) and was fixed. `web/3d-viewer.html`/`.css`: `#streamline-control` bar.
+- Tests: `tests/fixture.py` (2 rows × 4 lines, split and gap pieces, per-point values as STAR writes them), `tests/browser/picker-mode.html` (counts updated, 7 new checks). Docs: `starccm/README.md`, `CHANGELOG.md`, `STATUS.md`, `DECISIONS.md`, `TASK.md`, `tests/README.md`.
+- Real data (`D:\CFD_tool\finished\exp\3D-data`, read-only, scratch harness): joining gives 21 lines per row (one orphan piece in row 10); per-point values found (VelocityMagnitude 1.6–24.4, PressureCoefficient −3.86–0.42); screenshots coloured by VelocityMagnitude: 55 of 210 lines by default (every 2nd), 63 with all lines starting up to 0.3 m.
+- Checks: `py tests/run_browser_tests.py` 156/156 passed; `py -m unittest discover -s tests` 82 tests OK.
+- Not committed; portable zip not rebuilt.
+
+### Final response (verbatim)
+
+> Done. You can now choose the streamlines in the 3D viewer, and I fixed two problems your run showed.
+>
+> **Choosing lines:** a new bar under the viewer's toolbar (only for folders with streamlines):
+> - **Lines:** All, Every 2nd, Every 3rd or Every 4th (rows and lines in each row).
+> - **Height** and **Width:** from–to in metres, for where the lines start. Leave a box empty for no limit; the boxes show the full range as a hint.
+> - **All positions** clears the ranges; the count shows e.g. "55 of 210 lines". Your choice is remembered.
+>
+> **Fixes:**
+> 1. **The grey streamlines in your screenshot:** STAR-CCM+ writes their values per point, which the viewer couldn't read, so they had no colour in any field. Now they're coloured by the selected field (checked with your `exp` data, e.g. velocity).
+> 2. **Start 5 cm in front of the car:** your log showed the simulation measures in millimetres, so the macro added 0.05 mm. It now works in metres, which also makes its length limit work. The lines still reach well past the 1 m the viewer shows.
+>
+> The macro now exports 20 rows × 40 = 800 lines by default (before: 10 × 21), so there's more to choose from; "Every 2nd" then shows 200.
+>
+> **Checks:** 156/156 browser checks (7 new), 82 unit tests pass, and the macro compiles. The new macro hasn't run yet, so please run `exp` once more with the new `starccm\export3D.java`. Then I'd check the start position and the file size, and rebuild the zip.
+>
+> Nothing is committed yet. Should I commit and push now?
+
+## 2026-10-06 — 1002_homo_test: streamline values in another layout
+
+### User messages (verbatim)
+
+> [screenshot: 3D viewer with folder 1002_homo_test, full car, grey streamlines, streamline bar "200 of 800 lines", Field VelocityMagnitude but legend "CpX", error box "Field values for  cells do not match part Streamlines 1."] can you check 1002_homo_test. image shows some problem
+
+### Contributor messages (verbatim)
+
+> The error message gives a clue: "Field values for  cells" has an empty element type, so this streamline file is laid out differently again. The width range of −0.76 to 0.764 also suggests a full car this time. Looking at the folder:
+
+> Found it. The first values in each part are the real ones (one per point, as in `exp`), but the zero padding after them now has a different length per part. In `exp` it was always twice the number of points, and the viewer assumed exactly that. So the viewer read padding as the next record and stopped with that error.
+>
+> The fix: after the point values, skip zeros until the next record, whatever their length. I'll also vary the padding in the test data, and pad the records with spaces like this file does:
+
+> Running the tests, then a screenshot of `1002_homo_test`:
+
+> No screenshots, and the headless Chrome didn't exit. This full car is twice the size of `exp` (150 MB of geometry), so software rendering probably ran out of time. First I'll close only the Chrome processes started with my scratch profile, leaving your own Chrome alone:
+
+> They had already exited; the other Chrome processes are yours. I'll give the screenshot run more time and run it in the background:
+
+> While that runs, I'll check the new reading rule directly on all four streamline value files of `1002_homo_test`, using Python with the same logic as the viewer:
+
+> In the Cp file the bytes after the point values aren't zeros. So the padding isn't always zeros, and my rule is too simple. Measuring each part's block in every file:
+
+> Every part has exactly as many non-zero values as it has points; part 4 of velocity has one fewer, which is probably a real zero. In part 2, though, not all of them come first. Looking at where they sit, and at the screenshot run's result:
+
+> The values come in chunks with zeros between them. Mapping the runs of values and zeros:
+
+> The two runs are laid out differently:
+> - `1002_homo_test`, part 2: 13,274 values, 13,274 zeros, then 93 more values, then zeros. Together that's exactly one value per point (13,367), but split into two chunks.
+> - `exp`: the values come first, with a single zero every ~60 values, then zeros.
+>
+> I'll test which reading fits the geometry. Values along a line should change smoothly, so I'll compare "take the first N values" against "take the non-zero values in order" at the 93 points concerned:
+
+> For 18 of the 20 parts both readings agree. Where they differ, taking the first N values in order is clearly smoother. The open question is part 2's last 93 points, which that reading gives zero. Checking those 93 points against their neighbours along the line:
+
+> Those 93 points form a separate piece of line, about 4–12 cm around the car's tail. The 93 later values fit them: about 3 m/s and Cp ≈ −0.1, which is plausible there.
+>
+> So the rule is: take one value per point in order. Where the first block ends in zeros, the missing values are the later non-zero ones, which belong to later pieces. Checking that rule on every part of all four files in both exports:
+
+> The rule holds:
+> - `1002_homo_test`: in parts 2 and 7, the number of trailing zeros always matches the number of later values exactly (93 and 5).
+> - `exp`: no part has later values. The ~20 zeros per part in its Cp file are probably the lines' start points, which STAR-CCM+ apparently gives Cp = 0. That's harmless.
+>
+> Building this into the viewer:
+
+> Updating the test data so one row has a piece whose values come later in the block, as in `1002_homo_test`:
+
+> While that runs, I'll check whether the start position fix worked in `1002_homo_test`, i.e. whether the lines now start 5 cm in front of the nose:
+
+> The fixes from your last run worked:
+> - The lines start at x = 2.55 m, 5 cm in front of the nose (2.50 m).
+> - They end around x = −10.6 m, so the length limit now applies.
+> - This is a full car (width −0.76 to 0.76 m), and the 40 start points per row span all of it.
+>
+> Waiting for the screenshots.
+
+> Both runs passed: 156/156 browser checks, and the `1002_homo_test` folder loads without an error. The second "200 of 800" is not a stale count: with **All** lines and height up to 0.3 m, exactly 5 rows × 40 lines start that low. The screenshots:
+
+> `1002_homo_test` now shows coloured streamlines over the full car width, and the height filter works. Next: stop my leftover wait job, run the unit tests and update the notes.
+
+> The path got mangled by escape sequences. Fixing it:
+
+> Now the log entry:
+
+### Work record
+
+- `D:\CFD_tool\finished\1002_homo_test\3D-data` (read-only): full car (y −0.76…0.764), macro v5 output; streamlines 20 parts, 126,151 segments, 2.7 MB geometry + 2.65 MB per field; start x = 2.55 m (car front 2.50), end about x = −10.6 m. Records in the field files are padded with spaces. Each part's `coordinates` block holds `points` values followed by zeros (mostly 5 × points in total); in parts 2 and 7 a late piece's values (93, 5) come after zeros, and the first `points` values end in exactly that many zeros. Checked by smoothness along the lines (first-N order) and on all 4 fields of `1002_homo_test` and `exp`.
+- `web/3d-viewer.js` (`readValues`): after the point values, read on to the next record (checked only at a lower-case ASCII byte), collect non-zero values and fill the trailing zeros of the point values with them in order. The intermediate "skip zeros" version was replaced.
+- `tests/fixture.py`: streamline value records padded with spaces; row 1 padded with 2 × points zeros, row 2 with a late piece after 8 zeros. Docs: `CHANGELOG.md`, `STATUS.md` (a mangled path from shell escaping was repaired), `tests/README.md`.
+- Screenshots (scratch harness, headless Chrome needs several minutes for the 13-million-triangle car): `1002_homo_test` loads, 200 of 800 lines, coloured by VelocityMagnitude; height ≤ 0.3 m with All lines = 200 (5 rows × 40). A leftover background wait loop of mine was stopped; no other processes were touched.
+- Checks: `py tests/run_browser_tests.py` 156/156 passed; `py -m unittest discover -s tests` 82 tests OK.
+- Not committed; portable zip not rebuilt.
+
+### Final response (verbatim)
+
+> I fixed it: `1002_homo_test` opens now and the streamlines are coloured. Reload the 3D viewer to get the fix.
+>
+> **Cause:** STAR-CCM+ wrote the streamline values in a different layout this time than in `exp`. Each part has one value per point followed by zeros, but the amount of zeros varies. In two parts, a short piece of a line also has its values further on in the file. The viewer expected the `exp` layout exactly, misread the file and stopped with that error. It now handles both layouts. I checked all four fields of both runs, and the values change smoothly along every line.
+>
+> **The new macro works:**
+> - The lines start 5 cm in front of the nose (x = 2.55 m) and end about 10 m behind the car, so the length limit works now.
+> - It exports 800 lines over the full car width; the viewer shows 200 of them by default ("Every 2nd").
+> - The streamline data is about 13 MB.
+>
+> All tests pass: 156/156 browser checks and 82 unit tests.
+>
+> Since the macro is now tested, it's ready for the team template (`SCRIPT_RANS`); you'd copy `starccm\export3D.java` there. Nothing is committed yet. Should I commit and push now, and rebuild the portable zip?
+
+## 2026-10-06 — Sorting the coefficient table
+
+### User messages (verbatim)
+
+> can you add one feature? i want to have a feature to sort rows. you know what i mean.
+
+### Contributor messages (verbatim)
+
+> "Rows" most likely means the coefficient table in the main window (one row per simulation). First I'll check whether it can already be sorted:
+
+> The table can't be sorted yet, so that's almost certainly what you mean: click a column header to sort the simulations by it. I'll read how the table is built:
+
+> Clicking a column header will sort the simulations by that column: once ascending, again descending, a third time back to the original order. **Simulation** sorts by name, and Δ view sorts by the differences. Empty cells always go last, and the sort is remembered. Checking a few details in the code and tests first:
+
+> The table is built in `renderCsvTables`. I'll add the sorting there, with each header label as a button so it also works from the keyboard. The ▲/▼ arrow comes from CSS, so header texts (which the tests read) stay the same.
+
+> Now browser checks for sorting: by name both ways, by a Δ column, the choice surviving a view switch, empty cells last, and the third click restoring the original order.
+
+> The test caught a real edge case: an empty cell counted as 0, because `Number("")` is 0 in JavaScript. That affected the Δ view too: an empty value showed a difference as if it were 0. Fixing it where values are read:
+
+> All 163 pass. The monitor chart also reads values this way, so I'll check that it handles an empty cell now being "no value":
+
+> The chart already skips missing values, so it now leaves an empty cell out instead of drawing a 0 bar. Docs and log:
+
+> A literal NUL character got into STATUS.md: the shell turned my `\\u0000` into a real NUL. Replacing it with the text `\u0000`:
+
+### Work record
+
+- `web/app.js`: `readTableSort`/`writeTableSort` (localStorage `homo-cfd-coefficient-table-sort-v1`), `nextTableSort` (asc → desc → none), `sortCoefficientRows` (numbers by value, Δ view by difference from the reference, Simulation by `naturalOrder`, empty cells last, stable); `renderCsvTables` turns each header into a `.sort-button` and sets `aria-sort`; a remembered sort on a hidden column is ignored. `coefficientValue` returns null for an empty cell instead of 0 (Δ view and monitor chart).
+- `web/styles.css`: header buttons, ▲/▼ via `::after`, sorted column highlighted.
+- Tests: `tests/browser/server-mode.html` (7 new checks). Docs: `CHANGELOG.md`, `STATUS.md` (a NUL byte written by shell escaping was replaced), `tests/README.md`.
+- Checks: `py tests/run_browser_tests.py` 163/163 passed; `py -m unittest discover -s tests` 82 tests OK (run before the `coefficientValue` change, which only touches `web/app.js`).
+- Not committed; portable zip not rebuilt.
+
+### Final response (verbatim)
+
+> Done: the coefficient table in the main window can now be sorted. I took "rows" to mean its simulation rows; tell me if you meant something else.
+>
+> - **Click a column header** to sort the simulations by it, smallest first (▲). Click it again for largest first (▼), and a third time for the original order.
+> - **Simulation** sorts by name (case2 before case10). In **Δ vs reference** the rows sort by the difference from the reference.
+> - Empty cells always go last, and the sort is remembered when you switch views or reload.
+>
+> The tests also found a small existing bug, now fixed: an empty cell counted as 0 in **Δ vs reference** and in the monitor chart. Now it counts as no value.
+>
+> All tests pass: 163/163 browser checks (7 new) and 82 unit tests. Reload HoMo CFD to try it.
+>
+> Everything since the About button removal (streamlines, surface flow, line chooser, sorting) is still uncommitted. Should I commit and push it now, and rebuild the portable zip?
+
+## 2026-10-06 — Are CzA/CxA at 40 km/h valid at 60 km/h? (question only)
+
+### User messages (verbatim)
+
+> what do we do about this?....
+>
+> if i have CzA and CxA values at 40 kpm, would they be same at 60 kph?
+>
+> ChatGPT:
+>
+> [pasted ChatGPT answer: not necessarily; F = ½ρV²CA so forces scale by (60/40)² = 2.25 if the coefficients stay constant, but Cz and Cx can change with Reynolds number, ride height, flow conditions, tyre/ground effects and wing stall; use the same CzA/CxA at 40 and 60 km/h only if the aero data shows they are roughly speed-independent; do not automatically reuse 40 km/h STAR-CCM+ values at 60 km/h without checking Reynolds-number/ride-height effects.]
+
+### Contributor messages (verbatim)
+
+> This is about the **Downforce [N]** and **Drag [N]** columns: they take CzA/CxA from the simulation and multiply by ½ρv² at the speed set in the table (60 km/h by default). Checking what HoMo currently does and what was decided earlier:
+
+### Work record
+
+- Question only; no code changed. Read `DECISIONS.md` (force columns: one speed for all, default 60 km/h; v² scaling assumes constant CzA/CxA; most result folders lacked `Settings`) and the force-setting code in `web/app.js`.
+- Simulated speeds in `D:\CFD_tool\finished` (`Vehicle State/Velocity` in `Settings`): `0924_corner2` 45, `1002_homo_test` 40, `exp` 40; the other 7 folders have no `Settings`.
+- Recommended: each case's own speed by default, a Speed [km/h] column, a fixed speed as an option with scaled values marked, fallback for cases without `Settings`; and one 60 km/h run of the same car to measure the change. Waiting for the user's decision.
+
+### Final response (verbatim)
+
+> ChatGPT is right in principle, but for HoMo the practical answer is simpler.
+>
+> **Physics:** CzA and CxA are nearly constant between 40 and 60 km/h, but not exactly. At 1.5× the speed the Reynolds number is 1.5× higher, which usually shifts the coefficients by a few percent at most (wings near stall react most). The larger effect at speed is ride height: the car squats under its own downforce. A CFD run at fixed ride height doesn't capture that at either speed.
+>
+> **What HoMo does now:** **Downforce [N]** and **Drag [N]** use one speed for all simulations (60 km/h by default) and scale with v². That is extrapolation, because your runs are mostly at 40 km/h (`exp` and `1002_homo_test` at 40, `0924_corner2` at 45). The hover note says so, but nothing in the table shows which values are extrapolated.
+>
+> **What I'd do (recommendation):**
+> 1. **Use each simulation's own speed by default.** It comes from `Vehicle State/Velocity` in its `Settings` file, so the forces are what the CFD actually computed, with no scaling.
+> 2. **Add a "Speed [km/h]" column** showing that speed, so differences between cases are visible.
+> 3. **Keep a fixed speed as an option** for comparing designs at one speed. When it differs from a case's simulated speed, those force cells would be marked "scaled from 40 km/h, assumes constant CzA/CxA".
+> 4. Cases without a `Settings` file (7 of your 10 here, older runs) fall back to the fixed speed and get the same mark.
+>
+> The only way to know how much CzA really changes is to measure it: run the same car once at 60 km/h (New simulation, Velocity 60) and compare CzA/CxA with the 40 km/h run. With the sorting and **Δ vs reference** you just got, that's a one-glance comparison. If the difference is small (≈1–2 %), scaling is fine for your purposes.
+>
+> Should I build 1–4?
+
+### Follow-up
+
+> no worries. leave it then
+
+- The speed-handling proposal is not being built. No changes.
+
+> Okay, the force columns stay as they are. Everything from today is still uncommitted; just say if you want it committed and pushed.
+
+### Commit (2026-10-06)
+
+> do it.
+
+- Committed all changes of 2026-10-06 (streamlines and surface flow, streamline chooser, value-layout and unit fixes, table sorting) on `night-2026-10-02` and pushed it to `origin/night-2026-10-02` and `origin/master`. The diff was checked for keys and passwords (none). The portable zip was not rebuilt.
+
+> Committed and pushed: today's work is on GitHub on both `master` and `night-2026-10-02`. The portable zip isn't rebuilt yet; say if you want that too.

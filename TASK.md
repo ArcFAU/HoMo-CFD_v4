@@ -4,7 +4,15 @@ One task at a time (see the pipeline in `SHARED_CONTEXT.md` → Cooperation
 rules). Replace this file's content when a new task starts; record the finished
 one in `CHANGELOG.md` and `CHAT_HISTORY.md`.
 
-## Latest (2026-10-02): portable build and 3D viewer orientation
+## Latest (2026-10-06): streamlines and surface flow in the 3D viewer
+
+Built: `starccm/export3D.java` writes streamlines (start 5 cm in front of the
+car, shown to 1 m behind it) and the wall shear stress direction; the 3D viewer
+draws them (**Streamlines**, **Surface flow** checkboxes). First Fritz run works;
+the viewer now chooses which lines to show. Macro v5 (metres, 20 × 40 grid) still
+needs one run in `exp` before it goes into the team template.
+
+## Earlier (2026-10-02): portable build and 3D viewer orientation
 
 Done: `tools/make_portable.py` (HoMo CFD + Python 3.14.8 embeddable, zip for
 teammates) and the 3D viewer's turntable camera, angled presets and axes

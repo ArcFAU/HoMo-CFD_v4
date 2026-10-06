@@ -3,6 +3,22 @@
 User-visible changes, newest first. Detailed reasoning lives in
 `CHAT_HISTORY.md`; decisions in `DECISIONS.md`.
 
+## 2026-10-06
+
+### Added
+- **Sort the coefficient table:** click a column header to sort the simulations by it (▲ ascending), again for descending (▼), a third time for the original order. **Simulation** sorts by name; in **Δ vs reference** the rows sort by the difference. Empty cells always go last. The choice is remembered.
+- **Streamlines in the 3D viewer:** `starccm/export3D.java` now also writes `<sim>_streamlines.case`. The streamlines start 5 cm in front of the car, in 20 rows over its height with 40 start points across its width (800 lines), and are traced downstream with the flow fields. The viewer draws them as lines coloured by the selected field, up to 1 m behind the car, with a **Streamlines** checkbox (on). Rows and points per row can be set in the case's `Settings`. Tested on Fritz.
+- **Choosing streamlines:** a bar under the 3D viewer's toolbar shows **Lines** (all, every 2nd, 3rd or 4th row and line), a **Height** and **Width** range for where the lines start (in m; empty = no limit), **All positions** and how many lines are shown, e.g. "200 of 800 lines". The choice is remembered.
+- **Surface flow (like oil flow):** the export adds the wall shear stress direction (`WallShearStressX/Y/Z`) to the car. The viewer's **Surface flow** checkbox (off at first) draws short lines along the surface in the direction the air moves, dark at the downstream end, so separation and reversed flow show up.
+
+### Fixed
+- An empty cell in the coefficient table counted as 0 in **Δ vs reference** and the monitor chart; it now counts as no value.
+- Streamlines started at the nose instead of 5 cm in front of it, because the simulation measures in mm; the macro now works in metres.
+- Streamlines were grey for every field: STAR-CCM+ writes their values per point (padded with zeros of varying length, a late piece of line sometimes further on), which the viewer now reads. A folder with such a file no longer stops with "Field values for … cells do not match part Streamlines 1".
+
+### Changed
+- 3D viewer: one checkbox per kind of part (Vortices, Streamlines, Bad cells), and the view is fitted to the surfaces only.
+
 ## 2026-10-02
 
 ### Added

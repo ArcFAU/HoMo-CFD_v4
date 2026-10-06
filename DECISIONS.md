@@ -186,6 +186,25 @@ written before post-processing, and WinSCP alone cannot ask SLURM cheaply,
 so the generated `post.sh` writes its own marker. Details:
 `docs/STAGE7_FRITZ.md` sections 4–5.
 
+## 2026-10-06 — Streamlines from STAR-CCM+, surface flow from the wall shear stress
+
+Requested by the user (options 1 and 2 of three). Streamlines are computed in
+STAR-CCM+ by `export3D.java` and exported like the other parts, not traced in
+the browser: HoMo only has surface data, and the full volume (4.58 GB) is far
+too large. Start points: rows across the car's width and height, 5 cm in front
+of its nose; the viewer cuts the lines 1 m behind the car (STAR-CCM+ can only
+limit the path length, and streamlines bend). Surface flow uses the wall shear
+stress components (made as temporary field functions with fixed names, because
+STAR-CCM+ strips punctuation from exported names) and draws one short line per
+grid cell along the surface, darkening downstream. This is faster and more robust
+on a 6-million-triangle mesh than tracing lines across cells.
+**Why one export per kind:** a failure in the streamlines never costs the car or
+the vortex data.
+**Choosing lines in the viewer (user's choice, same day):** STAR-CCM+ exports a
+dense grid (20 × 40) and the viewer filters it by start point, so changing the
+number or area of lines needs no new 16-minute run. The viewer finds each line's
+start by joining STAR-CCM+'s pieces at shared points.
+
 ## 2026-10-02 — L/D column (aero balance column removed)
 
 Requested by the user. `L/D` = CzA ÷ CxA (the same as Downforce ÷ Drag, so

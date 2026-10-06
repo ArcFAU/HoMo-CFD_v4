@@ -246,7 +246,7 @@ runTests(async () => {
     `${JSON.stringify(before)} → ${JSON.stringify(after)}`);
 
   // Flow parts: the Lambda2 iso-surface has its own checkbox; a part switched off is not drawn.
-  const vortexBox = doc3d.querySelector('#part-toggles input[data-part="Lambda2"]');
+  const vortexBox = doc3d.querySelector('#part-toggles input[data-kind="vortices"]');
   check("3d: Lambda2 part gets a Vortices checkbox, on by default", !doc3d.getElementById("part-toggles").hidden && vortexBox?.checked === true &&
     /Vortices/.test(vortexBox?.parentElement?.textContent ?? ""), doc3d.getElementById("part-toggles").textContent);
   vortexBox.checked = false; vortexBox.dispatchEvent(new win3d.Event("change"));
@@ -267,13 +267,70 @@ runTests(async () => {
   check("3d: a Cp field starts at -5..1", rangeOf() === "-5..1", rangeOf());
   await showField("Velocity Magnitude");
   check("3d: the range set for a field comes back with it", rangeOf() === "0..50", rangeOf());
-  // export3D.java writes the car and the flow parts as two cases in one folder; they show as one model.
-  check("3d: car and flow cases of one folder load as one model", win3d.eval("caseSets.length") === 2 &&
-    win3d.eval("caseSets.map((set) => set.parts.map((p) => p.name).join('+')).join(' | ')") === "Frontwing+wheel-fr | Lambda2",
+  // export3D.java writes the car, the flow parts and the streamlines as three cases in one folder; they show as one model.
+  check("3d: car, flow and streamline cases of one folder load as one model", win3d.eval("caseSets.length") === 3 &&
+    win3d.eval("caseSets.map((set) => set.parts.map((p) => p.name).join('+')).join(' | ')") === "Frontwing+wheel-fr | Lambda2 | Streamlines 1+Streamlines 2",
     win3d.eval("caseSets.map((set) => set.parts.map((p) => p.name).join('+')).join(' | ')"));
   await showField("CpX");
-  check("3d: a field only the car case has leaves the flow parts without values",
-    win3d.eval("[...model.cp].filter(Number.isNaN).length") === 3 && win3d.eval("[...model.cp].filter(Number.isFinite).length") > 0,
+  check("3d: a field only the car case has leaves the flow parts and streamlines without values",
+    win3d.eval("[...model.cp].filter(Number.isNaN).length") === 29 && win3d.eval("[...model.cp].filter(Number.isFinite).length") > 0,
     win3d.eval("[...model.cp].map(String).join(',')"));
+
+  // Streamlines: lines (bar2) cut off 1 m behind the car's tail (Frontwing starts at x = 0); one checkbox for all rows.
+  const lineInfo = () => win3d.eval("model.lineRanges.map((r) => `${r.name}:${r.count / 2}`).join(',')");
+  check("3d: streamlines are drawn as lines, cut off 1 m behind the car", lineInfo() === "Frontwing:0,wheel-fr:0,Lambda2:0,Streamlines 1:12,Streamlines 2:4" &&
+    win3d.eval("Math.min(...[...model.lineIx].map((n) => model.pos[3 * n]))") >= -1, lineInfo());
+  await showField("Velocity Magnitude");
+  check("3d: streamlines are coloured by the selected field", win3d.eval("[...model.lineIx].every((n) => model.cp[n] === 22)"), win3d.eval("[...model.lineIx].map((n) => model.cp[n]).join(',')"));
+  check("3d: the view is fitted to the surfaces, not the streamlines", win3d.eval("model.lo[0]") === 0 && win3d.eval("model.hi[0]") === 2,
+    win3d.eval("JSON.stringify([model.lo, model.hi])"));
+  const streamBoxes = doc3d.querySelectorAll('#part-toggles input[data-kind="streamlines"]');
+  check("3d: one Streamlines checkbox for all rows, on by default", streamBoxes.length === 1 && streamBoxes[0].checked, doc3d.getElementById("part-toggles").textContent);
+  streamBoxes[0].checked = false; streamBoxes[0].dispatchEvent(new win3d.Event("change"));
+  check("3d: unticking Streamlines hides every row", win3d.eval("hiddenParts.has('Streamlines 1') && hiddenParts.has('Streamlines 2') && !hiddenParts.has('Lambda2')"));
+  streamBoxes[0].checked = true; streamBoxes[0].dispatchEvent(new win3d.Event("change"));
+
+  // Choosing streamlines: pieces joined into 8 lines (2 rows × 4) by their start points; every Nth row and column,
+  // height and width ranges of the start points; remembered.
+  const shown = () => [doc3d.getElementById("stream-count").textContent,
+    win3d.eval("renderer.lineRanges.filter((r) => /Streamlines/.test(r.name)).map((r) => r.count / 2).join('+')")].join(" / ");
+  const setStream = (id, value) => { const input = doc3d.getElementById(id); input.value = value;
+    input.dispatchEvent(new win3d.Event(id === "stream-every" ? "change" : "input")); };
+  const bar = doc3d.getElementById("streamline-control");
+  check("3d: streamline bar shows the start range and every 2nd line at first", !bar.hidden && shown() === "2 of 8 lines / 6+0" &&
+    ["stream-z-min", "stream-z-max", "stream-y-min", "stream-y-max"].map((id) => doc3d.getElementById(id).placeholder).join(",") === "0.3,0.6,0,0.75",
+    `${shown()} | ${["stream-z-min", "stream-z-max", "stream-y-min", "stream-y-max"].map((id) => doc3d.getElementById(id).placeholder)}`);
+  check("3d: streamline start points: rows by height, columns across the width",
+    win3d.eval("streamlineGrid.map((l) => `${l.row}${l.col}`).sort().join(',')") === "00,01,02,03,10,11,12,13", win3d.eval("JSON.stringify(streamlineGrid)"));
+  setStream("stream-every", "1");
+  check("3d: All lines shows every segment, including joined pieces", shown() === "8 of 8 lines / 12+4", shown());
+  setStream("stream-z-min", "0.5");
+  check("3d: a height range keeps the lines starting inside it", shown() === "4 of 8 lines / 0+4", shown());
+  setStream("stream-z-min", ""); setStream("stream-y-min", "0.7"); setStream("stream-y-max", "0.8");
+  check("3d: a width range keeps those lines; a piece after a gap stays with its line", shown() === "2 of 8 lines / 3+1", shown());
+  check("3d: the streamline choice is remembered", JSON.parse(win3d.localStorage.getItem("homo-cfd-3d-streamlines-v1") || "{}").y0 === "0.7",
+    win3d.localStorage.getItem("homo-cfd-3d-streamlines-v1"));
+  doc3d.getElementById("stream-all").click();
+  check("3d: All positions clears the ranges", shown() === "8 of 8 lines / 12+4" && doc3d.getElementById("stream-y-min").value === "" && doc3d.getElementById("stream-every").value === "1", shown());
+
+  // Surface flow: the wall shear stress components are not fields to pick; a checkbox (off at first) draws them as short lines.
+  check("3d: wall shear stress components are not in the Field list", ![...fieldSelect.options].some((o) => /WallShearStress[XYZ]/.test(o.value)),
+    [...fieldSelect.options].map((o) => o.value).join(","));
+  const flowBox = doc3d.querySelector('#part-toggles input[data-kind="surface-flow"]');
+  check("3d: Surface flow checkbox, off by default", flowBox && !flowBox.checked && win3d.eval("surfaceFlow") === null, doc3d.getElementById("part-toggles").textContent);
+  flowBox.checked = true; flowBox.dispatchEvent(new win3d.Event("change"));
+  await waitFor(() => win3d.eval("surfaceFlow !== null") || !doc3d.getElementById("error").hidden, 10000);
+  check("3d: ticking Surface flow draws one line per surface cell here", win3d.eval("surfaceFlow?.count") === 6 && win3d.eval("surfaceFlowOn") === true,
+    doc3d.getElementById("error").hidden ? String(win3d.eval("surfaceFlow?.count")) : doc3d.getElementById("error").textContent);
+  // Each line runs along the surface (the part of the shear off the surface removed) from light to dark in the flow direction.
+  const streaks = win3d.eval("(() => { const s = surfaceStreaks(geometryParts, model.radius / 150); const out = [];" +
+    " for (let i = 0; i < s.alpha.length; i += 2) out.push([s.pos[3 * i + 3] - s.pos[3 * i], s.pos[3 * i + 4] - s.pos[3 * i + 1], s.pos[3 * i + 5] - s.pos[3 * i + 2], s.alpha[i] < s.alpha[i + 1]]);" +
+    " return JSON.stringify(out); })()");
+  const directions = JSON.parse(streaks);
+  check("3d: surface flow lines follow the wall shear stress along the surface, reversed flow points back",
+    directions.length === 3 && directions.every(([, dy, dz, fades]) => dy === 0 && Math.abs(dz) < 1e-9 && fades) &&
+    directions.filter(([dx]) => dx > 0).length === 2 && directions.filter(([dx]) => dx < 0).length === 1, streaks);
+  flowBox.checked = false; flowBox.dispatchEvent(new win3d.Event("change"));
+  check("3d: unticking Surface flow hides the lines", win3d.eval("surfaceFlowOn") === false);
 });
 </script></body></html>

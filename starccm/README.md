@@ -49,6 +49,10 @@ shows the folder in the results tree as **3D-data · 3D viewer**:
   TotalPressureCoefficient, CpX, CpZ, CpZ-CpX, SkinFrictionCoefficient,
   WallYplus, and the magnitudes of WallShearStress, Velocity and
   VorticityVector. A full car is about 70–90 MB plus about 7 MB per field.
+  Also the wall shear stress direction as `WallShearStressX/Y/Z` (its three
+  components; the macro makes these field functions for the export and removes
+  them afterwards). The viewer draws them as **Surface flow** lines (like oil
+  flow) and doesn't list them as fields.
 - **`<sim>_flow.case`: the simulation's derived parts `Lambda2`** (vortex cores:
   iso-surface of `neg(Lambda2)`) **and `Bad_Cells`** (iso-surface around bad mesh
   cells), with the fields defined in the flow (PressureCoefficient,
@@ -57,11 +61,22 @@ shows the folder in the results tree as **3D-data · 3D viewer**:
   left out there: `CpX` = Cp × `Norm_Area_x` divides by a face area that is zero
   on some iso-surface faces. Without a `Lambda2` part the macro makes a
   temporary one from the `neg(Lambda2)` field function.
+- **`<sim>_streamlines.case`: streamlines** in 20 parts `Streamlines 1…20`, one
+  per row of start points. The rows lie 5 cm in front of the car's nose, spread
+  evenly over its height; each row has 40 start points across its width (800
+  lines). The car's size comes from temporary min/max reports of `Position` on the
+  car surfaces, in metres (simulations may use mm). Lines are traced downstream
+  along `Velocity` through all regions, with the flow fields. STAR-CCM+ writes
+  their values per point. The viewer shows them up to 1 m behind the car, with the
+  **Streamlines** checkbox and a bar to choose which lines to show (every Nth row
+  and line, height and width range of the start points).
 - **`fields.txt`**: every field function of the simulation (name, display name,
   type), to look up names.
 
-The car and the flow parts are two separate exports, so a problem with the flow
-parts never costs the car data.
+The car, the flow parts and the streamlines are three separate exports, so a
+problem with the flow parts or the streamlines never costs the car data. Parts,
+reports and field functions the macro creates are removed at the end, so playing
+it by hand leaves the simulation as it was.
 
 Details:
 
@@ -79,4 +94,8 @@ Details:
   3D-Data/Vortices : false              no Lambda2 part
   3D-Data/Bad Cells : false             no Bad_Cells part
   3D-Data/Vortices Iso Value : 30000    only for the temporary part, when the simulation has no Lambda2 part
+  3D-Data/Streamlines : false           no streamlines
+  3D-Data/Streamline Rows : 20          rows of start points over the car's height (1–200)
+  3D-Data/Streamlines Per Row : 40      start points per row across the car's width (2–200)
+  3D-Data/Surface Flow : false          no wall shear stress direction
   ```

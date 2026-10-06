@@ -57,9 +57,26 @@ ENSIGHT_FIELDS = {
     "CpX": (-2.25, 0.5, 1.125),
     "PressureCoefficient": (-1.5, 0.25, 0.75),
     "Velocity Magnitude": (10.0, 20.0, 30.0),
+    # Wall shear stress direction for the surface flow lines: downstream (+X) with a part off the
+    # surface (Z) on the triangles, reversed flow on the quad.
+    "WallShearStressX": (1.0, 1.0, -1.0),
+    "WallShearStressY": (0.0, 0.0, 0.0),
+    "WallShearStressZ": (0.5, 0.5, 0.5),
 }
 # The flow case (export3D.java's <sim>_flow.case): Lambda2 triangle values; no wall fields such as CpX.
 ENSIGHT_FLOW_FIELDS = {"PressureCoefficient": 0.0, "Velocity Magnitude": 25.0}
+# The streamlines case (<sim>_streamlines.case): two rows (parts) of four lines (bar2) starting 5 cm in front
+# of the car (Frontwing spans x 0…2) at y = 0, 0.25, 0.5, 0.75. Row 1 (z = 0.3) runs on to 1.5 m behind the car;
+# the viewer cuts it at 1 m. Like STAR-CCM+, lines come in pieces: y = 0.5 is split at a shared point and
+# y = 0.75 has a 0.5 mm gap. Row 2 (z = 0.6) is short.
+LONG_X, SHORT_X = (2.05, 1.0, 0.0, -0.9, -1.5), (2.05, 1.0)
+STREAMLINES = {
+    "Streamlines 1": [[(x, 0.0, 0.3) for x in LONG_X], [(x, 0.25, 0.3) for x in LONG_X],
+                      [(x, 0.5, 0.3) for x in LONG_X[:3]], [(x, 0.5, 0.3) for x in LONG_X[2:]],
+                      [(x, 0.75, 0.3) for x in LONG_X[:3]], [(x, 0.75, 0.3) for x in (-0.0005,) + LONG_X[3:]]],
+    "Streamlines 2": [[(x, y, 0.6) for x in SHORT_X] for y in (0.0, 0.25, 0.5, 0.75)],
+}
+ENSIGHT_STREAMLINE_FIELDS = {"PressureCoefficient": -0.5, "Velocity Magnitude": 22.0}
 
 
 def png(width, height, rgb):
@@ -79,7 +96,7 @@ def record(text):
 
 
 def write_ensight(folder):
-    """Car case (two-triangle + one-quad Frontwing, an empty part) and a flow case with a Lambda2 part."""
+    """Car case (two-triangle + one-quad Frontwing, an empty part), a flow case with a Lambda2 part and a streamlines case."""
     folder.mkdir(parents=True, exist_ok=True)
     header = [record("C Binary"), record("HoMo CFD test geometry"), record("synthetic"),
               record("node id off"), record("element id off")]
@@ -123,6 +140,34 @@ def write_ensight(folder):
             record(name), record("part"), struct.pack("<i", 1), record("tria3"), struct.pack("<1f", value)]))
         lines.append(f"scalar per element: {name} test_flow.{file}")
     (folder / "test_flow.case").write_text("\n".join(lines) + "\n", encoding="ascii")
+
+    # Streamlines: one part per row of start points, each piece a polyline of bar2 segments with its own points.
+    parts, point_counts = [], []
+    for part_id, (name, pieces) in enumerate(STREAMLINES.items(), start=1):
+        points, bars = [], []
+        for piece in pieces:
+            bars += [index for segment in range(len(points) + 1, len(points) + len(piece)) for index in (segment, segment + 1)]
+            points += piece
+        point_counts.append(len(points))
+        parts += [record("part"), struct.pack("<i", part_id), record(name), record("coordinates"), struct.pack("<i", len(points))]
+        parts += [struct.pack(f"<{len(points)}f", *[point[axis] for point in points]) for axis in range(3)]
+        parts += [record("bar2"), struct.pack("<i", len(bars) // 2), struct.pack(f"<{len(bars)}i", *bars)]
+    (folder / "test_streamlines.geo").write_bytes(b"".join(header + parts))
+    lines = ["FORMAT", "type: ensight gold", "", "GEOMETRY", "model: test_streamlines.geo", "", "VARIABLE"]
+    for name, value in ENSIGHT_STREAMLINE_FIELDS.items():
+        file = name.replace(" ", "")
+        values = [record(name)]
+        # As STAR-CCM+ writes them, despite "per element" in the case file: one value per point, padded with zeros
+        # of varying length, records padded with spaces. Row 1: values, then 2 × points zeros. Row 2: its last
+        # piece (2 points) comes later in the block, after zeros.
+        for part_id, count in enumerate(point_counts, start=1):
+            block = [value] * count + [0.0] * (2 * count) if part_id == 1 else \
+                [value] * (count - 2) + [0.0] * 8 + [value] * 2 + [0.0] * 5
+            values += [b"part".ljust(80, b" "), struct.pack("<i", part_id), b"coordinates".ljust(80, b" "),
+                       struct.pack(f"<{len(block)}f", *block)]
+        (folder / f"test_streamlines.{file}").write_bytes(b"".join(values))
+        lines.append(f"scalar per element: {name} test_streamlines.{file}")
+    (folder / "test_streamlines.case").write_text("\n".join(lines) + "\n", encoding="ascii")
 
 
 def pressure_csv(path, axis, station, populated):

@@ -1227,8 +1227,24 @@ function renderCsvTables(coefficientRows) {
     head.appendChild(headerRow);
     table.appendChild(head);
 
+    const sort = readTableSort();
+    if (sort && sort.key !== SIMULATION_SORT_KEY && !visibleHeaders.some((column) => column.key === sort.key)) sort.key = null;
+    [...headerRow.children].forEach((th, index) => {
+      const key = index === 0 ? SIMULATION_SORT_KEY : visibleHeaders[index - 1].key;
+      const button = cell("button", th.textContent);
+      button.type = "button";
+      button.className = "sort-button";
+      button.title = "Sort by this column (click again for descending, a third time for the original order)";
+      button.addEventListener("click", () => {
+        writeTableSort(nextTableSort(readTableSort(), key));
+        renderCsvTables(browserState.coefficientRows);
+      });
+      th.replaceChildren(button);
+      th.setAttribute("aria-sort", sort?.key === key ? (sort.direction === "asc" ? "ascending" : "descending") : "none");
+    });
+
     const body = document.createElement("tbody");
-    validRows.forEach((data) => {
+    sortCoefficientRows(validRows, sort?.key ? sort : null, browserState.coefficientView === "delta" ? referenceRow : null).forEach((data) => {
       const sourceRow = data.rows[data.rows.length - 1] ?? [];
       const row = document.createElement("tr");
       if (data.path === referenceRow.path) row.className = "reference-row";
@@ -1371,11 +1387,59 @@ function drawMonitorChart(coefficientRows, header, referenceRow) {
   return svg;
 }
 
+// Sorting the table by a column: click a header for ascending, again for descending, a third time for the
+// original order. Numbers sort by value (in Δ view by the difference from the reference), the Simulation column
+// by name; empty cells always go last. The choice is remembered.
+const TABLE_SORT_KEY = "homo-cfd-coefficient-table-sort-v1";
+const SIMULATION_SORT_KEY = "\u0000simulation";
+
+function readTableSort() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(TABLE_SORT_KEY) || "null");
+    return saved && typeof saved.key === "string" && (saved.direction === "asc" || saved.direction === "desc") ? saved : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeTableSort(sort) {
+  try {
+    if (sort) localStorage.setItem(TABLE_SORT_KEY, JSON.stringify(sort));
+    else localStorage.removeItem(TABLE_SORT_KEY);
+  } catch {
+    // sorting still works for this view
+  }
+}
+
+function nextTableSort(current, key) {
+  if (current?.key !== key) return { key, direction: "asc" };
+  return current.direction === "asc" ? { key, direction: "desc" } : null;
+}
+
+function sortCoefficientRows(rows, sort, referenceRow = null) {
+  if (!sort) return rows;
+  const sign = sort.direction === "desc" ? -1 : 1;
+  const valueOf = (data) => {
+    if (sort.key === SIMULATION_SORT_KEY) return simulationNameFromCsvPath(data.path);
+    const value = coefficientValue(data, sort.key);
+    const reference = referenceRow ? coefficientValue(referenceRow, sort.key) : 0;
+    return value === null || reference === null ? null : value - reference;
+  };
+  return rows.map((data, index) => ({ data, index, value: valueOf(data) }))
+    .sort((a, b) => {
+      if (a.value === null || b.value === null) return (a.value === null) - (b.value === null) || a.index - b.index;
+      const order = typeof a.value === "string" ? naturalOrder.compare(a.value, b.value) : a.value - b.value;
+      return sign * order || a.index - b.index;
+    })
+    .map((entry) => entry.data);
+}
+
 function coefficientValue(data, header) {
   const index = data.headers.indexOf(header);
   if (index < 0) return null;
-  const value = Number(data.rows[data.rows.length - 1]?.[index]);
-  return Number.isFinite(value) ? value : null;
+  const raw = String(data.rows[data.rows.length - 1]?.[index] ?? "").trim();
+  const value = Number(raw);
+  return raw && Number.isFinite(value) ? value : null;  // an empty cell is no value, not 0
 }
 
 function updateCoefficientViewControls() {

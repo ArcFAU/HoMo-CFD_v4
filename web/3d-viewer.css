@@ -1,5 +1,10 @@
 .cfd3d-body { height: 100%; overflow: hidden; display: flex; flex-direction: column; }
 .cfd3d-toolbar { min-height: 58px; padding: 9px 14px; display: flex; align-items: center; gap: 12px; background: var(--panel); border-bottom: 1px solid var(--border); }
+/* Streamline choice: a second, smaller bar, only for folders with streamlines. */
+.cfd3d-subbar { min-height: 0; padding: 6px 14px; flex-wrap: wrap; font-size: 12px; }
+.cfd3d-subbar[hidden] { display: none; }
+.cfd3d-subbar strong { min-width: 210px; font-weight: 600; }
+#stream-every { width: 110px; }
 .cfd3d-title { display: flex; flex-direction: column; min-width: 210px; gap: 2px; }
 .cfd3d-title span { max-width: 40vw; color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .range-control { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }

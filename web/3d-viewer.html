@@ -37,6 +37,19 @@
       <button class="small-control" id="auto-range" type="button" disabled title="Set the color range to the current field's surface minimum and maximum">Auto range</button>
       <button class="small-control" id="reset-view" type="button" disabled>Reset view</button>
     </header>
+    <div class="cfd3d-toolbar cfd3d-subbar" id="streamline-control" hidden>
+      <strong>Streamlines</strong>
+      <label class="range-control" title="Every 2nd: every 2nd row of start points and every 2nd line in each row">Lines <select id="stream-every">
+        <option value="1">All</option>
+        <option value="2">Every 2nd</option>
+        <option value="3">Every 3rd</option>
+        <option value="4">Every 4th</option>
+      </select></label>
+      <span class="range-control" title="Height of the start points above the ground; empty = no limit">Height <input id="stream-z-min" type="number" step="0.01" aria-label="Lowest start height (m)" /> – <input id="stream-z-max" type="number" step="0.01" aria-label="Highest start height (m)" /> m</span>
+      <span class="range-control" title="Start points across the car, from its centre line (y = 0); empty = no limit">Width <input id="stream-y-min" type="number" step="0.01" aria-label="Start points from (m across the car)" /> – <input id="stream-y-max" type="number" step="0.01" aria-label="Start points to (m across the car)" /> m</span>
+      <button class="small-control" id="stream-all" type="button" title="Clear the height and width limits">All positions</button>
+      <span class="range-control" id="stream-count"></span>
+    </div>
     <main class="cfd3d-stage">
       <canvas id="scene" tabindex="0" aria-label="Interactive three dimensional pressure coefficient surface"></canvas>
       <canvas id="axes" hidden aria-label="Axes: click an axis to look along it" title="Click an axis to look along it"></canvas>

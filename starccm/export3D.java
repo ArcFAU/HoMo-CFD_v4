@@ -4,20 +4,29 @@
 //   neg(Lambda2)) and "Bad_Cells" (iso-surface around bad mesh cells), when they exist, with the
 //   fields defined in the flow (wall-only fields such as CpX = Cp * Norm_Area_x divide by a face
 //   area that is zero on some iso-surface faces, which stops STAR-CCM+ with a floating point error),
+// - <sim>_streamlines.case: streamlines from rows of start points 5 cm in front of the car, across
+//   its width and height, with the flow fields (HoMo CFD shows them up to 1 m behind the car),
 // - fields.txt: every field function of the simulation, to look up names.
-// The two exports run separately, so a problem with the flow parts never costs the car data.
+// The car also gets the wall shear stress direction (WallShearStressX/Y/Z) for the viewer's surface
+// flow lines. The three exports run separately, so a problem with the flow parts or the
+// streamlines never costs the car data.
 // postprocessing.java plays it at the end; it can also be played on its own in STAR-CCM+
 // (File > Macro > Play Macro). Written for STAR-CCM+ 2506 (20.04).
 //
 // Values are per cell. Fields or parts a simulation does not have are left out. Regions named
 // "Cells deleted from ..." (left over from mesh repair, no solution) are skipped. Problems are
-// printed to the log and never stop the post-processing.
+// printed to the log and never stop the post-processing. Parts, reports and field functions the
+// macro creates are removed again, so the simulation is left as it was.
 //
 // Optional lines in the case's Settings file:
 //   3D-Data/Vortices : false              no Lambda2 part
 //   3D-Data/Bad Cells : false             no Bad_Cells part
 //   3D-Data/Vortices Iso Value : 30000    only used when the simulation has no "Lambda2" part:
 //                                         threshold of neg(Lambda2) for a temporary iso-surface
+//   3D-Data/Streamlines : false           no streamlines
+//   3D-Data/Streamline Rows : 20          rows of start points over the car's height
+//   3D-Data/Streamlines Per Row : 40      start points per row across the car's width (at least 2)
+//   3D-Data/Surface Flow : false          no wall shear stress direction
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -28,10 +37,18 @@ import java.util.ArrayList;
 import java.util.Locale;
 import java.util.Vector;
 
+import star.base.neo.DoubleVector;
 import star.base.neo.NeoProperty;
+import star.base.report.MaxReport;
+import star.base.report.MinReport;
+import star.base.report.ScalarReport;
 import star.common.*;
+import star.vis.IntegrationDirection;
 import star.vis.IsoMode;
 import star.vis.IsoPart;
+import star.vis.LineSeed;
+import star.vis.SeedMode;
+import star.vis.StreamPart;
 
 public class export3D extends StarMacro {
 
@@ -47,13 +64,22 @@ public class export3D extends StarMacro {
     private static final String[] SKIPPED = {"floor", "ground", "road", "walls", "wall", "tunnel", "symmetry", "sym", "top", "side"};
     // The team's lambda2 iso value (derived part "Lambda2" in UPSI_CFD_BASE).
     private static final double DEFAULT_VORTEX_ISO = 30000;
+    // Streamlines: start points this far in front of the car's nose (m), traced at most this far
+    // behind its tail (m; the viewer cuts them off there), in rows over the car's height.
+    private static final double STREAM_GAP = 0.05;
+    private static final double STREAM_WAKE = 1.0;
+    // A dense grid; the viewer chooses which of these lines to show.
+    private static final int STREAM_ROWS = 20;
+    private static final int STREAM_PER_ROW = 40;
 
     private Simulation simulation;
+    // Created by this macro; removed again at the end.
+    private final ArrayList<Part> temporaryParts = new ArrayList<>();
+    private final ArrayList<FieldFunction> temporaryFunctions = new ArrayList<>();
 
     @Override
     public void execute() {
         simulation = getActiveSimulation();
-        IsoPart temporary = null;
         try {
             File folder = new File(simulation.getSessionDir(), "3D-data");
             folder.mkdirs();
@@ -74,13 +100,16 @@ public class export3D extends StarMacro {
                 }
             }
             ArrayList<FieldFunction> fields = fields(FIELDS, MAGNITUDES, true);
+            if (!"false".equalsIgnoreCase(setting("3D-Data/Surface Flow"))) {
+                fields.addAll(shearComponents());
+            }
             ArrayList<FieldFunction> flowFields = fields(FLOW_FIELDS, FLOW_MAGNITUDES, false);
 
             ArrayList<Part> parts = new ArrayList<>();
             if (!"false".equalsIgnoreCase(setting("3D-Data/Vortices"))) {
                 Part lambda2 = derivedPart("Lambda2");
                 if (lambda2 == null) {
-                    lambda2 = temporary = vortexPart(regions);
+                    lambda2 = vortexPart(regions);
                 }
                 if (lambda2 != null) {
                     parts.add(lambda2);
@@ -112,16 +141,125 @@ public class export3D extends StarMacro {
                     simulation.println("export3D: flow parts failed, the car data is complete: " + e);
                 }
             }
+            if (!"false".equalsIgnoreCase(setting("3D-Data/Streamlines")) && !flowFields.isEmpty()) {
+                try {
+                    ArrayList<Part> streamlines = streamlines(regions, surfaces);
+                    if (!streamlines.isEmpty()) {
+                        export(new File(folder, name + "_streamlines.case"), new ArrayList<Boundary>(), streamlines, flowFields);
+                        simulation.println("export3D: " + streamlines.size() + " rows of streamlines with " + flowFields.size() + " fields written");
+                    }
+                } catch (Exception e) {
+                    simulation.println("export3D: streamlines failed, the other 3D data is complete: " + e);
+                }
+            }
         } catch (Exception e) {
             simulation.println("export3D failed, post-processing continues: " + e);
         } finally {
-            if (temporary != null) {
-                try {
-                    simulation.getPartManager().removeObjects(temporary);
-                } catch (Exception e) {
-                    simulation.println("export3D: could not remove the temporary Lambda2 part: " + e);
-                }
+            try {
+                simulation.getPartManager().removeObjects(temporaryParts);
+                simulation.getFieldFunctionManager().removeObjects(temporaryFunctions);
+            } catch (Exception e) {
+                simulation.println("export3D: could not remove its temporary parts or field functions: " + e);
             }
+        }
+    }
+
+    // Wall shear stress direction for the viewer's surface flow lines: its x, y and z components as
+    // field functions WallShearStressX/Y/Z (made for the export when the simulation has none).
+    private ArrayList<FieldFunction> shearComponents() {
+        ArrayList<FieldFunction> found = new ArrayList<>();
+        FieldFunction shear = find("WallShearStress");
+        if (shear == null) {
+            simulation.println("export3D: no field function WallShearStress, no surface flow");
+            return found;
+        }
+        FieldFunctionManager functions = simulation.getFieldFunctionManager();
+        for (int axis = 0; axis < 3; axis++) {
+            String name = "WallShearStress" + "XYZ".charAt(axis);
+            if (functions.hasFunction(name)) {
+                found.add(functions.getFunction(name));
+                continue;
+            }
+            UserFieldFunction component = functions.createFieldFunction();
+            temporaryFunctions.add(component);
+            component.setFunctionName(name);
+            component.setPresentationName(name);
+            component.setDefinition("$${" + shear.getFunctionName() + "}[" + axis + "]");
+            found.add(component);
+        }
+        return found;
+    }
+
+    // One streamline part per row of start points: a line across the car's width, STREAM_GAP in
+    // front of its nose, rows evenly over its height; traced downstream through all regions.
+    private ArrayList<Part> streamlines(ArrayList<Region> regions, ArrayList<Boundary> surfaces) {
+        ArrayList<Part> parts = new ArrayList<>();
+        FieldFunction velocity = find("Velocity");
+        FieldFunction position = find("Position");
+        if (velocity == null || position == null || surfaces.isEmpty()) {
+            simulation.println("export3D: no Velocity or Position field function or no car surfaces, no streamlines");
+            return parts;
+        }
+        // Everything in metres: simulations may use mm as their default length unit.
+        Units metres = simulation.getUnitsManager().getObject("m");
+        double[] lo = new double[3], hi = new double[3];
+        for (int axis = 0; axis < 3; axis++) {
+            lo[axis] = extreme(MinReport.class, position.getComponentFunction(axis), surfaces, metres);
+            hi[axis] = extreme(MaxReport.class, position.getComponentFunction(axis), surfaces, metres);
+        }
+        int rows = count("3D-Data/Streamline Rows", STREAM_ROWS);
+        int perRow = Math.max(2, count("3D-Data/Streamlines Per Row", STREAM_PER_ROW));
+        double x = hi[0] + STREAM_GAP;
+        // Streamlines bend, so they may run longer than the straight way to STREAM_WAKE behind the car
+        // (m; the first run, with a value thousands of times too large, showed the limit is in metres).
+        double length = 3 * (x - (lo[0] - STREAM_WAKE));
+        for (int row = 0; row < rows; row++) {
+            double z = lo[2] + (hi[2] - lo[2]) * (row + 0.5) / rows;
+            StreamPart part = simulation.getPartManager().createStreamPart();
+            temporaryParts.add(part);
+            part.setPresentationName("Streamlines " + (row + 1));
+            part.getInputParts().setObjects(regions);
+            part.setFieldFunction(velocity);
+            part.setMode(SeedMode.LINE);
+            LineSeed seed = part.getLineSeed();
+            seed.getPoint1Coordinate().setCoordinate(metres, metres, metres, new DoubleVector(new double[] {x, lo[1], z}));
+            seed.getPoint2Coordinate().setCoordinate(metres, metres, metres, new DoubleVector(new double[] {x, hi[1], z}));
+            // A resolution of n gives n + 1 points from end to end.
+            seed.setResolution(perRow - 1);
+            part.getIntegrator().setDirection(IntegrationDirection.FORWARD);
+            part.getIntegrator().setMaxPropagation(length);
+            part.getIntegrator().setMaximumNumberOfSteps(50000);
+            parts.add(part);
+        }
+        simulation.println(String.format(Locale.ROOT, "export3D: car x %.3f to %.3f, y %.3f to %.3f, z %.3f to %.3f m; %d rows of %d streamlines from x = %.3f m",
+                lo[0], hi[0], lo[1], hi[1], lo[2], hi[2], rows, perRow, x));
+        return parts;
+    }
+
+    // Minimum or maximum of a field over the car's surfaces, in the given units, from a temporary report.
+    private <T extends ScalarReport> double extreme(Class<T> type, FieldFunction function, ArrayList<Boundary> surfaces, Units units) {
+        T report = simulation.getReportManager().createReport(type);
+        try {
+            report.setFieldFunction(function);
+            report.setUnits(units);
+            report.getParts().setObjects(surfaces);
+            return report.getReportMonitorValue();
+        } finally {
+            simulation.getReportManager().removeObjects(report);
+        }
+    }
+
+    // A whole number from the Settings file (1 to 200), or the default.
+    private int count(String key, int fallback) {
+        String value = setting(key);
+        if (value == null) {
+            return fallback;
+        }
+        try {
+            return Math.max(1, Math.min(200, Integer.parseInt(value)));
+        } catch (NumberFormatException e) {
+            simulation.println("export3D: " + key + " is not a whole number, using " + fallback);
+            return fallback;
         }
     }
 
@@ -188,6 +326,7 @@ public class export3D extends StarMacro {
         }
         boolean negated = (simplified(lambda2.getPresentationName()) + simplified(lambda2.getFunctionName())).contains("neg");
         IsoPart part = simulation.getPartManager().createIsoPart(new Vector<>(regions), lambda2);
+        temporaryParts.add(part);
         part.setPresentationName("Lambda2");
         part.setMode(IsoMode.ISOVALUE_SINGLE);
         part.getSingleIsoValue().setValue(negated ? iso : -iso);

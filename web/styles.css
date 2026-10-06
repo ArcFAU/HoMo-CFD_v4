@@ -900,6 +900,35 @@ select {
   font-weight: 600;
 }
 
+/* Column headers sort the table; the arrow shows the column and direction. */
+.data-table .sort-button {
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.data-table .sort-button:hover,
+.data-table .sort-button:focus-visible {
+  color: var(--text);
+  text-decoration: underline;
+}
+
+.data-table th[aria-sort="ascending"] .sort-button::after {
+  content: " ▲";
+}
+
+.data-table th[aria-sort="descending"] .sort-button::after {
+  content: " ▼";
+}
+
+.data-table th[aria-sort="ascending"],
+.data-table th[aria-sort="descending"] {
+  color: var(--text);
+}
+
 .data-table tbody tr:nth-child(even) {
   background: #111a22;
 }
