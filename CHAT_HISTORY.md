@@ -5061,3 +5061,38 @@ The background watcher of the post job (job 4285206 in `exp`) finished; no new u
 - Commit `9cc3946` "Remove the About button and dialog" on `night-2026-10-02`, pushed to `origin/night-2026-10-02` and `origin/master` (fast-forward); local `master` updated to match. This log addendum is committed separately.
 
 > Committed and pushed: "Remove the About button and dialog" is on GitHub on both `master` and `night-2026-10-02`. The working tree is clean.
+
+## 2026-10-06 — Streamlines and flow visualisation: options (question only)
+
+### User messages (verbatim)
+
+> wakey wakey
+
+> i wanted to know what can be done about stream line flow and stuff?
+
+### Contributor messages (verbatim)
+
+> I'm here. The About button removal from last time is committed and pushed, and the project was clean when I left it. What's next?
+
+### Work record
+
+- Question only; no code changed. Read `STATUS.md`, the earlier export discussion in this log (team `Streamline` part has a single seed point, so it was left out) and `starccm/export3D.java` (car surfaces plus the `Lambda2` and `Bad_Cells` derived parts).
+- Options given: (1) streamlines computed in STAR-CCM+ from a seed rake and exported with the 3D data (EnSight support for streamline parts still to be tested; table export as fallback); (2) surface "oil flow" from the wall shear stress vector; (3) interactive streamlines in HoMo from velocity resampled on a coarse grid (resampling in STAR-CCM+ still to be checked). Recommended 1 + 2 first. Waiting for the user's choice and seed locations.
+
+### Final response (verbatim)
+
+> Streamlines are doable. The question is where they get computed, because they need the velocity field in the air, and HoMo currently only gets surface data plus the λ2 and bad-cell iso-surfaces.
+>
+> **What exists now:** the 3D viewer colours the car's surface (Cp, skin friction, wall shear, …) and shows the vortex cores (λ2). Your simulation already has a `Streamline` part, but it starts from a single point, so I left it out of the export.
+>
+> **Three ways to add flow lines:**
+>
+> 1. **Streamlines computed in STAR-CCM+, shown in HoMo (recommended first step).** `export3D.java` would create (or reuse) a streamline part seeded from a rake of points in front of the car, e.g. upstream of the front wing and around the wheels, and export it with velocity values. The viewer would draw them as lines coloured by velocity, with an on/off checkbox like the vortices. The files are small (a few MB), and every new case gets them automatically. The seeds are fixed per simulation: to look somewhere else, you rerun post-processing. One unknown is whether STAR-CCM+'s EnSight export writes streamline parts properly. I'd test that first, with a table export of the points as a fallback.
+>
+> 2. **Surface flow lines ("oil flow").** Export the wall shear stress *vector* (three components) instead of just its magnitude. The viewer then draws short lines along the surface showing which way the air moves over it. That's the best way to see separation and reversed flow on the wings and the diffuser, and it uses the surface the viewer already loads. Cost: three extra fields of about 6 MB each.
+>
+> 3. **Interactive streamlines in HoMo.** Export the velocity vectors on a coarse 3D grid around the car (e.g. 2 cm spacing, roughly 5–20 MB), and HoMo traces the streamlines itself. You click where they should start and they appear immediately, without rerunning anything. This is the most flexible option but also the most work, and the coarse grid blurs thin boundary layers and small vortices. The full volume export you tried earlier (4.58 GB) is far too large for this, so STAR-CCM+ would have to resample it first, which I'd need to check.
+>
+> I'd suggest doing 1 and 2 together, because both fit the existing export. Option 3 could come later if you want to explore freely.
+>
+> What did you have in mind with "and stuff"? And where should the streamlines start: in front of the front wing, around the wheels, at the rear wing?
