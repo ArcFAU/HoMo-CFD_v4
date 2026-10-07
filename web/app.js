@@ -531,7 +531,6 @@ function renderPressureWorkspace() {
   sceneField.value = browserState.pressureSceneField;
   const measurement = document.createElement("span");
   measurement.className = "pressure-measurement";
-  measurement.textContent = "Overlay up to 4 cases · use keyboard ← / → to step sections";
   const imageControls = document.createElement("div"); imageControls.className = "pressure-image-controls";
   imageControls.append(sceneField);
   toolbar.append(caseSelect, addCase, surfaceSelect, axisSelect, showImagesLabel, imageControls, measurement);
@@ -695,7 +694,7 @@ async function refreshPressureStations({ surfaceSelect, axisSelect, plotContaine
       : defaultFile);
   browserState.pressureStationPath = chosen.path;
   browserState.pressureStationPosition = chosen.position;
-  measurement.textContent = `${formatStation(chosen.position)} mm · keyboard ← / → to step · up to 4 cases`;
+  measurement.textContent = `${formatStation(chosen.position)} mm`;
   await renderPressureComparison(populated, chosen.position, { surface: surfaceSelect.value, axis: axisSelect.value, plotContainer, imageGallery, token });
 }
 
@@ -1199,9 +1198,7 @@ function renderCsvTables(coefficientRows) {
   if (browserState.coefficientView === "delta") {
     const note = document.createElement("p");
     note.className = "comparison-note";
-    note.textContent = "Δ = this simulation minus the reference. Downforce [N] and Drag [N] are positive for downforce and drag, so a positive Δ " +
-      "there means more downforce or more drag. Other columns are the exported monitors, unchanged: for CzA and CxA a negative Δ means " +
-      "more downforce or more drag. A positive Δ L/D means more downforce per unit of drag.";
+    note.textContent = "Δ = simulation − reference";
     collective.appendChild(note);
   }
 
@@ -1293,24 +1290,10 @@ function renderMonitorChart(coefficientRows, referenceRow) {
   controls.appendChild(select);
   chart.appendChild(controls);
 
-  const note = document.createElement("p");
-  note.className = "monitor-chart-note";
-  const describeSelection = () => {
-    const label = select.selectedOptions[0]?.textContent ?? "monitor";
-    const derived = derivedAeroColumn(select.value);
-    const meaning = derived ? derived.note : "Exported monitor value, unchanged.";
-    return browserState.coefficientView === "delta"
-      ? `Δ ${label}: case minus ${simulationNameFromCsvPath(referenceRow.path)}. ${meaning}`
-      : `${label}. ${meaning}`;
-  };
-  note.textContent = describeSelection();
-  chart.appendChild(note);
-
   const chartViewport = document.createElement("div");
   chartViewport.className = "monitor-chart-viewport";
   const draw = () => {
     browserState.monitorChartHeader = select.value;
-    note.textContent = describeSelection();
     chartViewport.replaceChildren(drawMonitorChart(coefficientRows, select.value, referenceRow));
   };
   select.addEventListener("change", draw);
@@ -1764,9 +1747,9 @@ function showWorkingDirectoryChooser(config, message = "") {
   const title = document.createElement("h1");
   title.textContent = "Choose working directory";
   const intro = document.createElement("p");
-  intro.textContent = "Select the folder that holds your CFD results — the same working directory CFD-Tool uses " +
-    "(with finished, inProgress and archive inside). HoMo CFD lists the simulations in its finished folder; " +
-    "a folder without finished is used as the results folder itself. The choice is saved for your user account on this computer.";
+  intro.textContent = "First create a folder for your CFD results, e.g. D:\\HoMo-CFD-results, with two folders inside: " +
+    "finished (one folder per simulation; HoMo CFD lists these) and inProgress (downloads from Fritz wait here until they are complete). " +
+    "Then choose that folder here. The choice is saved for your user account on this computer.";
   card.append(title, intro);
 
   if (config.workingDir) {

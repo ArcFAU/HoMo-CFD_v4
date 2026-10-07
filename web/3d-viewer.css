@@ -1,12 +1,15 @@
 .cfd3d-body { height: 100%; overflow: hidden; display: flex; flex-direction: column; }
-.cfd3d-toolbar { min-height: 58px; padding: 9px 14px; display: flex; align-items: center; gap: 12px; background: var(--panel); border-bottom: 1px solid var(--border); }
+/* Controls wrap to a further row when the window is narrow (e.g. a laptop with display scaling), never off screen. */
+.cfd3d-toolbar { min-height: 58px; padding: 9px 14px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; background: var(--panel); border-bottom: 1px solid var(--border); }
+.cfd3d-toolbar button, .cfd3d-toolbar .range-control, .part-toggles label { white-space: nowrap; }
 /* Streamline choice: a second, smaller bar, only for folders with streamlines. */
 .cfd3d-subbar { min-height: 0; padding: 6px 14px; flex-wrap: wrap; font-size: 12px; }
 .cfd3d-subbar[hidden] { display: none; }
 .cfd3d-subbar strong { min-width: 210px; font-weight: 600; }
 #stream-every { width: 110px; }
-.cfd3d-title { display: flex; flex-direction: column; min-width: 210px; gap: 2px; }
-.cfd3d-title span { max-width: 40vw; color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#stream-width { width: 80px; }
+#palette { width: 160px; }
+.cfd3d-title { display: flex; flex-direction: column; gap: 2px; white-space: nowrap; }
 .range-control { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
 .range-control input,.range-control select { width: 150px; padding: 6px; color: var(--text); background: #0c1219; border: 1px solid var(--border); border-radius: 5px; }
 .range-control input { width: 74px; }
@@ -29,8 +32,7 @@
 .cfd3d-legend { position: absolute; left: 50%; bottom: 26px; transform: translateX(-50%); display: grid; grid-template-columns: auto minmax(180px, 32vw) auto; align-items: center; gap: 8px; font-size: 12px; text-shadow: 0 1px 3px #000; }
 .cfd3d-legend div { height: 14px; border: 1px solid #8290a0; border-radius: 2px; background: linear-gradient(90deg,#3011a4,#1478df,#21d4c2,#28dc42,#f1df12,#f78b13,#cc1414); }
 .cfd3d-legend b { grid-column: 1 / -1; justify-self: center; font-weight: 500; }
-.cfd3d-help { position: absolute; right: 14px; bottom: 12px; max-width: min(330px, 28vw); text-align: right; line-height: 1.5; color: #aebacc; font-size: 11px; pointer-events: none; }
-@media(max-width:700px) { .cfd3d-toolbar { flex-wrap: wrap; } .cfd3d-title { flex: 1 0 100%; } .cfd3d-title span { max-width: 90vw; } }
+@media(max-width:700px) { .cfd3d-toolbar { flex-wrap: wrap; } .cfd3d-title { flex: 1 0 100%; } }
 
 /* Range min above Range max: limits are applied swapped; flag the inputs. */
 .range-control input:invalid {

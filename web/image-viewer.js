@@ -642,8 +642,8 @@ async function loadFolder() {
   }
   document.getElementById("viewer-title").textContent = is3DSceneGallery ? "3D reference scenes" : folderHandle.name;
   document.getElementById("viewer-path").textContent = is3DSceneGallery
-    ? `${target.path || folderHandle.name} · Use left/right arrow keys to step through scenes; + / − / 0 to zoom.`
-    : `${target.path || folderHandle.name} · Use left/right arrow keys to step through images.`;
+    ? `${target.path || folderHandle.name}`
+    : `${target.path || folderHandle.name}`;
   document.title = `${is3DSceneGallery ? "3D reference scenes" : target.path || folderHandle.name} | HoMo CFD`;
   // Only the names are listed here; the first image shows as soon as it is
   // read, and the others load in the background.
@@ -657,7 +657,7 @@ async function loadFolder() {
     imageStageObserver.observe(stage);
   }
   if (is3DSceneGallery) {
-    document.getElementById("viewer-path").textContent = `${target.path || folderHandle.name} · ${images.length} scenes · Use left/right arrow keys to step through scenes; + / − / 0 to zoom.`;
+    document.getElementById("viewer-path").textContent = `${target.path || folderHandle.name} · ${images.length} scenes`;
   }
   renderFrame();
 }
@@ -689,7 +689,7 @@ async function loadComparison() {
   });
   document.getElementById("sync-images-control").hidden = false;
   document.getElementById("viewer-title").textContent = "Simulation comparison";
-  document.getElementById("viewer-path").textContent = "Each panel has independent field, axis, frame, and zoom controls. T: CpT · V: Velocity · P: Cp · L: Lambda2 · X/Y/Z: axis (focused panel) · + / − / 0: zoom.";
+  document.getElementById("viewer-path").hidden = true;
   document.title = "Simulation comparison | HoMo CFD";
   stage.classList.add("compare-stage");
   renderFrame();

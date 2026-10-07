@@ -432,11 +432,6 @@ select {
   font: inherit;
 }
 
-.monitor-chart-note {
-  margin: 8px 0;
-  color: var(--muted);
-  font-size: 11px;
-}
 
 .monitor-chart-viewport {
   max-height: 480px;

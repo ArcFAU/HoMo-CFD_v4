@@ -160,9 +160,9 @@ runTests(async () => {
   await waitFor(() => viewer3dFrame.contentDocument?.getElementById("open-folder") && viewer3dFrame.contentDocument.readyState === "complete");
   const win3d = viewer3dFrame.contentWindow, doc3d = viewer3dFrame.contentDocument;
   doc3d.getElementById("open-folder").click();
-  await waitFor(() => /triangles/.test(doc3d.getElementById("case-name").textContent) || !doc3d.getElementById("error").hidden, 60000);
-  check("3d: EnSight case loads", /triangles/.test(doc3d.getElementById("case-name").textContent),
-    doc3d.getElementById("error").hidden ? doc3d.getElementById("case-name").textContent : doc3d.getElementById("error").textContent);
+  await waitFor(() => !doc3d.getElementById("legend").hidden || !doc3d.getElementById("error").hidden, 60000);
+  check("3d: EnSight case loads", !doc3d.getElementById("legend").hidden && win3d.eval("model.ix.length / 3") === 5,
+    doc3d.getElementById("error").hidden ? String(win3d.eval("model?.ix.length")) : doc3d.getElementById("error").textContent);
   const field = doc3d.getElementById("field-select");
   field.value = "PressureCoefficient"; field.dispatchEvent(new win3d.Event("change"));
   field.value = "CpX"; field.dispatchEvent(new win3d.Event("change"));
@@ -310,6 +310,34 @@ runTests(async () => {
   check("3d: a width range keeps those lines; a piece after a gap stays with its line", shown() === "2 of 8 lines / 3+1", shown());
   check("3d: the streamline choice is remembered", JSON.parse(win3d.localStorage.getItem("homo-cfd-3d-streamlines-v1") || "{}").y0 === "0.7",
     win3d.localStorage.getItem("homo-cfd-3d-streamlines-v1"));
+  const widthSelect = doc3d.getElementById("stream-width");
+  check("3d: streamlines are 2 px wide at first", widthSelect.value === "2" && win3d.eval("lineWidth") === 2, widthSelect.value);
+  widthSelect.value = "6"; widthSelect.dispatchEvent(new win3d.Event("change"));
+  const thick = win3d.eval("(() => { draw(); const e = gl.getError(); return lineWidth + ' ' + e + ' ' + localStorage.getItem('homo-cfd-3d-line-width-v1'); })()");
+  check("3d: a thicker setting draws without errors and is remembered", thick === "6 0 6", thick);
+  widthSelect.value = "2"; widthSelect.dispatchEvent(new win3d.Event("change"));
+
+  // Palettes: the field colours and the legend bar follow the chosen palette; remembered.
+  const paletteSelect = doc3d.getElementById("palette");
+  check("3d: seven palettes, Rainbow at first", paletteSelect.options.length === 7 && paletteSelect.value === "rainbow",
+    [...paletteSelect.options].map((o) => o.textContent).join(", "));
+  paletteSelect.value = "viridis"; paletteSelect.dispatchEvent(new win3d.Event("change"));
+  const palette = win3d.eval("(() => { draw(); return gl.getError() + ' ' + paletteStops().length + ' ' + localStorage.getItem('homo-cfd-3d-palette-v1'); })()");
+  const legendBar = doc3d.querySelector("#legend div").style.background;
+  check("3d: Viridis colours the field and the legend, and is remembered", palette === "0 21 viridis" && /rgb\(68, 1, 84\)/.test(legendBar), `${palette} | ${legendBar}`);
+  paletteSelect.value = "rainbow"; paletteSelect.dispatchEvent(new win3d.Event("change"));
+
+  // A narrow window (laptop with display scaling): the toolbar wraps instead of pushing buttons off screen.
+  const frameWidth = viewer3dFrame.style.width;
+  viewer3dFrame.style.width = "1000px";
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  const offScreen = [...doc3d.querySelectorAll(".cfd3d-toolbar button, .cfd3d-toolbar .range-control")]
+    .filter((control) => !control.hidden && control.offsetParent && control.getBoundingClientRect().right > doc3d.documentElement.clientWidth + 1)
+    .map((control) => control.id || control.textContent.trim().slice(0, 20));
+  const openButton = doc3d.getElementById("open-folder").getBoundingClientRect();
+  check("3d: in a narrow window every toolbar control stays on screen", offScreen.length === 0 && openButton.height < 40,
+    `off screen: ${offScreen.join(", ") || "none"}; Open folder button ${Math.round(openButton.height)} px high`);
+  viewer3dFrame.style.width = frameWidth;
   doc3d.getElementById("stream-all").click();
   check("3d: All positions clears the ranges", shown() === "8 of 8 lines / 12+4" && doc3d.getElementById("stream-y-min").value === "" && doc3d.getElementById("stream-every").value === "1", shown());
 
@@ -331,6 +359,7 @@ runTests(async () => {
     directions.length === 3 && directions.every(([, dy, dz, fades]) => dy === 0 && Math.abs(dz) < 1e-9 && fades) &&
     directions.filter(([dx]) => dx > 0).length === 2 && directions.filter(([dx]) => dx < 0).length === 1, streaks);
   flowBox.checked = false; flowBox.dispatchEvent(new win3d.Event("change"));
+
   check("3d: unticking Surface flow hides the lines", win3d.eval("surfaceFlowOn") === false);
 });
 </script></body></html>

@@ -37,7 +37,8 @@ runTests(async () => {
   check("Δ Drag [N] positive = more drag", cellFor(doc, "caseB", "Δ Drag [N]") === (0.15 * dynamicPressure(60)).toFixed(1), cellFor(doc, "caseB", "Δ Drag [N]"));
   check("Δ L/D", cellFor(doc, "caseB", "Δ L/D") === "-0.06", cellFor(doc, "caseB", "Δ L/D"));
   check("Δ CzA keeps the exported sign", cellFor(doc, "caseB", "Δ CzA") === "-0.300", cellFor(doc, "caseB", "Δ CzA"));
-  check("Δ note explains the signs", /positive Δ there means more downforce/.test(doc.querySelector(".comparison-note")?.textContent ?? ""), doc.querySelector(".comparison-note")?.textContent);
+  check("Δ note is one short line", doc.querySelector(".comparison-note")?.textContent === "Δ = simulation − reference", doc.querySelector(".comparison-note")?.textContent);
+  check("no explanation under the monitor chart title", !doc.querySelector(".monitor-chart-note"));
   [...doc.querySelectorAll(".table-mode-switch button")].find((button) => button.textContent === "Values").click();
   await waitFor(() => headerCells(doc).includes("Downforce [N]"));
 
@@ -92,6 +93,8 @@ runTests(async () => {
   await waitFor(() => opened[0]?.contentDocument?.querySelector(".compare-image-panel img")?.naturalWidth, 30000);
   const win = opened[0].contentWindow, viewer = win.document;
   check("viewer opens with the server image", viewer.querySelector(".compare-image-panel img")?.naturalWidth > 0, viewer.getElementById("viewer-error").textContent);
+  check("comparison window has no hint line under its title", viewer.getElementById("viewer-path").hidden && !viewer.getElementById("viewer-path").textContent,
+    viewer.getElementById("viewer-path").textContent);
   const stage = viewer.getElementById("image-stage");
   const addCase = async (name) => {
     viewer.getElementById("add-case").click();
@@ -154,17 +157,20 @@ runTests(async () => {
   await waitFor(() => doc.querySelector("svg.pressure-chart"), 30000);
   check("pressure plot renders", /2460 mm/.test(doc.querySelector(".pressure-chart-title")?.textContent ?? "") && /40 measurements/.test(doc.querySelector(".pressure-chart-details")?.textContent ?? ""),
     `${doc.querySelector(".pressure-chart-title")?.textContent} | ${doc.querySelector(".pressure-chart-details")?.textContent}`);
+  check("pressure toolbar shows only the station", doc.querySelector(".pressure-measurement")?.textContent === "2460 mm", doc.querySelector(".pressure-measurement")?.textContent);
   doc.querySelector('.scene-gallery-folder[data-path="caseA/3D"]').click();
   await waitFor(() => opened[1]?.contentDocument?.querySelector("#image-stage img")?.naturalWidth, 30000);
   check("scene gallery loads", opened[1]?.contentDocument?.querySelector("#image-stage img")?.naturalWidth > 0);
   const ensight = doc.querySelector('.ensight-folder[data-path="caseA/3D-data"]');
   check("3D-data has a 3D viewer entry", ensight, [...doc.querySelectorAll(".ensight-folder")].map((entry) => entry.dataset.path).join(","));
   ensight?.click();
-  await waitFor(() => /triangles/.test(opened[2]?.contentDocument?.getElementById("case-name")?.textContent ?? "") ||
+  await waitFor(() => opened[2]?.contentDocument?.getElementById("legend")?.hidden === false ||
     opened[2]?.contentDocument?.getElementById("error")?.hidden === false, 60000);
-  const viewer3d = opened[2]?.contentDocument;
-  check("3D viewer loads the EnSight case from the tree", /Frontwing, Lambda2, Streamlines · 5 triangles/.test(viewer3d?.getElementById("case-name")?.textContent ?? ""),
-    viewer3d?.getElementById("error")?.hidden === false ? viewer3d.getElementById("error").textContent : viewer3d?.getElementById("case-name")?.textContent);
+  const viewer3d = opened[2]?.contentDocument, parts = () => opened[2]?.contentWindow?.eval("geometryParts.filter((p) => p.points.length).map((p) => p.name).join(',')");
+  check("3D viewer loads the EnSight case from the tree", viewer3d?.getElementById("legend")?.hidden === false && parts() === "Frontwing,Lambda2,Streamlines 1,Streamlines 2" &&
+    opened[2].contentWindow.eval("model.ix.length / 3") === 5,
+    viewer3d?.getElementById("error")?.hidden === false ? viewer3d.getElementById("error").textContent : parts());
+  check("3D viewer names the simulation in the window title, no parts line", viewer3d.title === "caseA · 3D viewer — HoMo CFD" && !viewer3d.getElementById("case-name"), viewer3d.title);
   // Stage 7 step 1: Fritz cluster settings (fake WinSCP on the test server).
   const clusterButton = doc.getElementById("cluster-settings");
   check("Fritz cluster button shown with serve.py", clusterButton && !clusterButton.hidden);

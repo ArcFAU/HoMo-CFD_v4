@@ -8,7 +8,9 @@ runTests(async () => {
   const card = await waitFor(() => app.contentDocument?.querySelector(".working-dir-card"));
   check("first start shows Choose working directory", card, app.contentDocument?.getElementById("panels")?.textContent.slice(0, 200));
   let doc = app.contentDocument;
-  check("chooser offers Browse…", [...doc.querySelectorAll(".working-dir-card button")].some((button) => button.textContent === "Browse…"));
+  const intro = doc.querySelector(".working-dir-card p")?.textContent ?? "";
+  check("chooser explains the folders to create, without CFD-Tool", /First create a folder/.test(intro) && /finished/.test(intro) && /inProgress/.test(intro) && !/CFD-Tool/.test(intro), intro);
+  check("chooser offers Browse…",[...doc.querySelectorAll(".working-dir-card button")].some((button) => button.textContent === "Browse…"));
   check("the HoMo CFD title is the working-directory button", /HoMo CFD/.test(doc.getElementById("open-results").textContent) &&
     doc.getElementById("working-dir-label").textContent === "Choose working directory", doc.getElementById("open-results").textContent);
   const useButton = () => [...doc.querySelectorAll(".working-dir-card button")].find((button) => button.textContent === "Use this folder");

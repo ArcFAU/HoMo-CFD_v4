@@ -3,6 +3,23 @@
 User-visible changes, newest first. Detailed reasoning lives in
 `CHAT_HISTORY.md`; decisions in `DECISIONS.md`.
 
+## 2026-10-07
+
+### Fixed
+- **3D viewer on smaller screens:** the toolbar wraps to a further row instead of pushing Auto range and Reset view off screen (seen on a laptop with display scaling), and labels stay on one line.
+
+### Added
+- **Palettes in the 3D viewer:** **Palette** in the toolbar: Rainbow (as before), STAR-CCM+ (blue–red), Cool–warm, Viridis, Inferno, Grey, Magenta–gold. Surfaces, streamlines and the legend bar follow it; the choice is remembered.
+
+### Changed
+- 3D viewer: the line listing the folder and all parts under the title is gone; the window title names the simulation instead (e.g. "1002_homo_test · 3D viewer").
+- **Fewer instruction texts** (user review): no mouse/key help in the 3D viewer, no key hints in the image and scene windows (path and scene count stay) or the pressure plot (only the station, e.g. "2460 mm"), the Δ note is one line ("Δ = simulation − reference"), no explanation under the monitor chart title or in Customize columns. **Choose working directory** now says to create a results folder with **finished** and **inProgress** inside, without referring to CFD-Tool.
+
+### Removed
+- The hint line under the **Simulation comparison** title ("Each panel has independent field, axis, frame, and zoom controls. T: CpT · …").
+
+### Added
+- **Thicker streamlines:** **Thickness** in the streamline bar (Thin, 2, 3, 4 or 6 px; 2 px by default, remembered).
 ## 2026-10-06
 
 ### Added

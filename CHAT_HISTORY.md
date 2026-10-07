@@ -5563,3 +5563,349 @@ The background watcher of the post job (job 4285206 in `exp`) finished; no new u
 - Committed all changes of 2026-10-06 (streamlines and surface flow, streamline chooser, value-layout and unit fixes, table sorting) on `night-2026-10-02` and pushed it to `origin/night-2026-10-02` and `origin/master`. The diff was checked for keys and passwords (none). The portable zip was not rebuilt.
 
 > Committed and pushed: today's work is on GitHub on both `master` and `night-2026-10-02`. The portable zip isn't rebuilt yet; say if you want that too.
+
+## 2026-10-06 — Project summary for Claude chat
+
+### User messages (verbatim)
+
+> can you give me short text regarding entire project to give it to claude chat (not claude code).
+
+### Final response (verbatim)
+
+> [A copyable "Project context: HoMo CFD" text: what HoMo CFD is and who made it, how it works (serve.py, plain web front end, portable zip), its features (coefficient table with Δ and sorting, comparison window, pressure plots, 3D viewer with vortices, streamlines and surface flow, Fritz cluster through WinSCP), the STAR-CCM+ export macros, and the sign and axis conventions; followed by a note that the entry was not yet logged and the question whether to log it.]
+
+### Work record
+
+- Text only; no files changed. This entry was added later, in the next task.
+
+## 2026-10-07 — Picture looks and Save image in the 3D viewer
+
+### User messages (verbatim)
+
+> [image: part of a team poster, "…AMICS" heading, the car rendered in shiny iridescent chrome (magenta, gold, green) with coloured streamlines] can we get something like this temporarily?
+
+### Contributor messages (verbatim)
+
+> That looks like a promotional render: a shiny, chrome-like car with rainbow tints (magenta → gold → green), coloured streamlines, and a transparent background so it can sit on a poster. I'll add two things to the 3D viewer for that:
+>
+> 1. **Look** setting:
+>    - **Standard:** today's view.
+>    - **Glossy:** your data colours with highlights.
+>    - **Showcase:** an iridescent chrome look for pictures, which ignores the data on the car; the streamlines stay coloured by the field.
+> 2. **Save image** button: a PNG at twice the window's resolution, with a transparent background.
+>
+> Starting with the shaders:
+
+> Now the controls in the toolbar:
+
+> The **Save image** button should be enabled and disabled together with **Reset view**:
+
+> Browser checks: both looks render without a GL error, and a saved image has the requested size and a transparent background:
+
+> All 165 checks pass. Now the real test: your `exp` car in **Showcase** from the front-right, like your picture, saved the same way **Save image** does (transparent background). For comparison I'll also save **Glossy** with Cp:
+
+> I've looked at both saved images. The background is transparent, and the image viewer only shows it as black.
+>
+> - **Glossy** works well: Cp colours with highlights.
+> - **Showcase** is too dark and too green next to your picture. Vertical faces turn almost black, and the tint runs green–yellow instead of magenta–gold.
+>
+> Also, `exp` is a half car, so from the front-right you look into its cut side. For pictures, use a full-car run like `1002_homo_test`, or the front-left view.
+>
+> I'll brighten Showcase: more light from the horizon, a magenta → red → gold tint, and a bit of white mixed in for a chrome feel.
+
+> The new Showcase is much closer to your picture: gold chrome with magenta edges and green tints, and coloured streamlines. Some faces turned away from the light are still dark red. Running the tests again, then the docs and log:
+
+### Work record
+
+- `web/3d-viewer.js`: fragment shader with `look` (0 standard, 1 glossy, 2 showcase), normal passed to the fragment shader and turned to the viewer; lines always drawn with look 0; `draw(target)` with `{width, height, transparent}`; `saveImage()` (2x CSS size, `toBlob`, download `<folder> <field>.png`); `ResizeObserver(() => draw())`. `web/3d-viewer.html`/`.css`: **Look** select, **Save image** button (enabled with the model).
+- Tests: `tests/browser/picker-mode.html` (2 new checks). Docs: `CHANGELOG.md` (new 2026-10-07 section), `STATUS.md`, `tests/README.md`.
+- Visual check on `D:\CFD_tool\finished\exp\3D-data` (scratch harness, read-only): transparent 2400 x 1400 PNGs; Glossy with Cp; Showcase tuned once (brighter, magenta-to-gold tint).
+- Checks: `py tests/run_browser_tests.py` 165/165 passed. Unit tests not affected (viewer only; last run 82 OK).
+- Not committed.
+
+### Final response (verbatim)
+
+> I added a picture mode to the 3D viewer, so you can make renders like that one yourself.
+>
+> - **Look** (in the toolbar): **Standard** (as before), **Glossy** (your data colours with a light and highlights), or **Showcase** (shiny iridescent chrome, gold to magenta, like your picture). In Showcase the car's colours show no data, but the streamlines stay coloured by the selected field.
+> - **Save image**: saves the current view as a PNG at twice the window's resolution, with a transparent background, ready to place on a poster. The legend and axes aren't included.
+>
+> I tried both on your `exp` car. Showcase came out close to your picture after one round of tuning, though some faces turned away from the light stay dark red. `exp` is a half car, so from the right side you see its cut face; for pictures, use a full-car run like `1002_homo_test`, or the front-left view. Tip: **Lines: Every 3rd** or a height range gives a cleaner streamline picture.
+>
+> 165/165 browser checks pass. Reload the 3D viewer to try it. Not committed yet; say if you want it pushed.
+
+## 2026-10-07 — Thicker streamlines
+
+### User messages (verbatim)
+
+> can we make stram lines thicker?
+
+### Contributor messages (verbatim)
+
+> Yes, but not with WebGL's line width setting: browsers ignore line widths above 1 pixel. Instead I'll draw each streamline segment as a thin strip of two triangles, a few pixels wide on screen, and add a **Thickness** choice to the streamline bar. **Save image** will scale the thickness with the image, so the lines look the same there. Reading the current line drawing code:
+
+> Plan: one instance per segment carrying both end points and their values, widened on screen in the vertex shader. The existing filter keeps working as before; it now fills that segment buffer instead of an index list. First, sharing the colour palette between both shaders:
+
+> Now the **Thickness** choice in the streamline bar:
+
+> All 167 checks pass. Rendering your `exp` car again at 3 px, in Showcase and in Standard:
+
+> The thick streamlines render cleanly: continuous, coloured by the field, and correctly hidden behind the car. Docs and log:
+
+### Work record
+
+- `web/3d-viewer.js`: `makeLineRenderer` (instanced strips, width in screen pixels, scaled for Save image), `applyStreamlineFilter` fills the segment buffer, `PALETTE_GLSL` shared, `lineWidth` + `#stream-width` (remembered). `web/3d-viewer.html`/`.css`: Thickness select. Tests: `tests/browser/picker-mode.html` (2 new checks). Docs: `CHANGELOG.md`, `STATUS.md`, `tests/README.md`.
+- Visual check on `exp` (scratch harness): 3 px streamlines in Showcase render continuous and depth-correct.
+- Checks: `py tests/run_browser_tests.py` 167/167 passed.
+- Not committed.
+
+### Final response (verbatim)
+
+> Done: streamlines can now be thicker. The streamline bar has a new **Thickness** choice: Thin, 2 px (the new default), 3, 4 or 6 px. Your choice is remembered, and **Save image** keeps the lines in proportion to the larger picture.
+>
+> I checked it on your `exp` car at 3 px in Showcase: the lines are smooth and continuous, coloured by the field, and correctly hidden behind the car. 167/167 browser checks pass. Reload the 3D viewer to try it.
+>
+> Today's changes (Look, Save image, Thickness) aren't committed yet; say if you want them pushed.
+
+## 2026-10-07 — Picture looks removed again, thickness kept
+
+### User messages (verbatim)
+
+> can you undo the temporary changes? but keep the thickness option.
+
+### Contributor messages (verbatim)
+
+> I'll remove the **Look** setting and the **Save image** button and keep **Thickness**. Reading the current state of those parts:
+
+> Removing them from the viewer code:
+
+> The page, the remaining reference in `disposeRenderer`, the tests and the docs:
+
+> Only ordinary "look along an axis" wording remains. One leftover: the Thickness tooltip still mentions Save image. Fixing it, then the log:
+
+### Work record
+
+- Removed from `web/3d-viewer.js`, `.html`, `.css`: the `look` uniform and Glossy/Showcase shader code, the normal varying, `draw(target)` (back to `draw()`), `saveImage` and the **Look** and **Save image** controls. Kept: the line renderer and **Thickness** (`#stream-width`), the shared `PALETTE_GLSL`, `ResizeObserver(() => draw())`.
+- Tests: the 2 look/save checks removed from `tests/browser/picker-mode.html`. Docs: `CHANGELOG.md` (looks entry removed, thickness entry kept), `STATUS.md` (one line notes the removal), `tests/README.md`.
+- Checks: `py tests/run_browser_tests.py` 165/165 passed.
+- Not committed.
+
+### Final response (verbatim)
+
+> Done: the **Look** setting (Glossy/Showcase) and the **Save image** button are gone again, and **Thickness** stays in the streamline bar. All 165 browser checks pass. Reload the 3D viewer to see it.
+>
+> Not committed yet; say if you want it pushed.
+
+## 2026-10-07 — Comparison window hint line removed
+
+### User messages (verbatim)
+
+> can you remove this line completely.."Each panel has independent field, axis, frame, and zoom controls. T: CpT · V: Velocity · P: Cp · L: Lambda2 · X/Y/Z: axis (focused panel) · + / − / 0: zoom."
+
+### Contributor messages (verbatim)
+
+> The line is the subtitle of the **Simulation comparison** window ([web/image-viewer.js:692](web/image-viewer.js#L692)). The same element shows the path in the other viewer windows, so I'll hide it only in the comparison window rather than deleting the element:
+
+> `.hint` doesn't set `display`, so `hidden` takes effect. I'll add a check to the comparison-window test, then log:
+
+### Work record
+
+- `web/image-viewer.js`: the comparison window no longer sets that text and hides `#viewer-path` (still used by the scene gallery and image folder windows). The keyboard shortcuts themselves are unchanged.
+- Tests: `tests/browser/server-mode.html` (1 new check). Docs: `CHANGELOG.md`, `tests/README.md`.
+- Checks: `py tests/run_browser_tests.py` 166/166 passed.
+- Not committed.
+
+### Final response (verbatim)
+
+> Done: the comparison window no longer shows that line under its title. The keyboard shortcuts it described (T, V, P, L, X/Y/Z, + / − / 0) still work. 166/166 browser checks pass. Reload HoMo CFD and open a comparison window to see it.
+>
+> Not committed yet; say if you want it pushed.
+
+## 2026-10-07 — Review of guidance texts (proposal)
+
+### User messages (verbatim)
+
+> okay, i guess we need to look through all the text and instructions like this.
+
+### Contributor messages (verbatim)
+
+> I'll collect every hint, help line and instruction text shown in the app, then go through them with you. First, the static ones in the pages:
+
+> Now the texts the scripts write into the page (40+ characters, excluding error messages):
+
+> Several of those continue over more lines. Reading the full texts:
+
+### Work record
+
+- Collected guidance texts from `web/*.html`, `web/app.js`, `web/image-viewer.js`, `web/3d-viewer.*`, `web/server-fs.js` (error messages, status lines and tooltips left out). No changes yet; waiting for the user's choice.
+
+### Final response (verbatim)
+
+> [A table of 11 texts with suggestions: 1 3D viewer mouse/key help — remove; 2 image folder subtitle — keep only the path; 3 3D scenes gallery subtitle — keep path and count; 4 pressure plot line — keep only the station; 5 Δ note — shorten to "Δ = simulation − reference"; 6 monitor chart note — remove; 7 Customize columns dialog hint — remove; 8 Choose working directory intro — one sentence; 9 Fritz cluster intro — one sentence; 10 Simulations on Fritz note — "Nothing on Fritz is changed or deleted."; 11 New simulation intro — one sentence. Kept: 3D viewer empty-state message, Pageant status lines, "Current: <folder>" line, pressure-side/suction-side legend. Question: apply all, or change some first ("all except 5 and 9").]
+
+## 2026-10-07 — Guidance texts trimmed (1–7) and working-directory text rewritten (8)
+
+### User messages (verbatim)
+
+> all except 8,9,10,11. change the 8 to that does not refere to CFD-Tool and write something independent (like informing the use to first make a folder with name like cfd-tool or homo tool and make sub folders like finished, uninished etc...).
+
+### Contributor messages (verbatim)
+
+> I'll apply 1–7, rewrite 8 without CFD-Tool, and leave 9–11 as they are. For 8, I first need to know which subfolders HoMo actually uses:
+
+> HoMo uses two subfolders: **finished** (the simulations it lists) and **inProgress** (where Fritz downloads wait until they're complete). Checking which tests read the texts I'm about to change:
+
+> Applying all the text changes in one script:
+
+> Applied. Updating the Δ note test and adding checks for the station-only pressure line and the new working-directory text:
+
+> All 169 checks pass. Docs and log:
+
+### Work record
+
+- `web/3d-viewer.html`/`.css`: help line and `.cfd3d-help` removed. `web/image-viewer.js`: image folder subtitle = path; scene gallery subtitle = path · N scenes. `web/app.js`: pressure toolbar shows only the station; Δ note "Δ = simulation − reference"; monitor chart note removed (`web/styles.css` rule removed too); working-directory intro: "First create a folder for your CFD results, e.g. D:\HoMo-CFD-results, with two folders inside: finished (one folder per simulation; HoMo CFD lists these) and inProgress (downloads from Fritz wait here until they are complete). Then choose that folder here. The choice is saved for your user account on this computer." `web/index.html`: Customize columns hint removed.
+- Left unchanged at the user's choice: Fritz cluster intro (9), Simulations on Fritz note (10), New simulation intro (11).
+- Tests: `tests/browser/server-mode.html` (Δ note check changed, 2 new), `tests/browser/first-start.html` (1 new). Docs: `CHANGELOG.md`, `STATUS.md`, `tests/README.md`.
+- Checks: `py tests/run_browser_tests.py` 169/169 passed.
+- Not committed.
+
+### Final response (verbatim)
+
+> Done. Texts 1–7 are gone or shortened as listed, and 9–11 are unchanged.
+>
+> **New text for Choose working directory (8):**
+> > First create a folder for your CFD results, e.g. D:\HoMo-CFD-results, with two folders inside: finished (one folder per simulation; HoMo CFD lists these) and inProgress (downloads from Fritz wait here until they are complete). Then choose that folder here. The choice is saved for your user account on this computer.
+>
+> HoMo only uses those two subfolders, so I named just them. An existing CFD-Tool folder still works as before.
+>
+> 169/169 browser checks pass. Reload HoMo CFD to see it. Not committed yet; say if you want it pushed.
+
+## 2026-10-07 — Portable zip rebuilt
+
+### User messages (verbatim)
+
+> do you also change things in share zip.
+
+### Contributor messages (verbatim)
+
+> Not automatically. The zip (`dist\HoMo-CFD-portable.zip`) is only rebuilt when `tools/make_portable.py` runs. Checking how old it is:
+
+> The zip is from 2 October, just after the About button removal. It has none of the later work: no streamlines, surface flow, table sorting or new texts. Rebuilding it now; this only writes the local file in `dist`, nothing gets sent anywhere.
+
+### Work record
+
+- `py tools/make_portable.py`: `dist/HoMo-CFD-portable.zip` rebuilt (12.5 MB, 58 entries, bundled Python 3.14.8 checked). Verified it contains the streamline code, table sorting, the new working-directory text and the new `export3D.java`, and no notes or logs.
+- The project files themselves are still uncommitted.
+
+### Final response (verbatim)
+
+> Not by itself. I just rebuilt it: `dist\HoMo-CFD-portable.zip` (12.5 MB) now contains everything up to the text changes, including streamlines, surface flow, thickness, table sorting and the new `export3D.java` macro. I checked those are inside, and that no notes or logs went in.
+>
+> From now on: after a change, the zip needs rebuilding before you share it. Just ask me, or run `py tools/make_portable.py` in the project folder. Teammates who already have an older zip need the new one; they can unzip it over their old folder, and their settings stay.
+>
+> The project changes themselves aren't committed yet; say if you want them pushed.
+
+## 2026-10-07 — Colour palettes for the 3D viewer
+
+### User messages (verbatim)
+
+> can we add some color palet options for 3d viewer? like we did yesterday?
+
+### Contributor messages (verbatim)
+
+> "Like yesterday" — I don't find palette work from this session, so it may have been in an earlier one. Checking the log for colour options we built before:
+
+> I don't find palette options for the 3D viewer in the log, so I think you mean the colours of the Showcase look from earlier today (magenta → gold). I'll add a **Palette** choice for the field colours. Unlike Showcase, every palette still shows the data:
+>
+> - **Rainbow:** today's colours, the default.
+> - **STAR-CCM+:** blue → red, like STAR-CCM+'s default.
+> - **Cool–warm:** blue → white → red; good for Cp, where the middle is near zero.
+> - **Viridis** and **Inferno:** even brightness steps, readable for colour-blind viewers and when printed in grey.
+> - **Grey**
+> - **Magenta–gold:** the Showcase colours, but mapped to the data.
+>
+> The legend bar and the streamlines follow the palette, and the choice is remembered. Finding the palette code:
+
+> The palettes are in. Adding browser checks: the palette list, Viridis colouring the field and the legend, and remembering the choice:
+
+> All 171 checks pass. Now how the palettes look on your `exp` car, with Cp:
+
+> The palettes work: the car and the streamlines follow the chosen palette. Both pictures look mostly one colour because the default Cp range of −5 to 1 puts most of the car near the top end. With **Cool–warm**, a range centred on zero (e.g. −1 to 1) puts white at Cp = 0. Docs and log:
+
+### Work record
+
+- `web/3d-viewer.js`: `PALETTES` (Rainbow = the original seven colours as hex, STAR-CCM+ blue–red, Cool–warm, Viridis, Inferno, Grey, Magenta–gold), `paletteStops()`, `PALETTE_GLSL` with `uniform vec3 stops[7]` set in `draw()` for surfaces and lines, `#palette` select filled from `PALETTES`, legend bar gradient from the stops, localStorage `homo-cfd-3d-palette-v1`. `web/3d-viewer.html`/`.css`: Palette select.
+- Tests: `tests/browser/picker-mode.html` (2 new checks). Docs: `CHANGELOG.md`, `STATUS.md`, `tests/README.md`.
+- Visual check on `exp` (scratch harness, read-only): Cool–warm, Magenta–gold and Viridis render on surfaces and streamlines.
+- Checks: `py tests/run_browser_tests.py` 171/171 passed.
+- Not committed; portable zip not rebuilt since this change.
+
+### Final response (verbatim)
+
+> I added a **Palette** choice to the 3D viewer's toolbar. It has seven palettes:
+>
+> - **Rainbow:** the colours you had, still the default.
+> - **STAR-CCM+ (blue–red):** looks like STAR-CCM+'s scenes.
+> - **Cool–warm:** blue → white → red; best for Cp with a range centred on 0, e.g. −1 to 1.
+> - **Viridis** and **Inferno:** even brightness, readable for colour-blind people and in grey prints.
+> - **Grey**
+> - **Magenta–gold:** the Showcase colours from earlier today, but showing the data.
+>
+> Surfaces, streamlines and the legend bar all follow it, and your choice is remembered. If you meant something else by "like yesterday", tell me.
+>
+> 171/171 browser checks pass. Reload the 3D viewer to try it. Not committed, and the zip doesn't have it yet; say if you want both.
+
+## 2026-10-07 — 3D viewer toolbar on the laptop screen; parts line removed
+
+### User messages (verbatim)
+
+> [two screenshots of the 3D viewer: on the laptop screen the toolbar ends after "Range max" and the Open 3D-data folder button is squeezed to four lines; on the monitor Auto range and Reset view are visible] also in 3d viewer the things are hidden for some reason. if i open in laptop screen it is hidden but if i move the window to my monitor screen (which is bigger than laptop screen) i can see it. (look image from laptop and monitor screen)
+
+> i guess if you remove this line it will help a little (3D-data · Remaining, wheel-fr, Frontwing, Rearwing, Undertray, wheel-fl, wheel-rr, wheel-rl, mono, suspension, rim, s)
+
+### Contributor messages (verbatim)
+
+> The screenshots show a toolbar overflow. On the laptop, the window is narrower in CSS pixels (Windows display scaling enlarges everything), and the 3D viewer's toolbar never wraps to a second row. So **Auto range** and **Reset view** are pushed off the right edge: in your laptop picture they're missing after "Range max". The **Open 3D-data folder** button also gets squeezed into four lines. Checking the toolbar's CSS:
+
+> The fix is to let the toolbar wrap onto a second row when it doesn't fit, and to keep each control's label on one line:
+
+> Adding a check for this: the 3D viewer at a laptop-like width of 1000 px must keep every toolbar button inside the window, and **Open 3D-data folder** must stay on one line:
+
+> Passes. To be sure the check catches the problem, I'll run it once with the wrapping switched off:
+
+> The check works: without wrapping it reports six controls off screen, matching your laptop picture. The fix is restored.
+>
+> About your new message: yes, removing that line helps. That subtitle lists every part, and it's what squeezes the title block. I'll remove it from the toolbar. So the simulation's name is still visible somewhere, I'll put it in the window and tab title instead (e.g. "1002_homo_test · 3D viewer"). Finding where the line is set:
+
+> The tests use that line to see when a case has loaded. They'll check the visible legend, the triangle count and the new window title instead:
+
+> All 173 checks pass, including the narrow-window check and the new title. Docs and log:
+
+### Work record
+
+- `web/3d-viewer.css`: toolbar wraps (`flex-wrap: wrap`, `gap: 8px 12px`); buttons, range controls and part toggles don't wrap their labels; `.cfd3d-title` without `min-width`, its `span` rules removed.
+- `web/3d-viewer.html`/`.js`: `#case-name` removed; `document.title` = `<case> · 3D viewer — HoMo CFD` via `caseName()`; page title "3D viewer — HoMo CFD".
+- Tests: `tests/browser/picker-mode.html` (load check via legend and triangle count; new 1000 px toolbar check, confirmed to fail without the fix), `tests/browser/server-mode.html` (load check via legend, parts and triangle count; new title check). Docs: `CHANGELOG.md`, `STATUS.md`, `tests/README.md`.
+- Checks: `py tests/run_browser_tests.py` 173/173 passed.
+- Not committed; portable zip not rebuilt since these changes.
+
+### Final response (verbatim)
+
+> I fixed both:
+>
+> - **Hidden buttons:** the toolbar now wraps onto a second row when the window is narrow, so **Auto range** and **Reset view** stay visible on your laptop, and **Open 3D-data folder** keeps its label on one line. A new browser check opens the viewer at 1000 px wide. Before the fix it found six controls off screen, which matches your laptop picture; now it finds none.
+> - **The parts line** under "3D CFD Field" is gone. The window and tab title now name the simulation instead, e.g. "1002_homo_test · 3D viewer".
+>
+> 173/173 browser checks pass. Reload the 3D viewer to see it.
+>
+> Not committed yet, and the zip doesn't have today's last changes (palettes, these fixes). Say if you want both.
+
+### Commit and zip (2026-10-07)
+
+> do it
+
+> Committing and pushing, then rebuilding the zip. First the unit tests, which haven't run since the text changes:
+
+- `py -m unittest discover -s tests`: 82 tests OK; diff checked for keys and passwords (none). Committed the 2026-10-07 changes (thickness, palettes, toolbar wrap, parts line removed, trimmed texts, comparison hint removed) on `night-2026-10-02`, pushed to `origin/night-2026-10-02` and `origin/master`, and rebuilt `dist/HoMo-CFD-portable.zip`.
+
+> Done: today's changes are committed and on GitHub (`master` and `night-2026-10-02`), and `dist\HoMo-CFD-portable.zip` is rebuilt with them, ready to share.
