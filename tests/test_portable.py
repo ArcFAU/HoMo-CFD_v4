@@ -48,9 +48,11 @@ class PortableBuildTests(unittest.TestCase):
         names = zipfile.ZipFile(archive).namelist()
         self.assertTrue(all(name.startswith("HoMo-CFD/") for name in names), names[:5])
         top = {name.split("/")[1] for name in names}
-        self.assertEqual(top, {"serve.py", "cluster.py", "Start HoMo CFD.bat", "Create desktop shortcut.bat", "README.md", "ABOUT.txt", "web", "starccm", "python"})
+        self.assertEqual(top, {"serve.py", "cluster.py", "Start HoMo CFD.bat", "Create desktop shortcut.bat", "README.md", "ABOUT.txt", "web", "starccm", "fritz", "python"})
         self.assertIn("HoMo-CFD/web/homo-cfd.ico", names)
         self.assertIn("HoMo-CFD/starccm/export3D.java", names)
+        self.assertIn("HoMo-CFD/starccm/mesh.java", names)
+        self.assertIn("HoMo-CFD/fritz/homo-table.py", names)
         self.assertIn("HoMo-CFD/web/3d-viewer.js", names)
         self.assertFalse([name for name in names if "__pycache__" in name or name.endswith((".ppk", ".sim", ".pyc"))])
         with zipfile.ZipFile(archive) as built:

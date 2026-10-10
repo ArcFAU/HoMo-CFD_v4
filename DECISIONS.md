@@ -186,6 +186,15 @@ written before post-processing, and WinSCP alone cannot ask SLURM cheaply,
 so the generated `post.sh` writes its own marker. Details:
 `docs/STAGE7_FRITZ.md` sections 4–5.
 
+## 2026-10-10 — The results listing is cached on the user's disk
+
+Results usually live on a hard disk; a cold scan of ~50,000 files took 7–15 s
+at every start. The server saves the last listing in the settings folder and
+the start page shows it first, then checks the disk in the background and
+reloads if anything changed. **Why not watch the folder for changes:** Python's
+standard library has no file watcher, and a stale listing for a few seconds is
+harmless (opening a file that has gone shows an error).
+
 ## 2026-10-06 — Streamlines from STAR-CCM+, surface flow from the wall shear stress
 
 Requested by the user (options 1 and 2 of three). Streamlines are computed in

@@ -5909,3 +5909,451 @@ The background watcher of the post job (job 4285206 in `exp`) finished; no new u
 - `py -m unittest discover -s tests`: 82 tests OK; diff checked for keys and passwords (none). Committed the 2026-10-07 changes (thickness, palettes, toolbar wrap, parts line removed, trimmed texts, comparison hint removed) on `night-2026-10-02`, pushed to `origin/night-2026-10-02` and `origin/master`, and rebuilt `dist/HoMo-CFD-portable.zip`.
 
 > Done: today's changes are committed and on GitHub (`master` and `night-2026-10-02`), and `dist\HoMo-CFD-portable.zip` is rebuilt with them, ready to share.
+
+## 2026-10-08 — Palettes from D:\SIM\maps.colormap (choosing)
+
+### User messages (verbatim)
+
+> can you add this pallet as well "D:\SIM\maps.colormap"
+
+### Clarifications (question tool; the user's answers verbatim)
+
+- Which palettes from maps.colormap should the 3D viewer get? → "Only a few"
+
+### Contributor messages (verbatim)
+
+> This is a STAR-CCM+ colormap export, and it holds several palettes, not just one. Listing them:
+
+> The file has **66 palettes**, not one. It looks like your STAR-CCM+ collection: turbo, FAU-bwr, HiVo Transparent, blue-red balanced, the byu_* maps and more. Before I build it:
+
+> You chose a few, but the names didn't come through, so I need to know which ones. To make choosing easier, I'll make a preview page showing all 66 as colour bars with their names:
+
+### Work record
+
+- `D:\SIM\maps.colormap`: a Python-literal dict `LookupTables` with 66 tables (Name, ColorValues as x, r, g, b, AlphaValues, ColorSpace 0–3). Wrote a preview page `D:\SIM\maps-colormap-preview.html` (new file next to the colormap; nothing else changed there). No app changes yet; waiting for the names.
+
+### Final response (verbatim)
+
+> [Asked which palettes to add; pointed to the preview page D:\SIM\maps-colormap-preview.html with all 66 numbered; suggested FAU-bwr, HiVo Transparent, turbo and blue-red balanced; answers by name or number accepted.]
+
+### Follow-up (2026-10-08)
+
+> what are the actual palettes inside there?
+
+> [Listed all 66 palettes grouped: rainbow-like (12), perceptual (5), blue–red diverging (12), other two-colour diverging (10), single colour/greys (8), themed (15), band/filter maps (4, transparency-based, suggested to leave out); noted that HiVo Transparent, Digital Neon and the byu_* maps fade to transparent at one end, which the viewer shows solid; pointed to D:\SIM\maps-colormap-preview.html; asked which to add and suggested FAU-bwr, HiVo Transparent, turbo and blue-red balanced.]
+
+> add suggseted ones
+
+### Contributor messages (verbatim)
+
+> Adding **FAU-bwr**, **HiVo Transparent**, **turbo** and **blue-red balanced**. These palettes have their colour points at uneven positions, and turbo has 256 of them. The viewer's current palettes are exactly seven evenly spaced colours, so I'll change the viewer to work from a 256-step colour table that it builds from any palette's points. All four blend in RGB in STAR-CCM+, as the viewer does. Extracting their colour points:
+
+> Now the viewer code. Reading the current palette block exactly as it stands:
+
+> All 174 checks pass. A look at FAU-bwr, turbo and HiVo Transparent on your `exp` car, with Cp:
+
+> The images were saved; the error is only my test page reading the parts line removed yesterday. But the range wasn't applied either, because the range boxes react to typing ("input" events), not "change". Fixing both and rendering again:
+
+> Both look right with Cp from −1.5 to 1. FAU-bwr shows suction in blue and stagnation in red with white near zero, and turbo looks like STAR-CCM+'s. Docs and log:
+
+> The quoted path in STATUS picked up extra backslashes. Cleaning it up:
+
+### Work record
+
+- `web/3d-viewer.js`: palettes as colour points (`evenly()` for the seven HoMo palettes, unchanged colours), four STAR-CCM+ colormaps (FAU-bwr, HiVo Transparent, turbo thinned to 33 points, blue-red balanced) in group "STAR-CCM+"; `paletteTable()` (256 RGBA steps), `uploadPalette()` (texture unit 0), `PALETTE_GLSL` samples `uniform sampler2D paletteTable`; select with two optgroups; legend gradient at the points' positions.
+- Tests: `tests/browser/picker-mode.html` (palette list 7 + 4, table length 1024, FAU-bwr blended at its points: 4,49,106 at 0, white at the middle, red at 1). Docs: `CHANGELOG.md` (2026-10-08), `STATUS.md`, `tests/README.md`.
+- Visual check on `exp` with Cp −1.5…1 (scratch harness): FAU-bwr, turbo, HiVo Transparent.
+- Checks: `py tests/run_browser_tests.py` 174/174 passed.
+- Not committed; zip not rebuilt.
+
+### Final response (verbatim)
+
+> I added the four suggested palettes, FAU-bwr, HiVo Transparent, turbo and blue-red balanced, in their own group "STAR-CCM+ colormaps" under **Palette**. Their colours sit at the same positions as in STAR-CCM+. STAR-CCM+'s transparency isn't used, so HiVo Transparent shows solid white at the top end.
+>
+> To make that possible, the viewer now builds a 256-step colour table from each palette's colour points, so any palette from your file can be added the same way later. Your seven existing palettes keep exactly the same colours.
+>
+> I checked them on your `exp` car with Cp from −1.5 to 1. FAU-bwr shows suction in blue and stagnation in red with white near zero, so it works best with a range centred on 0.
+>
+> 174/174 browser checks pass. Reload the 3D viewer to try it. Not committed, and the zip doesn't have it yet; say if you want both.
+
+## 2026-10-09 — Replacing parts (CAD) on Fritz: how the old team did it (question)
+
+### User messages (verbatim)
+
+> do you think we can make a macro that replaces the part in simulation on cluster and continue simulation after wards. we used to have those things working but nobody knows how previous team did it. basically they use same sim file on cluster all the time but they put step or whatever file in same folder (i.g. new frontwing/rearwing/undertray etc.) and run the macro. it changes the current part with new part and after change also starts simulation.
+
+### Contributor messages (verbatim)
+
+> Very likely yes, and part of it may still exist without anyone knowing. The "mesh" job your pipeline runs before the solver suggests the template already has a meshing macro, which may be where parts get imported. Checking what the template and Settings contain:
+
+> Settings has no geometry entries. The meshing job's log should show what its macro does, for example whether it imports any parts. Reading only lines about macros, imports and parts, and leaving out the licence-key line:
+
+> This is a strong lead. The meshing macro is `mesh.java`, played from the case folder. It's over 1,100 lines long, and around line 1112 it calls `removeParts(children)` on a composite part. Removing children of a composite part and putting in new ones is exactly how part replacement is done in STAR-CCM+. So the old team's mechanism may well be inside `mesh.java` already. Checking whether there's a copy on this PC:
+
+> Found it. Your `Downloads\mesh.java` (1,166 lines, from November 2025) contains exactly that mechanism, in a method called `addCAD()`. Reading how it picks files and parts, and when it runs:
+
+### Work record
+
+- Read (read-only) `D:\CFD_tool\finished\1002_homo_test\Settings` (no geometry keys) and the meshing log `mesh.o4284892` (filtered, licence lines left out): it plays `<case>/mesh.java`; compiler warnings at lines 434 and 1112 match `C:\Users\Archit\Downloads\mesh.java` (1,166 lines, 2025-11-13). An older 158-line `mesh.java` is in `D:\CFD_tool\archive\002_LES_removed_custom_control\cluster files`.
+- `mesh.java` `execute()`: `addCAD()` (caught; errors to `ERRORS`), then Settings, cornering, MapSettings, `startMeshing()` (generate volume mesh, save `.sim`). `addCAD()`: every `.igs/.iges/.step/.stp/.stl` in the case folder; name contains frontwing → C_FRONTWING, deflector → deflectors (commented out, so null → exception, rest skipped), undertray → C_UNDERTRAY, mono → C_MONOCOQUE, rearwing → C_REARWING, else z_000_remaining-parts (added, nothing removed); removes the group's child parts, `importCadPart`, finds the part by the file name before the first dot in upper or lower case, reparents it; mirroring commented out.
+- No changes made. Proposed: CAD files in New simulation on Fritz (with target-part preview and name checks), using a `.sim` already on Fritz instead of uploading, and a team copy of `mesh.java` with the two bugs fixed; first steps would be a read-only look at the template's `mesh.java` and one test run.
+
+### Final response (verbatim)
+
+> [Explained that no new macro is needed: the team's `mesh.java` already has `addCAD()`, which imports CAD files from the case folder before meshing, chooses the part group by file name (frontwing → C_FRONTWING, undertray → C_UNDERTRAY, rearwing → C_REARWING, mono → C_MONOCOQUE, else added to z_000_remaining-parts), deletes the old parts in that group, imports the new one, then applies Settings, meshes, saves, and the chain continues with solver and post-processing. Workflow today: copy e.g. `frontwing_v3.stp` into the new case folder with WinSCP, then Start. Pitfalls: `deflector` files break the import (group commented out); one file per group; lower-case names without extra dots; CAD in the car's coordinates, half car on half-car models; force monitors for the new part unchecked. Suggested HoMo additions: CAD files field in New simulation on Fritz with target preview and name warnings, using a `.sim` already on Fritz, and a fixed team copy of `mesh.java`; asked whether to build them, starting with a read-only check of the template's `mesh.java` and one test case.]
+
+## 2026-10-09 — Look at 1002_homo_test on Fritz (blocked: key locked)
+
+### User messages (verbatim)
+
+> can you check home/vault/v152dc/v152dc11/1002_homo_test on fritz?
+
+### Contributor messages (verbatim)
+
+> I'll list that folder on Fritz read-only, through your saved WinSCP session the same way HoMo does, without changing anything. Finding the session name and how HoMo calls WinSCP:
+
+### Work record
+
+- Ran a read-only WinSCP script (`open` saved session `v152dc11@csnhr.nhr.fau.de`, `cd /home/vault/v152dc/v152dc11/1002_homo_test`, `ls`) via `cluster.WinScp().run`: authentication failed, the key needs its passphrase and Pageant was not running. Nothing on Fritz was touched. Waiting for the user to unlock the key with Pageant.
+
+### Final response (verbatim)
+
+> The login failed because your Fritz key has a passphrase, and Pageant (PuTTY's key agent) isn't running right now, so WinSCP can't unlock the key without you. Nothing was changed on Fritz.
+>
+> Please unlock the key once:
+> 1. In HoMo CFD, open **Fritz cluster** and click **Unlock key with Pageant**.
+> 2. Pageant asks for your passphrase in its own window; type it there.
+> 3. Tell me when that's done, and I'll list `1002_homo_test` (read-only).
+
+### Follow-up (2026-10-09)
+
+> i have unlocked
+
+### Contributor messages (verbatim)
+
+> Your test is visible on Fritz. You put two STEP files into `1002_homo_test`, `FW_V1.stp` and `1008_RW_V4.stp`, and started the run at 03:43. The meshing log `mesh.o4317217` was last written at 03:57. There's also an `ERRORS` file of 19 bytes, exactly the length of `mesh.java`'s message "Adding CAD failed". The case's `mesh.java` is the same size as your Downloads copy (53,705 bytes).
+>
+> Copying `ERRORS` and the meshing log to my scratch folder to see what happened (read-only for Fritz):
+
+> The cause is clear from the log:
+>
+> 1. `mesh.java` read `FW_V1.stp`, and STAR-CCM+ reported **"Imported 29 CAD Parts"**. Your STEP file is an assembly of 29 bodies, so STAR-CCM+ didn't create one part named `FW_V1`.
+> 2. The macro then looks for a single part with exactly the file's name (`FW_V1`, in upper or lower case). That doesn't exist, so it fails with "Adding CAD failed" and stops importing. `1008_RW_V4.stp` was never read.
+> 3. On top of that, neither name contains the macro's keywords: `FW_V1` doesn't contain "frontwing" and `1008_RW_V4` doesn't contain "rearwing". So even if the import had worked, the old parts would not have been replaced; the new ones would only have been added to "remaining parts".
+>
+> The meshing then carried on with the old car. Checking where the job is now:
+
+### Work record
+
+- WinSCP (read-only; key unlocked by the user in Pageant): `ls /home/vault/v152dc/v152dc11/1002_homo_test`: STARTED and deleteDate.txt 03:43, `mesh.o4317217` 03:57, `UPSI_CFD_BASE_0830_mk3.sim` (6.4 GB), `FW_V1.stp` (3.2 MB), `1008_RW_V4.stp` (1.3 MB), `mesh.java` (53,705 bytes, 2025-11-13), `ERRORS` (19 bytes), job scripts and macros. Copied `ERRORS` and `mesh.o4317217` to the scratch folder with `get` (nothing changed on Fritz).
+- `ERRORS`: "Adding CAD failed". Log (licence lines filtered): "Reading CAD model from file: FW_V1.stp", "Imported 29 CAD Parts", then the normal meshing operations; still meshing (surface remesher) at 03:57. No rans/post logs yet.
+- Proposed a fixed team copy of `mesh.java` (reparent every part the import creates, short name keywords FW/RW/UT, per-file errors, deflector fix), to be compiled locally and tested once by the user. No changes made.
+
+### Final response (verbatim)
+
+> The meshing job was still running when I copied the log, at 03:57. It's meshing the **old** car, and afterwards the chain will solve and post-process it as usual. So this run will give you the baseline geometry, not FW_V1 or RW_V4. If you don't want to spend the cluster time on that, cancel the job yourself (HoMo can't cancel jobs). I haven't touched anything on Fritz.
+>
+> **Two ways forward:**
+> 1. **Quick workaround, without changing the macro:** rename the files so the names contain the keywords, e.g. `frontwing_v1.stp` and `rearwing_v4.stp`. That only fixes the part choice, though. The 29-body assembly would still make the macro fail, unless the STEP is exported as a single body.
+> 2. **Fix `mesh.java` (my recommendation):** make a team copy where:
+>    - after importing a file, the macro takes **all new parts** STAR-CCM+ created, however many bodies the STEP has, and moves them into the right group;
+>    - short names work too: `FW` / `frontwing`, `RW` / `rearwing`, `UT` / `undertray`, `mono`, `deflector`;
+>    - a failing file is skipped with its reason written to `ERRORS` (e.g. "FW_V1.stp: …"), and the other files still get imported;
+>    - the deflector crash is fixed.
+>
+>    I'd compile it against STAR-CCM+ 2506 here and you'd test it once in a case folder, like with `export3D.java`.
+>
+> Should I do option 2?
+
+## 2026-10-09 — Fixed mesh.java for part replacement from CAD
+
+### User messages (verbatim)
+
+> yes go ahead. i'll cancle the job
+
+> i have also renamed STEP files
+
+### Contributor messages (verbatim)
+
+> I'll build the fixed copy now. First two read-only checks:
+> - Whether `mesh.java` contains anything personal, such as paths or keys.
+> - `mesh.sh`, to see whether the chain continues to the solver when meshing fails. That decides whether a failed import should stop the run.
+
+> Two findings:
+> - `mesh.sh` always submits the solver job (`sbatch rans.sh`) after meshing, whatever the macro did. The macro can't stop the chain, so a failed import needs to be impossible to miss in `ERRORS`. A warning in HoMo's case list could come later.
+> - `mesh.java` has a previous member's Fritz path hard-coded (`/home/vault/iwst/iwst074h/`), used only to label the simulation name in scenes. With your folders it gives a wrong label, so I'll replace it with the case folder's name. That also keeps their path out of the repo, as we did with `postprocessing.java`.
+>
+> Checking the STAR-CCM+ calls the new import needs:
+
+> The calls are there. The import will compare STAR-CCM+'s list of parts before and after reading the file, and move every new part into the target group. That works for single bodies and for assemblies like your 29-body front wing. Checking two more details in `mesh.java` before editing:
+
+> `vehicle` is never used after it's set, so the missing deflector group only matters inside `addCAD()`. Making the team copy `starccm/mesh.java` from your Downloads version and changing only the CAD import, the group lookup and the name label:
+
+> Noted that you renamed the STEP files. I'll check the new names against the macro's naming rules once it compiles. Right now I'm writing the fixed `mesh.java`:
+
+> It compiles against STAR-CCM+ 2506, with the same compiler notes the original had, and the other member's path is gone. Now your renamed files on Fritz (read-only listing):
+
+> Both new names match the macro's rules: `frontwing_V1.stp` replaces the front wing (C_FRONTWING) and `1008_rearwing_V4.stp` replaces the rear wing (C_REARWING). With the old `mesh.java` on Fritz, though, the 29-body front wing would still fail, so the new macro has to go into that folder.
+>
+> One more thing to check first. If the cancelled job had got as far as saving, the `.sim` could now hold the 29 stray front-wing parts from the failed import. Checking its timestamp and how the job ended:
+
+> The job ended before saving: the `.sim` on Fritz is still from 2 October, so your base model is untouched. Now the macro README and the notes:
+
+### Work record
+
+- Read-only on Fritz (WinSCP `ls`, `get` into the scratch folder): `mesh.sh` (licence key not shown; ends with `starccm+ -batch mesh.java …` then `sbatch rans.sh`), the case listing (`frontwing_V1.stp`, `1008_rearwing_V4.stp`, old `ERRORS`, `STARTED`), `.sim` unchanged (2026-10-02 16:05), the cancelled job's log ended without saving.
+- New `starccm/mesh.java` (from `C:\Users\Archit\Downloads\mesh.java`, CRLF kept): reworked `addCAD()` with `group()` and `groupName()`; error text includes the reason; annotation uses the case folder name (former member's path removed). STAR-CCM+ 2506 API checked with `javap` (`SimulationPartManager.getParts`, `GeometryPartManager.reparentParts(Collection, GeometryPartManager)`, `removeParts`, `CompositePart.getChildParts`). Compiles with STAR's javac.
+- Docs: `starccm/README.md` (new section "New parts from CAD files"), `CHANGELOG.md` (2026-10-09), `STATUS.md`.
+- Not run on Fritz yet; nothing uploaded; nothing committed.
+
+### Final response (verbatim)
+
+> The fixed macro is ready: `D:\HoMo-CFD\starccm\mesh.java`. It compiles against STAR-CCM+ 2506 but hasn't run yet.
+>
+> **What's different from the old one:**
+> - It takes **every part** a CAD file creates, so your 29-body front wing works.
+> - Short names work as well: `FW`, `UT`, `RW` (e.g. `FW_V1.stp`), besides `frontwing`, `undertray`, `rearwing`, `mono` and `deflector`.
+> - The old parts of a group are only removed after the new file imported successfully. If a file fails, that group keeps its old parts, the reason goes to `ERRORS`, and the other files still get imported.
+> - Each file gets a line in the meshing log, e.g. `addCAD: frontwing_V1.stp -> C_FRONTWING: 29 part(s) imported, 12 old part(s) removed`.
+> - The former member's Fritz path is gone; the scenes get the case folder's name instead.
+>
+> Your renamed files fit: `frontwing_V1.stp` replaces the front wing and `1008_rearwing_V4.stp` the rear wing. The cancelled job never saved, so the `.sim` on Fritz is still your untouched base model.
+>
+> **To test it in `1002_homo_test`:**
+> 1. In WinSCP, replace that folder's `mesh.java` with `D:\HoMo-CFD\starccm\mesh.java`.
+> 2. Delete the old `ERRORS` file (it's from the failed run) and `STARTED`, so HoMo offers **Start** again. Or run `sbatch mesh.sh` there yourself.
+> 3. After about 15 minutes, check the meshing log `mesh.o…` for the two `addCAD:` lines, and check that no new `ERRORS` file appeared. I can do that check for you.
+> 4. When the run is done, compare CzA Frontwing and CzA Rearwing with the baseline. That shows whether the force monitors picked up the new parts, the one thing I can't check from here.
+>
+> One limit: `mesh.sh` always starts the solver after meshing, so even a failed import gets a full run. That's why step 3 matters.
+>
+> Nothing is committed yet. If you'd rather I do steps 1–2 on Fritz for you, say so.
+
+### Check on Fritz (2026-10-09)
+
+> check
+
+> Checking `1002_homo_test` on Fritz (read-only):
+
+- Read-only listings of `1002_homo_test` and `SCRIPT_RANS`: the user had uploaded the new `mesh.java` (54,152 bytes, same as `starccm/mesh.java`) and removed `ERRORS`, `STARTED`, `deleteDate.txt`, the old log and `plots`; `mesh.sh` was missing too (the template still has it, 3,046 bytes). Not started yet. Nothing changed on Fritz.
+
+> The new `mesh.java` is on Fritz: 54,152 bytes, the same size as my file. The old `ERRORS`, `STARTED`, logs and `plots` are gone, and the job hasn't started yet.
+>
+> **One problem:** `mesh.sh` is missing from `1002_homo_test`, probably deleted along with the old files. Without it the run can't start: **Start** runs `sbatch mesh.sh` and would fail. The template `SCRIPT_RANS` still has it (3,046 bytes, from 12 January), so copy it from there into `1002_homo_test`, then press **Start**. I can do that copy for you if you like; it's the only change I'd make on Fritz.
+
+### Recheck (2026-10-09)
+
+> recheck
+
+- Read-only: `1002_homo_test` now has `mesh.sh` again, `STARTED` 04:20, `mesh.o4317225` (04:39), no `ERRORS`. Log (licence lines filtered): "Reading CAD model from file: 1008_rearwing_V4.stp" / "Imported 9 CAD Parts" / `addCAD: 1008_rearwing_V4.stp -> C_REARWING: 1 part(s) imported, 1 old part(s) removed`; "frontwing_V1.stp" / "Imported 29 CAD Parts" / `addCAD: frontwing_V1.stp -> C_FRONTWING: 1 part(s) imported, 1 old part(s) removed`; mesh operations through Y_small complete (Z_Wrapper 266 s vs 210 s before); still meshing at 04:39. Force monitors for the new parts still to be checked after the run.
+
+> [Reported: the import worked for both files (9 and 29 bodies, one part each, one old part removed per group), no ERRORS, the new parts are in the mesh, meshing nearly done and the chain continues; open point: compare CzA Frontwing / CzA Rearwing with the local baseline run in Δ vs reference once the new run is downloaded; offered to check the log again.]
+
+### Question (2026-10-09)
+
+> what did you change in mesh.sh?
+
+- No change was ever made to `mesh.sh`: it was only read (copied to the scratch folder). The copy now in `1002_homo_test` (3,046 bytes, 2026-01-12) matches the template's.
+
+> [Answered: nothing; `mesh.sh` was only read to learn that it always runs `sbatch rans.sh`; when it was missing I only offered to copy it; the current copy matches `SCRIPT_RANS` (3,046 bytes, 12 January); the only HoMo file on Fritz is the new `mesh.java`, uploaded by the user.]
+
+### Question (2026-10-09)
+
+> yeah, okay, what did you changed in mesh.java?
+
+> Comparing the new file with your original line by line, so the list is exact:
+
+- `diff` of `C:\Users\Archit\Downloads\mesh.java` against `starccm/mesh.java` (line endings ignored): changes only at the header, the removed `workingDir` field and its use, the part-group lookups, the addCAD error message and `addCAD()` with the two new helpers.
+
+> [Listed the five changes with line numbers in starccm/mesh.java: header comment; former member's path removed, label from the case folder name (1067); safe part-group lookup (71–76); error message with the reason (94); reworked addCAD() (1084–1152): FW/UT/RW and case-insensitive names and extensions, parts found by comparing the part list before and after import, old parts removed only after a successful import and once per group, per-file errors in ERRORS, one log line per file, files in name order, import settings unchanged. Everything else unchanged.]
+
+## 2026-10-09 — STAR-CCM+ 2506 or 2606? (question only)
+
+### User messages (verbatim)
+
+> do you think i shoild move from star-ccm+ 2506 to 2606?
+
+### Work record
+
+- Question only; no changes. Facts used: job scripts load `star-ccm+/2506-r8-clang`; this PC has STAR-CCM+ 20.04 (2506) and 19.02; the macros are compiled against 2506 and use deprecated calls (`removeParts`, `deleteInterfaces`). Whether Fritz offers 2606 was not checked.
+
+### Final response (verbatim)
+
+> [Recommended not switching now unless 2606 has a needed feature or fix, or Fritz drops 2506. Reasons: a 2606 `.sim` cannot be opened in 2506, so the whole team switches together; job scripts load the 2506 module; macros need recompiling against 2606 (deprecated calls may be gone); results shift slightly between versions, so the baseline should be rerun. Safe order if switching: check Fritz for a 2606 module (offered a read-only `module avail`), install 2606 locally and recompile the macros, run one known case in both versions and compare CzA/CxA in the Δ view, then switch the template's job scripts and tell the team the same day; between design cycles, not before a design freeze.]
+
+## 2026-10-10 — Mobile version? (question only)
+
+### User messages (verbatim)
+
+> is there a possiblity to make a mobile version somehow?
+
+### Work record
+
+- Question only; no changes. Basis: `serve.py` listens on 127.0.0.1 and rejects non-local requests by design; 3D exports are 75–150 MB with 6–13 million triangles; the WinSCP key and Pageant are on the PC.
+
+### Final response (verbatim)
+
+> [Explained: possible without an app; the phone opens HoMo in its browser, served by the PC. Proposal: an opt-in, read-only "phone access" mode for devices on the same Wi-Fi with a one-time code (no Fritz start/upload/download from the phone), a phone layout for the table, section images (swipe) and pressure plots; away from home via the PC plus a private VPN such as Tailscale or the university VPN. Limits: the full 3D model is too heavy for most phones (would need a reduced model); Fritz status only through the PC. Not recommended: a native app or a cloud copy of the results. Asked what it would mainly be used for (results, Fritz status, or showing the 3D car); suggested starting with read-only phone access for table and images.]
+
+### Follow-up (2026-10-10)
+
+> okay, how about a version where i can get all the result table? i don't need to see images, pressure plots, or 3d view. (so far i have terminus app to see stuff on cluster from phone)
+
+> [Offered two options. A (recommended): a script on Fritz run from Termius that prints one line per case (state, CzA, CxA, L/D, downforce and drag at each case's simulated speed) from `plots/Coefficients_*.csv`, no PC needed, narrow layout, sorting and single-case detail; limit: only cases still on Fritz. B: a read-only phone page of HoMo's table through the PC (same Wi-Fi or a VPN), showing all finished cases, but the PC must be on. Asked which one (or A now and B later).]
+
+## 2026-10-10 — Results table on Fritz for Termius (option A)
+
+### User messages (verbatim)
+
+> option A is good
+
+### Contributor messages (verbatim)
+
+> I'll write it as a single Python file using only the standard library, so it runs with whatever Python Fritz's login nodes have. To match HoMo exactly, I'll reuse HoMo's rules: how it reads the coefficients and computes the forces, and how `cluster.py` works out a case's state from its job files. Reading those:
+
+> I have everything I need. HoMo reads the last row of `plots/Coefficients_*.csv`, takes CzA, CxA and the parts' monitors, and computes downforce and drag as ½ρv²·(−CzA) and ½ρv²·(−CxA). The state comes from the job files. Fritz's login nodes may run an older Python (3.6), so I'll write the script for that and check it against 3.6 syntax. Checking two details first: the "probably stopped" time limit, and whether the test data has `Settings` files with a speed:
+
+> Writing the script, `fritz/homo-table.py`:
+
+> Checking that the script only uses Python 3.6 syntax, then running it on your local `finished` folder: once narrow like a phone (45 columns), once wide, and once for one case in detail:
+
+> The script works on your local results. At 45 columns, a phone screen in portrait, it shows case, state, CzA, CxA and L/D. Wider screens also get forces, speed and the age of the last log. The detail view lists every part's monitors.
+>
+> Locally many cases show "wait?", because the downloaded copies don't contain all job logs, and older ones have no speed in `Settings`. On Fritz, where the logs and `Settings` are present, the states and forces will be complete.
+>
+> Now unit tests for the script. They build cases in every state, including a failed post-processing and a run that stopped, and check the forces, sorting, the detail view and that it never writes anything:
+
+> All 8 pass. Teammates should get the script too, so I'll add the `fritz` folder to the portable zip, with a short README that explains setup in Termius:
+
+> Docs and the full test runs:
+
+> Both suites pass: 90 unit tests (8 new) and 174 browser checks. Log:
+
+### Work record
+
+- New `fritz/homo-table.py` (read-only, stdlib, Python 3.6 syntax) and `fritz/README.md` (setup with an `ht` alias in `~/.bashrc`, usage, states, force formula). Logic mirrors `web/app.js` (`classifyHeader`, forces, L/D) and `cluster.py` (`case_state`, `POST_FAILED`, `STALE_HOURS`).
+- Tried on `D:\CFD_tool\finished` at 45 and 90 columns and in detail view (1002_homo_test: 420.7 N downforce, 140.5 N drag at 40 km/h, L/D 2.99).
+- `tests/test_homo_table.py` (8 tests). `tools/make_portable.py`: `fritz` added to the zip; `tests/test_portable.py` expects `fritz/homo-table.py` and `starccm/mesh.java`. Docs: `CHANGELOG.md` (2026-10-10), `STATUS.md`, `tests/README.md`.
+- Checks: `py -m unittest discover -s tests` 90 tests OK; `py tests/run_browser_tests.py` 174/174 passed.
+- Not uploaded to Fritz; not committed; zip not rebuilt.
+
+### Final response (verbatim)
+
+> The script is ready: `D:\HoMo-CFD\fritz\homo-table.py`. On a phone in portrait it looks like this (your local results):
+>
+> ```
+> Case               State     CzA    CxA   L/D
+> L_1010_concept_re~  done  -5.728 -1.818  3.15
+> L_1009_concept_v1~  done  -3.189 -1.618  1.97
+> 1002_homo_test      done  -5.755 -1.922  2.99
+> ```
+>
+> Turn the phone sideways (or add `--wide`) for downforce and drag in N, the speed and the age of the last log. `ht 1002_homo_test` shows one case with every part's CzA and CxA, and `--sort downforce`, `drag`, `ld` or `name` changes the order. It only reads files, never changes anything, and needs nothing installed on Fritz.
+>
+> **Set up once:**
+> 1. Copy `homo-table.py` into `/home/vault/v152dc/v152dc11` (your folder with the cases) with WinSCP.
+> 2. In Termius, run once:
+>    ```sh
+>    echo "alias ht='python3 /home/vault/v152dc/v152dc11/homo-table.py'" >> ~/.bashrc
+>    source ~/.bashrc
+>    ```
+> 3. From then on just type `ht`.
+>
+> I can do step 1 for you if you like. `fritz/README.md` has the same instructions for teammates, and the folder is now part of the portable zip.
+>
+> Tests: 90 unit tests (8 new for the script) and 174 browser checks pass. Nothing is committed yet, including the palettes and `mesh.java` from the last days.
+
+## 2026-10-10 — Slow start: results listing cached on the SSD
+
+### User messages (verbatim)
+
+> okay, back to main stream. homo is taking more time now when i open it to load all the results
+
+### Contributor messages (verbatim)
+
+> I'll measure where the time goes, starting with the server side. Your HoMo is running on port 5173, so I'll time the same requests the page makes when it opens (read-only):
+
+> The server isn't the slow part: the folder listing takes 0.15 s, though it's 1.7 MB. So the time goes to what the page does after that. I'll open HoMo in a headless browser against your real results, on a separate port so your running HoMo isn't affected, and record what it requests and how long each part takes:
+
+> In a fresh browser, HoMo shows your 16 simulations after **1.1 seconds**:
+> - Folder listing: 0.14 s (1.7 MB).
+> - The 16 coefficient files: 0.4 s together (4.3 MB). Each holds the whole iteration history, about 270 KB.
+> - Nothing else is slow.
+>
+> So a fresh start against your results is fast. The slowness you see must come from something specific to your setup. The likely candidates:
+> - **First start after booting the PC:** the folder scan then reads from disk instead of memory.
+> - **Windows that reopen with HoMo:** for example a 3D viewer reloading a 150 MB car, or comparison windows.
+>
+> Checking HoMo's log on your PC for slow or repeated requests:
+
+> The end of the log shows image and 3D viewer use, not the start. Finding the start-ups in the log and how long each took, from opening the page to the last coefficient file:
+
+> The log has the answer. Between opening the page and the folder listing finishing, your HoMo takes **7 to 15 seconds**: 17:48:42 → 17:48:57, 18:13:08 → 18:13:15, 18:16:28 → 18:16:39. In my test the same step took half a second. The coefficient files then all arrive within the same second. Looking at what happens in between:
+
+> The time is in the folder listing itself. The page asks for it at 18:16:29, and the server needs **10 seconds** to answer. Right now it takes 0.15 s, so it's fast at some moments and slow at others (18:03 took one second). That points to the disk: when Windows has the folder information in memory, the scan is quick; when it has to read it from the disk again, it's slow. Checking what the scan does and what kind of drive `D:` is:
+
+> That's it:
+> - **`D:` is a laptop hard disk** (Seagate ST1000LM049, spinning), not an SSD. Your `C:` drive is the fast NVMe SSD.
+> - When Windows has your results folder's directory information cached in memory, the scan takes 0.15 s. Once that cache is pushed out, for example after opening a big 3D car or a download, the disk has to seek through every folder again, and that takes 7–15 s.
+> - It got worse as you added simulations: each one adds about 25 folders with hundreds of images.
+>
+> Checking how many folders and files the scan touches:
+
+> The scan covers **417 folders and about 50,000 files**. On the hard disk that's the 7–15 seconds whenever Windows has to read the folders again.
+>
+> **Plan:** HoMo keeps a copy of the last folder listing on your fast `C:` drive (in `%APPDATA%\HoMo-CFD`). On opening, it shows the results from that copy straight away, then checks the hard disk in the background. If something changed, such as a new or deleted simulation, the page updates by itself a few seconds later. Reading how the page uses the listing:
+
+> I'm making the server keep a copy of the folder listing on the SSD. Checking where HoMo stores its settings and how the server sends JSON responses:
+
+> The listing endpoint only receives the folder path, so the server will read one extra flag (`cached=1`) itself. Only the start page sends it; other callers are unaffected. Server side first:
+
+> Adding the cache to the request handler, next to its other shared state:
+
+> Now the tests. Unit tests for the server's saved listing:
+> - the first scan saves it;
+> - a later start gets the saved copy even after a new folder appeared;
+> - a fresh scan updates the copy;
+> - a copy saved for a different results folder is never used.
+
+> My new tests used the wrong temporary folder. Fixing that and running them again:
+
+> The server tests pass. Now an end-to-end check in the browser. The test server gets two test-only routes that add and remove a copied case folder. The page should then open with the saved listing (2 simulations) and update itself to 3 without a reload. Reading the end of the server-mode test and the runner's routes:
+
+> The behaviour is right. The page first showed the saved listing (caseA, caseB) and then updated itself. The fresh scan also found `caseC`, which an earlier test downloads into `finished`. So the check only needs to compare "caseZ missing at first, present afterwards":
+
+> All 175 browser checks pass. One compatibility point: your running HoMo still has the old `serve.py` in memory until it's restarted. If you reload the page before restarting, the new page talks to the old server, which ignores the new flag. I'll make the page handle that too:
+
+> The saved listing works with your real results: the first start scans and saves the copy (1.7 MB in the settings folder); the second start shows the table from the copy and scans in the background. Right now your folders are in Windows' memory, so both starts take under a second. The difference shows when the disk is "cold", as in your 7–15 s cases. The page also works with your currently running, older HoMo. Docs and log:
+
+> The page changed after the last browser run (the old-server fallback), so running the browser checks once more:
+
+### Work record
+
+- Measurements (read-only; separate `serve.py` instance on a free port with the user's `D:\CFD_tool`, headless Chrome, scratch APPDATA): table after 1.06 s; `/api/tree` 0.14 s / 1.7 MB; 16 coefficient CSVs 4.3 MB. User's log `%APPDATA%\HoMo-CFD\homo-cfd.log`: `/api/tree` finished 7–15 s after the page at 17:48, 18:00, 18:13, 18:16, 1 s at 18:03. `D:` = ST1000LM049 SATA HDD, `C:` NVMe. Tree: 417 folders, 49,968 files.
+- `serve.py`: `TreeCache` (memory + `tree-cache.json` in the settings folder, keyed by results path, atomic write), `Handler.tree_cache`, `api_tree` with `cached=1` for the results root. `web/server-fs.js`: `fillServerListings`, `prefetchServerTree(handle, {cached})` (also accepts an old server's plain tree), `freshServerTree`. `web/app.js`: `loadResultsRoot(handle, fresh)` and `refreshResultsRoot`.
+- Tests: `tests/test_serve.py` (2 new), `tests/run_browser_tests.py` (test routes `/__fs/add-case`, `/__fs/remove-case`, slow fresh scan while the added case exists), `tests/browser/server-mode.html` (1 new check). Docs: `CHANGELOG.md`, `STATUS.md`, `DECISIONS.md`, `tests/README.md`.
+- Real-data check with the harness: start 1 scanned (1 tree request) and saved the copy; start 2 used it plus a background scan (2 tree requests).
+- Checks: `py -m unittest discover -s tests` 92 tests OK; `py tests/run_browser_tests.py` 175/175 passed.
+- The user's running HoMo needs a restart (⏻, then the desktop shortcut) for the server part. Not committed; zip not rebuilt.
+
+### Final response (verbatim)
+
+> Found and fixed. HoMo itself isn't slower; your results folder is on a **hard disk**. `D:` is a spinning laptop disk, unlike your fast `C:` SSD. Each time HoMo opens, it lists the whole results folder: 417 folders and about 50,000 files. When Windows still has that in memory, it takes 0.15 s. When it doesn't, for example after opening a big 3D car or after a download, the disk has to read it all again. Your log shows that taking **7 to 15 seconds** at several starts today. It grew with every simulation you added.
+>
+> **The fix:** HoMo now keeps a copy of that listing on your SSD (in `%APPDATA%\HoMo-CFD`, about 2 MB). When you open it, the table appears straight away from the copy. The hard disk is checked in the background, and if a simulation was added or removed in the meantime, the page updates by itself a few seconds later.
+>
+> **To get it:** stop HoMo once with the ⏻ button and start it again with the desktop shortcut. The very first start after that still scans once to make the copy; from then on it's quick.
+>
+> All tests pass: 92 unit tests and 175 browser checks, including one that adds a simulation between two starts and checks that it appears by itself. Nothing is committed yet; that now includes the palettes, `mesh.java`, the Fritz table script and this fix. Say if you want it all pushed and the zip rebuilt.
+
+### Commit and zip (2026-10-10)
+
+> yes
+
+> Three stray folders appeared in the project folder (`homo-cfd-serve-…`). They come from my first, faulty version of the new server tests, which wrote its test copy into the current folder instead of the temporary one. Checking what's in them before removing them:
+
+> They contain only test listings from 18:37, the time of that faulty run. Removing them, then logging, committing, pushing and rebuilding the zip:
+
+- Removed the three `homo-cfd-serve-*` folders (one `tree-cache.json` test listing each). Diff checked for keys and passwords (none; only log text mentioning passphrases). Committed palettes from maps.colormap, `starccm/mesh.java`, `fritz/homo-table.py`, the results-listing cache and the docs on `night-2026-10-02`, pushed to `origin/night-2026-10-02` and `origin/master`, rebuilt `dist/HoMo-CFD-portable.zip`.
+
+> Done: everything is committed and on GitHub (`master` and `night-2026-10-02`), and the zip is rebuilt with it, including `fritz/homo-table.py` and the new `mesh.java`. Remember to restart HoMo once (⏻, then the desktop shortcut) to get the faster start.

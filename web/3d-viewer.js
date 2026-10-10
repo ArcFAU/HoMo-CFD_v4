@@ -121,17 +121,29 @@ function indexStreamlines(parts){const lines=[],rows=[];
   return lines.length?lines:null;}
 // Screen x/y follow the view basis; nearer points (larger "back") get the smaller depth, so the image is a true, unmirrored view.
 const CAMERA_GLSL=`uniform vec2 size,pan;uniform vec3 center,right,up,back;uniform float radius,zoom;vec4 project(vec3 p){vec3 a=(p-center)/radius;vec3 q=vec3(dot(a,right),dot(a,up),dot(a,back));return vec4(q.x*zoom*size.y/size.x+pan.x,q.y*zoom+pan.y,-q.z*.4,1.);}`;
-// Colour palettes for the field values: seven colours from low to high, blended in between. Rainbow is the original one.
-const PALETTES={rainbow:{label:"Rainbow",stops:["#5233db","#1485fa","#0ddbc7","#30e63d","#ffe614","#ff730f","#db1412"]},
-  star:{label:"STAR-CCM+ (blue–red)",stops:["#0000ff","#0080ff","#00ffff","#40ff40","#ffff00","#ff8000","#ff0000"]},
-  coolwarm:{label:"Cool–warm",stops:["#3b4cc0","#6f92f3","#aac7fd","#dddddd","#f7b89c","#e7745b","#b40426"]},
-  viridis:{label:"Viridis",stops:["#440154","#443983","#31688e","#21918c","#35b779","#90d743","#fde725"]},
-  inferno:{label:"Inferno",stops:["#000004","#320a5e","#781c6d","#bc3754","#ed6925","#fbb61a","#fcffa4"]},
-  grey:{label:"Grey",stops:["#1c1c1c","#424242","#686868","#8e8e8e","#b4b4b4","#dadada","#ffffff"]},
-  magentagold:{label:"Magenta–gold",stops:["#4a1470","#9c1f9a","#e0407a","#f0705a","#f5a742","#f7d24a","#fff3a8"]}};
-let palette="rainbow";
-const paletteStops=()=>PALETTES[palette].stops.flatMap(hex=>[1,3,5].map(i=>parseInt(hex.slice(i,i+2),16)/255));
-const PALETTE_GLSL=`uniform vec3 stops[7];vec3 pal(float t){float x=clamp(t,0.,1.)*6.;int i=min(int(x),5);return mix(stops[i],stops[i+1],fract(x));}`;
+// Colour palettes for the field values, low to high: colour points at positions 0…1 (or colours evenly spaced),
+// blended into a 256-step table that the shaders look up. The "STAR-CCM+" group comes from the team's colormaps
+// (D:\SIM\maps.colormap, blended in RGB as there; STAR-CCM+'s transparency is not used; turbo thinned to 33 points).
+const evenly=colors=>colors.map((color,i)=>[i/(colors.length-1),color]);
+const PALETTES={rainbow:{label:"Rainbow",points:evenly(["#5233db","#1485fa","#0ddbc7","#30e63d","#ffe614","#ff730f","#db1412"])},
+  star:{label:"STAR-CCM+ (blue–red)",points:evenly(["#0000ff","#0080ff","#00ffff","#40ff40","#ffff00","#ff8000","#ff0000"])},
+  coolwarm:{label:"Cool–warm",points:evenly(["#3b4cc0","#6f92f3","#aac7fd","#dddddd","#f7b89c","#e7745b","#b40426"])},
+  viridis:{label:"Viridis",points:evenly(["#440154","#443983","#31688e","#21918c","#35b779","#90d743","#fde725"])},
+  inferno:{label:"Inferno",points:evenly(["#000004","#320a5e","#781c6d","#bc3754","#ed6925","#fbb61a","#fcffa4"])},
+  grey:{label:"Grey",points:evenly(["#1c1c1c","#424242","#686868","#8e8e8e","#b4b4b4","#dadada","#ffffff"])},
+  magentagold:{label:"Magenta–gold",points:evenly(["#4a1470","#9c1f9a","#e0407a","#f0705a","#f5a742","#f7d24a","#fff3a8"])},
+  faubwr:{label:"FAU-bwr",group:"STAR-CCM+",points:[[0,"#04316a"],[0.25,"#186af4"],[0.375,"#988cf8"],[0.5,"#ffffff"],[0.625,"#fed07e"],[0.75,"#fd6b32"],[1,"#ff0000"]]},
+  hivo:{label:"HiVo Transparent",group:"STAR-CCM+",points:[[0,"#000000"],[0.25,"#800000"],[0.5,"#ff9000"],[0.75,"#c0c0c0"],[1,"#ffffff"]]},
+  turbo:{label:"turbo",group:"STAR-CCM+",points:[[0,"#30123b"],[0.0314,"#392a73"],[0.0627,"#4040a2"],[0.0941,"#4456c7"],[0.1255,"#466be3"],[0.1569,"#4680f6"],[0.1882,"#4294ff"],[0.2196,"#37a8fa"],[0.251,"#28bceb"],[0.2824,"#1ccdd8"],[0.3137,"#18ddc2"],[0.3451,"#1fe9af"],[0.3765,"#32f298"],[0.4078,"#4ef97d"],[0.4392,"#6dfe62"],[0.4706,"#8bff4b"],[0.502,"#a4fc3c"],[0.5333,"#b9f635"],[0.5647,"#cdec34"],[0.5961,"#dfdf37"],[0.6275,"#eecf3a"],[0.6588,"#f8be39"],[0.6902,"#fdac34"],[0.7216,"#fe962b"],[0.7529,"#fb7e21"],[0.7843,"#f46617"],[0.8157,"#eb500e"],[0.8471,"#df3f08"],[0.8784,"#d02f05"],[0.9098,"#be2102"],[0.9412,"#a91601"],[0.9725,"#920b01"],[1,"#7a0403"]]},
+  blueredbalanced:{label:"blue-red balanced",group:"STAR-CCM+",points:[[0,"#1d328a"],[0.1574,"#3f5aba"],[0.309,"#89cade"],[0.4577,"#aad56c"],[0.6093,"#fcfd58"],[0.7405,"#ff6441"],[0.8717,"#f03c25"],[1,"#561b1c"]]}};
+let palette="rainbow",paletteTexture=null;
+// 256 RGBA steps, blended linearly between the palette's colour points.
+function paletteTable(name=palette){const points=PALETTES[name].points,rgb=hex=>[1,3,5].map(i=>parseInt(hex.slice(i,i+2),16)),table=new Uint8Array(256*4);
+  for(let i=0;i<256;i++){const x=i/255;let k=0;while(k<points.length-2&&x>points[k+1][0])k++;const [x0,c0]=points[k],[x1,c1]=points[k+1],f=x1>x0?Math.min(1,Math.max(0,(x-x0)/(x1-x0))):0,a=rgb(c0),b=rgb(c1);
+    for(let j=0;j<3;j++)table[4*i+j]=Math.round(a[j]+(b[j]-a[j])*f);table[4*i+3]=255;}return table;}
+function uploadPalette(){if(!gl)return;paletteTexture??=gl.createTexture();gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,paletteTexture);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,256,1,0,gl.RGBA,gl.UNSIGNED_BYTE,paletteTable());
+  for(const [key,value] of [[gl.TEXTURE_MIN_FILTER,gl.LINEAR],[gl.TEXTURE_MAG_FILTER,gl.LINEAR],[gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE],[gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE]])gl.texParameteri(gl.TEXTURE_2D,key,value);}
+const PALETTE_GLSL=`uniform sampler2D paletteTable;vec3 pal(float t){return texture(paletteTable,vec2(clamp(t,0.,1.)*(255./256.)+.5/256.,.5)).rgb;}`;
 // Lines (streamlines, bar2 edges) as strips of two triangles facing the screen, `width` pixels wide, one instance per
 // segment with both end points and their values (x, y, z, value): WebGL draws plain lines only 1 pixel wide.
 function makeLineRenderer(){const program=makeProgram(`#version 300 es
@@ -150,11 +162,11 @@ function makeRenderer(data){if(!gl)throw Error("WebGL2 is unavailable in this br
  const fs=`#version 300 es\nprecision highp float;in float cp;in float light;uniform float lo,hi;out vec4 color;${PALETTE_GLSL}void main(){if(isnan(cp)||cp!=cp){color=vec4(vec3(.45)*light,1.);return;}color=vec4(pal((cp-lo)/max(hi-lo,.00001))*light,1.);}`;
  const program=makeProgram(vs,fs);
  const vao=gl.createVertexArray();gl.bindVertexArray(vao);let cpBuffer,positionBuffer,normalBuffer;for(const [name,array,n] of [["p",data.pos,3],["n",data.normal,3],["val",data.cp,1]]){const b=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,b);gl.bufferData(gl.ARRAY_BUFFER,array,gl.STATIC_DRAW);if(name==="val")cpBuffer=b;else if(name==="n")normalBuffer=b;else positionBuffer=b;const loc=gl.getAttribLocation(program,name);gl.enableVertexAttribArray(loc);gl.vertexAttribPointer(loc,n,gl.FLOAT,false,0,0);}const ib=gl.createBuffer();gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,ib);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,data.ix,gl.STATIC_DRAW);gl.bindVertexArray(null);renderer={program,vao,ib,lines:makeLineRenderer(),cpBuffer,positionBuffer,normalBuffer,data};model=data;setView(DEFAULT_VIEW,false);document.querySelector("#view-control").hidden=false;document.querySelector("#axes").hidden=false;document.querySelector("#auto-range").disabled=false;document.querySelector("#reset-view").disabled=false;document.querySelector("#legend").hidden=false;message.hidden=true;draw();}
-function draw(){if(!renderer)return;const d=Math.min(devicePixelRatio||1,2),w=Math.max(1,canvas.clientWidth*d),h=Math.max(1,canvas.clientHeight*d);if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h;}gl.viewport(0,0,w,h);gl.clearColor(.055,.07,.09,1);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);gl.enable(gl.DEPTH_TEST);gl.useProgram(renderer.program);gl.bindVertexArray(renderer.vao);const u=n=>gl.getUniformLocation(renderer.program,n),data=model,view=viewBasis();setCamera(renderer.program,w,h,view);gl.uniform1f(u("shading"),shading?1:0);const [lo,hi]=colorLimits(),stops=paletteStops();gl.uniform1f(u("lo"),lo);gl.uniform1f(u("hi"),hi);gl.uniform3fv(u("stops"),stops);
+function draw(){if(!renderer)return;const d=Math.min(devicePixelRatio||1,2),w=Math.max(1,canvas.clientWidth*d),h=Math.max(1,canvas.clientHeight*d);if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h;}gl.viewport(0,0,w,h);gl.clearColor(.055,.07,.09,1);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);gl.enable(gl.DEPTH_TEST);gl.useProgram(renderer.program);gl.bindVertexArray(renderer.vao);const u=n=>gl.getUniformLocation(renderer.program,n),data=model,view=viewBasis();setCamera(renderer.program,w,h,view);gl.uniform1f(u("shading"),shading?1:0);const [lo,hi]=colorLimits();gl.uniform1f(u("lo"),lo);gl.uniform1f(u("hi"),hi);gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,paletteTexture);
   // Surfaces sit a little behind the lines drawn on them (streamlines, surface flow).
   gl.enable(gl.POLYGON_OFFSET_FILL);gl.polygonOffset(1,1);gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,renderer.ib);for(const range of data.ranges)if(range.count&&!hiddenParts.has(range.name))gl.drawElements(gl.TRIANGLES,range.count,gl.UNSIGNED_INT,range.start*4);gl.disable(gl.POLYGON_OFFSET_FILL);
   // Lines keep their width in screen (CSS) pixels on any display.
-  const lines=renderer.lines,lu=n=>gl.getUniformLocation(lines.program,n);gl.useProgram(lines.program);gl.bindVertexArray(lines.vao);setCamera(lines.program,w,h,view);gl.uniform1f(lu("lo"),lo);gl.uniform1f(lu("hi"),hi);gl.uniform3fv(lu("stops"),stops);gl.uniform1f(lu("width"),lineWidth*w/Math.max(1,canvas.clientWidth));gl.bindBuffer(gl.ARRAY_BUFFER,lines.segments);
+  const lines=renderer.lines,lu=n=>gl.getUniformLocation(lines.program,n);gl.useProgram(lines.program);gl.bindVertexArray(lines.vao);setCamera(lines.program,w,h,view);gl.uniform1f(lu("lo"),lo);gl.uniform1f(lu("hi"),hi);gl.uniform1f(lu("width"),lineWidth*w/Math.max(1,canvas.clientWidth));gl.bindBuffer(gl.ARRAY_BUFFER,lines.segments);
   for(const range of renderer.lineRanges??[])if(range.count&&!hiddenParts.has(range.name)){const offset=range.start/2*32;gl.vertexAttribPointer(lines.a,4,gl.FLOAT,false,32,offset);gl.vertexAttribPointer(lines.b,4,gl.FLOAT,false,32,offset+16);gl.drawArraysInstanced(gl.TRIANGLE_STRIP,0,4,range.count/2);}
   if(surfaceFlow&&surfaceFlowOn){gl.useProgram(surfaceFlow.program);gl.bindVertexArray(surfaceFlow.vao);setCamera(surfaceFlow.program,w,h,view);gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.depthMask(false);gl.drawArrays(gl.LINES,0,surfaceFlow.count);gl.depthMask(true);gl.disable(gl.BLEND);}
   gl.bindVertexArray(null);drawAxes(view);}
@@ -276,8 +288,9 @@ document.querySelector("#view-preset").addEventListener("change",event=>setView(
 document.querySelector("#shading").addEventListener("change",event=>{shading=event.target.checked;draw();});
 // Palette for the field colours (surfaces and streamlines), remembered; the legend bar shows it.
 const PALETTE_KEY="homo-cfd-3d-palette-v1",paletteSelect=document.querySelector("#palette");
-paletteSelect.replaceChildren(...Object.entries(PALETTES).map(([key,entry])=>new Option(entry.label,key)));
-function applyPalette(){document.querySelector("#legend div").style.background=`linear-gradient(90deg,${PALETTES[palette].stops.join(",")})`;draw();}
+paletteSelect.replaceChildren(...[["HoMo CFD",undefined],["STAR-CCM+ colormaps","STAR-CCM+"]].map(([label,group])=>{const optgroup=document.createElement("optgroup");optgroup.label=label;
+  optgroup.append(...Object.entries(PALETTES).filter(([,entry])=>entry.group===group).map(([key,entry])=>new Option(entry.label,key)));return optgroup;}));
+function applyPalette(){uploadPalette();document.querySelector("#legend div").style.background=`linear-gradient(90deg,${PALETTES[palette].points.map(([x,color])=>`${color} ${(100*x).toFixed(1)}%`).join(",")})`;draw();}
 try{const saved=localStorage.getItem(PALETTE_KEY);if(PALETTES[saved])palette=saved;}catch{}paletteSelect.value=palette;applyPalette();
 paletteSelect.addEventListener("change",()=>{palette=PALETTES[paletteSelect.value]?paletteSelect.value:"rainbow";try{localStorage.setItem(PALETTE_KEY,palette);}catch{}applyPalette();});
 // Streamline thickness in screen pixels, remembered.

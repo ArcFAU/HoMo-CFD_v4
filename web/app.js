@@ -1666,7 +1666,8 @@ async function openComparisonWindow(nodes, initialSectionPath = "") {
   }
 }
 
-async function loadResultsRoot(handle) {
+// fresh: a tree from freshServerTree() to show instead of asking serve.py again.
+async function loadResultsRoot(handle, fresh = null) {
   const token = ++browserState.renderToken;
   browserState.pressureRequestToken++;
   el.reconnect.hidden = true;
@@ -1676,7 +1677,15 @@ async function loadResultsRoot(handle) {
     className: "workspace-empty",
     textContent: `Indexing folders in ${handle.name}…`,
   }));
-  if (handle.homoServer) await prefetchServerTree(handle);
+  // The results folder opens from serve.py's saved listing when there is one; it is
+  // scanned again right after, and reloaded here if anything changed.
+  let shown = null;
+  if (fresh) {
+    serverListings.clear();
+    fillServerListings(handle.path, fresh);
+  } else if (handle.homoServer) {
+    shown = await prefetchServerTree(handle, { cached: handle.path === "" });
+  }
   browserState.root = await buildFolderNode(handle);
   browserState.selectedFolder = null;
   browserState.selectedFile = null;
@@ -1684,6 +1693,19 @@ async function loadResultsRoot(handle) {
   // A settings card opened while indexing keeps the main panel.
   if (token !== browserState.renderToken) return;
   await selectFolder(browserState.root);
+  if (shown) refreshResultsRoot(handle, shown);
+}
+
+// Results shown from the saved listing: scan the folder now and reload if something
+// changed, unless the user has moved on (the next start then shows it).
+async function refreshResultsRoot(handle, shown) {
+  const token = browserState.renderToken;
+  try {
+    const fresh = await freshServerTree(handle, shown);
+    if (fresh && token === browserState.renderToken) await loadResultsRoot(handle, fresh);
+  } catch {
+    // The saved listing stays; a scan error shows up on the next start.
+  }
 }
 
 function findFolderByPath(node, path) {

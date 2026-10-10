@@ -60,6 +60,50 @@ def settings_file():
     return user_config_dir() / "settings.json"
 
 
+class TreeCache:
+    """The last scanned tree of the results folder, in memory and in the settings folder.
+
+    Results often sit on a hard disk: once Windows has dropped the folder data from
+    memory, scanning ~50,000 files there takes 7-15 s. The start page shows this copy
+    at once and then asks for a fresh scan, which also updates the copy.
+    """
+
+    def __init__(self, file=None):
+        self.file = file
+        self.lock = threading.Lock()
+        self.root = None
+        self.tree = None
+
+    def path(self):
+        return self.file or user_config_dir() / "tree-cache.json"
+
+    def get(self, root):
+        with self.lock:
+            if self.root == root:
+                return self.tree
+        try:
+            saved = json.loads(self.path().read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+        if not (isinstance(saved, dict) and saved.get("root") == root and isinstance(saved.get("tree"), dict)):
+            return None
+        with self.lock:
+            self.root, self.tree = root, saved["tree"]
+        return saved["tree"]
+
+    def put(self, root, tree):
+        with self.lock:
+            self.root, self.tree = root, tree
+        try:
+            path = self.path()
+            path.parent.mkdir(parents=True, exist_ok=True)
+            temporary = path.with_suffix(".tmp")
+            temporary.write_text(json.dumps({"root": root, "tree": tree}, separators=(",", ":")), encoding="utf-8")
+            os.replace(temporary, path)
+        except OSError:
+            pass  # the copy only saves time
+
+
 def read_settings():
     try:
         return json.loads(settings_file().read_text(encoding="utf-8"))
@@ -310,6 +354,7 @@ class Server(ThreadingHTTPServer):
 
 class Handler(SimpleHTTPRequestHandler):
     working_dir = WorkingDirectory()
+    tree_cache = TreeCache()
     browse_lock = threading.Lock()
     winscp = cluster.WinScp()
     cluster_lock = threading.Lock()
@@ -767,12 +812,24 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_json(self.working_dir.describe())
 
     def api_tree(self, relative):
+        """The nested listing of a folder. For the results folder itself, cached=1 answers
+        {"tree", "cached"} from the saved copy when there is one (see TreeCache); every
+        scan of the results folder updates that copy."""
         target = self.results_path(relative)
         if target is None:
             return
         if not target.is_dir():
             return self.send_json({"error": "Not a folder."}, HTTPStatus.BAD_REQUEST)
-        self.send_json(scan_tree(target))
+        wrapped = parse_qs(urlsplit(self.path).query).get("cached") == ["1"]
+        is_root = relative.strip("/") == ""
+        if wrapped and is_root:
+            saved = Handler.tree_cache.get(str(target))
+            if saved is not None:
+                return self.send_json({"tree": saved, "cached": True})
+        tree = scan_tree(target)
+        if is_root:
+            Handler.tree_cache.put(str(target), tree)
+        self.send_json({"tree": tree, "cached": False} if wrapped else tree)
 
     def api_list(self, relative):
         target = self.results_path(relative)

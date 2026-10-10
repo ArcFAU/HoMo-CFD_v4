@@ -319,12 +319,16 @@ runTests(async () => {
 
   // Palettes: the field colours and the legend bar follow the chosen palette; remembered.
   const paletteSelect = doc3d.getElementById("palette");
-  check("3d: seven palettes, Rainbow at first", paletteSelect.options.length === 7 && paletteSelect.value === "rainbow",
+  check("3d: 7 HoMo palettes and 4 STAR-CCM+ colormaps, Rainbow at first", paletteSelect.options.length === 11 &&
+    [...paletteSelect.querySelectorAll("optgroup")].map((g) => g.children.length).join("+") === "7+4" && paletteSelect.value === "rainbow",
     [...paletteSelect.options].map((o) => o.textContent).join(", "));
   paletteSelect.value = "viridis"; paletteSelect.dispatchEvent(new win3d.Event("change"));
-  const palette = win3d.eval("(() => { draw(); return gl.getError() + ' ' + paletteStops().length + ' ' + localStorage.getItem('homo-cfd-3d-palette-v1'); })()");
+  const palette = win3d.eval("(() => { draw(); return gl.getError() + ' ' + paletteTable().length + ' ' + localStorage.getItem('homo-cfd-3d-palette-v1'); })()");
   const legendBar = doc3d.querySelector("#legend div").style.background;
-  check("3d: Viridis colours the field and the legend, and is remembered", palette === "0 21 viridis" && /rgb\(68, 1, 84\)/.test(legendBar), `${palette} | ${legendBar}`);
+  check("3d: Viridis colours the field and the legend, and is remembered", palette === "0 1024 viridis" && /rgb\(68, 1, 84\)/.test(legendBar), `${palette} | ${legendBar}`);
+  // FAU-bwr (from maps.colormap): uneven colour points, white in the middle; Rainbow keeps its original colours.
+  const fau = win3d.eval("(() => { const t = paletteTable('faubwr'); const r = paletteTable('rainbow'); return [t[0], t[1], t[2], t[4 * 128], t[4 * 128 + 1], t[4 * 255], t[4 * 255 + 1], r[0], r[1], r[2]].join(','); })()");
+  check("3d: STAR-CCM+ colormap blended at its own colour points", fau === "4,49,106,255,254,255,0,82,51,219", fau);
   paletteSelect.value = "rainbow"; paletteSelect.dispatchEvent(new win3d.Event("change"));
 
   // A narrow window (laptop with display scaling): the toolbar wraps instead of pushing buttons off screen.

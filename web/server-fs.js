@@ -86,17 +86,37 @@ class ServerDirectoryHandle {
   async requestPermission() { return "granted"; }
 }
 
+function fillServerListings(path, node) {
+  serverListings.set(path, [
+    ...Object.keys(node.d).map((name) => ({ name, kind: "directory" })),
+    ...node.f.map((name) => ({ name, kind: "file" })),
+  ]);
+  Object.entries(node.d).forEach(([name, child]) => fillServerListings(joinServerPath(path, name), child));
+}
+
 // Loads the whole folder tree in one request so indexing doesn't need a
 // request per folder. Later listings of these folders come from memory.
-async function prefetchServerTree(handle) {
-  const fill = (path, node) => {
-    serverListings.set(path, [
-      ...Object.keys(node.d).map((name) => ({ name, kind: "directory" })),
-      ...node.f.map((name) => ({ name, kind: "file" })),
-    ]);
-    Object.entries(node.d).forEach(([name, child]) => fill(joinServerPath(path, name), child));
-  };
-  fill(handle.path, await serverJson("tree", handle.path));
+// With cached, serve.py may answer from its saved copy of the results folder
+// (instant, even on a slow hard disk); the return value is then that tree as
+// JSON, so the caller can compare it with a fresh scan (freshServerTree).
+async function prefetchServerTree(handle, { cached = false } = {}) {
+  if (!cached) {
+    fillServerListings(handle.path, await serverJson("tree", handle.path));
+    return null;
+  }
+  const response = await fetch(`${serverUrl("tree", handle.path)}&cached=1`);
+  const body = await response.json().catch(() => null);
+  // A serve.py started before this version ignores cached=1 and sends the plain tree.
+  const tree = body?.tree ?? (body?.d ? body : null);
+  if (!response.ok || !tree) throw new Error(body?.error || `Server request failed (${response.status}) for the results folder`);
+  fillServerListings(handle.path, tree);
+  return body.cached ? JSON.stringify(tree) : null;
+}
+
+// A fresh scan of the folder; null when it equals the tree shown (JSON).
+async function freshServerTree(handle, shown) {
+  const tree = await serverJson("tree", handle.path);
+  return JSON.stringify(tree) === shown ? null : tree;
 }
 
 // Every HoMo CFD window tells serve.py once a minute that it is open; started

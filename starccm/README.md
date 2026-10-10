@@ -1,7 +1,11 @@
 # STAR-CCM+ macros for HoMo CFD
 
-Two macros that make STAR-CCM+ export 3D data for HoMo CFD's 3D viewer at the
-end of the post-processing on Fritz. For STAR-CCM+ 2506 (20.04).
+Macros for the team's simulations on Fritz, for STAR-CCM+ 2506 (20.04): two
+that export 3D data for HoMo CFD's 3D viewer at the end of the post-processing,
+and the meshing macro, which can swap in new parts from CAD files.
+
+- **mesh.java**: the team's meshing macro (template `SCRIPT_RANS`, 2025-11-13)
+  with a reworked CAD import, see "New parts from CAD files" below.
 
 - **postprocessing.java**: the team's post-processing macro (section images, 3D
   scene pictures, pressure distributions, plots) with one addition: after the 3D
@@ -33,6 +37,40 @@ own changes), keep yours and add two things by hand instead: the call
 
 after the loop that calls `exportThree(three);`, and the method `export3DData()`
 from this folder's `postprocessing.java`.
+
+## New parts from CAD files (mesh.java)
+
+Put CAD files (`.stp`, `.step`, `.igs`, `.iges`, `.stl`) into the case folder
+before starting it. Before meshing, `mesh.java` imports each one and replaces
+the part group its name points to (case does not matter):
+
+| File name contains | Replaces the parts in |
+| --- | --- |
+| `frontwing` or the word `FW` | C_FRONTWING |
+| `undertray` or the word `UT` | C_UNDERTRAY |
+| `deflector` | C_UNDERTRAY_DEFLECTORS (if the simulation has it) |
+| `mono` | C_MONOCOQUE |
+| `rearwing` or the word `RW` | C_REARWING |
+| anything else | nothing; added to z_000_remaining-parts |
+
+"Word" means separated by `_`, `-`, spaces or dots: `FW_V1.stp`,
+`1008_RW_V4.step` and `frontwing_v3.stp` all work. Every part the import
+creates goes into the group, so a STEP assembly with many bodies is fine.
+Several files can fill one group: its old parts are removed only once. The CAD
+must be in the car's coordinates (the macro does not move or mirror it).
+
+A file that cannot be imported is skipped; the reason goes to the `ERRORS` file
+in the case folder and to the log (`addCAD: …`), and that group keeps its old
+parts. `mesh.sh` always starts the solver after meshing, so check `ERRORS` (or
+the `addCAD:` lines in `mesh.o…`) before trusting the results.
+
+Changes against the template's version: parts are found by comparing the
+simulation's parts before and after the import (the old code looked for one
+part named like the file, which fails for assemblies and mixed-case names and
+then stopped importing the remaining files); short names FW/UT/RW; one failing
+file no longer stops the others; a missing deflector group no longer stops the
+import; a hard-coded path of a former member, used only to label the scenes
+with the simulation name, is replaced by the case folder's name.
 
 ## Try it once by hand
 

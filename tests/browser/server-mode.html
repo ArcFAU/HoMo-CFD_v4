@@ -262,5 +262,17 @@ runTests(async () => {
   check("new simulation is created after confirming", /1 changed setting/.test(confirmed[1] ?? "") &&
     /Created on Fritz/.test(doc.querySelector(".cluster-new-case .cluster-status")?.textContent ?? ""),
     `${confirmed[1]} | ${doc.querySelector(".cluster-new-case .cluster-status")?.textContent}`);
+
+  // Opening HoMo again: the saved listing of the results folder shows at once (no slow disk scan);
+  // a case added on disk since then appears by itself once the background scan has finished.
+  await fetch("/__fs/add-case");
+  const again = frame("/");
+  await waitFor(() => again.contentDocument?.querySelector(".data-table tbody tr"), 60000);
+  const shownFirst = rowNames(again.contentDocument).join(",");
+  await waitFor(() => rowNames(again.contentDocument).includes("caseZ"), 20000);
+  // (Earlier checks download caseC into finished, so the fresh scan finds it too.)
+  check("a new start shows the saved listing at once, then the case added since", shownFirst === "caseA,caseB" &&
+    rowNames(again.contentDocument).join(",") === "caseA,caseB,caseC,caseZ", `${shownFirst} → ${rowNames(again.contentDocument).join(",")}`);
+  await fetch("/__fs/remove-case");
 });
 </script></body></html>

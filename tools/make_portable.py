@@ -29,8 +29,9 @@ PYTHON_SHA256 = "a93abe456ab01bd96d7a085b3cdb6566b3063f4241360d114142fbdb07f0a31
 
 # What a teammate needs to run the app; never tests, notes, data or secrets.
 APP_FILES = ["serve.py", "cluster.py", "Start HoMo CFD.bat", "Create desktop shortcut.bat", "README.md", "ABOUT.txt"]
-# starccm/: the STAR-CCM+ macros for the 3D export, which teammates add to their own template.
-APP_FOLDERS = ["web", "starccm"]
+# starccm/: the STAR-CCM+ macros (3D export, meshing with new CAD parts), which teammates add to their own template.
+# fritz/: the results table for a terminal on Fritz (homo-table.py).
+APP_FOLDERS = ["web", "starccm", "fritz"]
 
 
 def sha256(path):

@@ -122,6 +122,36 @@ class ApiTests(ServeTestCase):
         self.assertIn("Cp_x-Section", tree["d"])
         self.assertEqual(len(tree["d"]["Cp_x-Section"]["f"]), 12)
 
+    def test_results_tree_opens_from_the_saved_copy(self):
+        saved = self.temp / "tree-cache.json"
+        serve.Handler.tree_cache = serve.TreeCache(saved)
+        self.addCleanup(setattr, serve.Handler, "tree_cache", serve.TreeCache())
+        status, data = self.request("GET", "/api/tree?path=&cached=1")
+        first = json.loads(data)
+        self.assertEqual((status, first["cached"], sorted(first["tree"]["d"])), (200, False, ["caseA", "caseB"]))
+        self.assertTrue(saved.exists(), "the first scan saves the copy")
+        new_case = self.working_dir / "finished" / "caseC"
+        new_case.mkdir()
+        serve.Handler.tree_cache = serve.TreeCache(saved)  # a new start: only the copy on disk is known
+        status, data = self.request("GET", "/api/tree?path=&cached=1")
+        answer = json.loads(data)
+        self.assertEqual((answer["cached"], sorted(answer["tree"]["d"])), (True, ["caseA", "caseB"]), "the saved copy, at once")
+        status, data = self.request("GET", "/api/tree?path=")
+        self.assertEqual(sorted(json.loads(data)["d"]), ["caseA", "caseB", "caseC"], "a plain request scans the disk")
+        status, data = self.request("GET", "/api/tree?path=&cached=1")
+        self.assertIn("caseC", json.loads(data)["tree"]["d"], "the scan updated the copy")
+        status, data = self.request("GET", "/api/tree?path=caseA&cached=1")
+        self.assertFalse(json.loads(data)["cached"], "subfolders are always scanned")
+
+    def test_saved_tree_of_another_results_folder_is_ignored(self):
+        saved = self.temp / "tree-cache.json"
+        saved.write_text(json.dumps({"root": "D:\\elsewhere", "tree": {"d": {"old": {"d": {}, "f": []}}, "f": []}}), encoding="utf-8")
+        serve.Handler.tree_cache = serve.TreeCache(saved)
+        self.addCleanup(setattr, serve.Handler, "tree_cache", serve.TreeCache())
+        status, data = self.request("GET", "/api/tree?path=&cached=1")
+        answer = json.loads(data)
+        self.assertEqual((answer["cached"], sorted(answer["tree"]["d"])), (False, ["caseA", "caseB"]))
+
     def test_file_and_conditional_get(self):
         status, data = self.request("GET", "/api/file?path=caseA/plots/Coefficients_49.csv")
         self.assertEqual(status, 200)

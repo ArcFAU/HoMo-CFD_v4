@@ -3,6 +3,24 @@
 User-visible changes, newest first. Detailed reasoning lives in
 `CHAT_HISTORY.md`; decisions in `DECISIONS.md`.
 
+## 2026-10-10
+
+### Fixed
+- **Slow start with results on a hard disk:** HoMo CFD keeps a copy of the results folder's listing in its settings folder and opens from it at once; the folder is scanned in the background and the page updates by itself if a simulation was added or removed. Before, every start waited for the scan, 7–15 s on a hard disk once Windows had dropped the folder data from memory (~400 folders, ~50,000 files).
+
+### Added
+- **Results table on Fritz for the phone:** `fritz/homo-table.py` prints the table in a terminal on Fritz (e.g. Termius): state, CzA, CxA, L/D, and on wider screens downforce and drag in N at each case's own speed. Sort with `--sort downforce|drag|ld|name|time`; one case in detail with its name. Read-only, Python 3.6+, nothing to install; setup in `fritz/README.md`. Included in the portable zip.
+
+## 2026-10-09
+
+### Added
+- **`starccm/mesh.java`: new parts from CAD files.** The team's meshing macro, with a reworked CAD import: STEP/IGES/STL files in the case folder replace the front wing, undertray, deflectors, monocoque or rear wing by name (`frontwing` or `FW`, `undertray` or `UT`, `deflector`, `mono`, `rearwing` or `RW`), assemblies with many bodies work, and a failing file is reported in `ERRORS` without stopping the others. Compiled against STAR-CCM+ 2506; not yet run on Fritz.
+
+## 2026-10-08
+
+### Added
+- **STAR-CCM+ colormaps in the 3D viewer:** FAU-bwr, HiVo Transparent, turbo and blue-red balanced from the team's `maps.colormap`, in their own group under **Palette**, with their colours at the same positions as in STAR-CCM+ (without its transparency).
+
 ## 2026-10-07
 
 ### Fixed

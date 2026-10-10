@@ -115,6 +115,17 @@ def make_handler(serve, working_dir):
             if path == "/api/config" and referer in injected:
                 # Injected test pages act as if opened without serve.py.
                 return self.send_bytes(b"not served by serve.py", "text/plain", 404)
+            # A results folder that changes between two starts (saved listing, then a slow fresh scan).
+            if path == "/__fs/add-case":
+                shutil.copytree(finished / "caseB", finished / "caseZ")
+                type(self).slow_scan = True
+                return self.send_bytes(b"ok", "text/plain")
+            if path == "/__fs/remove-case":
+                shutil.rmtree(finished / "caseZ", ignore_errors=True)
+                type(self).slow_scan = False
+                return self.send_bytes(b"ok", "text/plain")
+            if path == "/api/tree" and getattr(self, "slow_scan", False) and "cached=1" not in self.path:
+                time.sleep(1.5)  # like a hard disk, so the saved listing is seen first
             if path in injected:
                 source, script = injected[path]
                 html = (serve.WEB / source).read_text(encoding="utf-8")
