@@ -347,6 +347,8 @@ class ClusterApiTests(ApiTests):
         self.assertEqual(by_name["caseD"]["local"], "partial")
         self.assertTrue(by_name["caseE"]["stale"])
         self.assertFalse(by_name["bad/name"]["downloadable"])
+        self.assertEqual(by_name["caseC"]["results"]["values"][1], "-5.0")
+        self.assertIsNone(by_name["caseD"]["results"], "no data row yet")
 
     def test_download_moves_case_to_finished(self):
         self.save_cluster()

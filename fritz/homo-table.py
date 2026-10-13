@@ -7,6 +7,8 @@ Run it on Fritz in the folder that holds your case folders (or pass --dir):
     python3 homo-table.py --sort downforce   most downforce first (also: drag, ld, name, time)
     python3 homo-table.py 1002_homo_test     one case in detail (all monitors)
     python3 homo-table.py --wide             forces in N and speed, also on a narrow screen
+    python3 homo-table.py -p                 CzA and CxA of the front wing, undertray and rear wing
+    python3 homo-table.py -p --sort fw       ... most front wing downforce first (also: ut, rw)
 
 It reads the same files as HoMo CFD: the last row of plots/Coefficients*.csv
 (CzA, CxA and the parts' monitors), the speed in Settings (Vehicle State/Velocity,
@@ -158,19 +160,45 @@ def ago(stamp):
     return "{}d".format(minutes // 1440)
 
 
-def table(rows, wide):
-    """Plain columns; the case name gets whatever width is left."""
-    columns = [("State", 5, lambda r: STATES[r["state"]] + ("?" if r["stale"] else "")),
-               ("CzA", 7, lambda r: fmt(r["values"].get("CzA"), 3)),
-               ("CxA", 6, lambda r: fmt(r["values"].get("CxA"), 3)),
-               ("L/D", 5, lambda r: fmt(r["ld"], 2))]
-    if wide:
-        columns += [("Fz[N]", 7, lambda r: fmt(r["downforce"], 1)),
-                    ("Fx[N]", 6, lambda r: fmt(r["drag"], 1)),
-                    ("km/h", 5, lambda r: fmt(r["speed"], 0)),
-                    ("Log", 4, lambda r: ago(r["lastLog"]))]
+# Parts shown with their CzA and CxA.
+TABLE_PARTS = ["FW", "UT", "RW"]
+# Case names keep at least this many characters before another group of columns is added.
+NAME_ROOM = 30
+
+
+def column_groups():
+    """Groups of (title, width, value) columns: totals, forces and the parts' coefficients."""
+    totals = [("State", 6, lambda r: STATES[r["state"]] + ("?" if r["stale"] else "")),
+              ("Iter", 5, lambda r: fmt(r["values"].get("Iteration"), 0)),
+              ("CzA", 7, lambda r: fmt(r["values"].get("CzA"), 3)),
+              ("CxA", 6, lambda r: fmt(r["values"].get("CxA"), 3)),
+              ("L/D", 5, lambda r: fmt(r["ld"], 2))]
+    forces = [("Fz[N]", 7, lambda r: fmt(r["downforce"], 1)),
+              ("Fx[N]", 6, lambda r: fmt(r["drag"], 1)),
+              ("km/h", 5, lambda r: fmt(r["speed"], 0)),
+              ("Log", 4, lambda r: ago(r["lastLog"]))]
+    parts = []
+    for part in TABLE_PARTS:
+        parts += [(part + " z", 5, lambda r, part=part: fmt(r["values"].get("CzA " + part), 2)),
+                  (part + " x", 5, lambda r, part=part: fmt(r["values"].get("CxA " + part), 2))]
+    return {"totals": totals, "forces": forces, "parts": parts}
+
+
+def table(rows, wide, parts=False):
+    """Plain columns, fitted to the terminal: the first group always (totals, or the parts with
+    parts=True), then the others in turn as long as the case names keep NAME_ROOM characters
+    (wide: the forces in any case). The case name gets whatever width is left."""
+    groups = column_groups()
+    order = ["parts", "totals", "forces"] if parts else ["totals", "forces", "parts"]
     width = shutil.get_terminal_size((60, 20)).columns
-    name_width = max(8, min(max([len(r["name"]) for r in rows] + [4]), width - sum(w + 1 for _, w, _ in columns)))
+    longest = max([len(r["name"]) for r in rows] + [4])
+    room = min(longest, NAME_ROOM) + 1
+    columns = []
+    for index, name in enumerate(order):
+        size = sum(w + 1 for _, w, _ in groups[name])
+        if index == 0 or room + sum(w + 1 for _, w, _ in columns) + size <= width or (name == "forces" and wide):
+            columns += groups[name]
+    name_width = max(8, min(longest, width - sum(w + 1 for _, w, _ in columns)))
     lines = [" ".join(["Case".ljust(name_width)] + [title.rjust(w) for title, w, _ in columns])]
     for row in rows:
         name = row["name"] if len(row["name"]) <= name_width else row["name"][:name_width - 1] + "~"
@@ -201,8 +229,10 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description="HoMo CFD results table (read-only).")
     parser.add_argument("case", nargs="?", help="show one case in detail")
     parser.add_argument("--dir", default=os.path.dirname(os.path.abspath(__file__)), help="folder with the case folders (default: this script's folder)")
-    parser.add_argument("--sort", choices=["time", "name", "downforce", "drag", "ld"], default="time")
+    parser.add_argument("--sort", choices=["time", "name", "downforce", "drag", "ld", "fw", "ut", "rw"], default="time",
+                        help="fw, ut, rw: most downforce of that part first")
     parser.add_argument("--wide", action="store_true", help="add forces, speed and last log even on a narrow screen")
+    parser.add_argument("-p", "--parts", action="store_true", help="CzA and CxA of the front wing, undertray and rear wing")
     args = parser.parse_args(argv)
 
     rows = cases(args.dir)
@@ -221,9 +251,13 @@ def main(argv=None):
             "downforce": lambda r: (missing(r["downforce"]), -(r["downforce"] or 0)),
             "drag": lambda r: (missing(r["drag"]), r["drag"] or 0),
             "ld": lambda r: (missing(r["ld"]), -(r["ld"] or 0))}
+    for part in TABLE_PARTS:
+        keys[part.lower()] = lambda r, part=part: (missing(r["values"].get("CzA " + part)), r["values"].get("CzA " + part) or 0)
     rows.sort(key=keys[args.sort])
     wide = args.wide or shutil.get_terminal_size((60, 20)).columns >= 80
-    print(table(rows, wide))
+    print(table(rows, wide, args.parts))
+    if args.parts:
+        print("z = CzA, x = CxA (negative = downforce, drag)")
     if any(row["stale"] for row in rows):
         print("? no job log for {} h: probably stopped".format(STALE_HOURS))
     return 0

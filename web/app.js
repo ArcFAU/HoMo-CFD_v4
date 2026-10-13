@@ -1861,6 +1861,41 @@ function timeAgo(epochSeconds) {
   return `${Math.round(hours / 24)} days ago`;
 }
 
+// Columns of Results on Fritz: the results table's names for the monitors and computed columns.
+const CLUSTER_RESULT_COLUMNS = ["Iteration", "CzA", "CxA", "L/D", "Downforce [N]", "Drag [N]",
+  "CzA FW", "CxA FW", "CzA UT", "CxA UT", "CzA RW", "CxA RW"];
+
+function renderClusterResults(table, cases) {
+  const head = document.createElement("thead");
+  const headRow = document.createElement("tr");
+  headRow.appendChild(cell("th", "Case"));
+  CLUSTER_RESULT_COLUMNS.forEach((title) => {
+    const th = cell("th", title);
+    const derived = derivedAeroColumn(title);
+    if (derived) {
+      th.classList.add("derived-column");
+      th.title = `Computed by HoMo CFD. ${derived.note}`;
+    }
+    headRow.appendChild(th);
+  });
+  head.appendChild(headRow);
+  const body = document.createElement("tbody");
+  cases.filter((item) => item.results).forEach((item) => {
+    const data = withComputedColumns({ path: item.name, headers: item.results.headers, rows: [item.results.values] });
+    const values = {};
+    data.headers.forEach((header, index) => {
+      const key = /^iteration$/i.test(header) ? "Iteration" : CLUSTER_RESULT_COLUMNS.includes(header) ? header : classifyHeader(header);
+      if (key && !(key in values)) values[key] = data.rows[0][index];
+    });
+    const row = document.createElement("tr");
+    row.dataset.case = item.name;
+    row.appendChild(cell("td", item.name));
+    CLUSTER_RESULT_COLUMNS.forEach((title) => row.appendChild(cell("td", formatCoefficientValue(title, values[title] ?? ""))));
+    body.appendChild(row);
+  });
+  table.replaceChildren(head, body);
+}
+
 function clusterCasesSection({ saved, onNeedsPassphrase, templateFolder }) {
   const section = document.createElement("section");
   section.className = "cluster-cases";
@@ -1895,7 +1930,20 @@ function clusterCasesSection({ saved, onNeedsPassphrase, templateFolder }) {
   const table = document.createElement("table");
   table.className = "data-table cluster-table";
   tableWrap.appendChild(table);
-  section.append(header, note, status, tableWrap);
+  // Results of the cases on Fritz (last row of each case's coefficients CSV, read by the same
+  // status check), with the same columns and force settings as the results table.
+  const results = document.createElement("div");
+  results.className = "cluster-results";
+  results.hidden = true;
+  const resultsTitle = document.createElement("h2");
+  resultsTitle.textContent = "Results on Fritz";
+  const resultsWrap = document.createElement("div");
+  resultsWrap.className = "csv-table-wrap";
+  const resultsTable = document.createElement("table");
+  resultsTable.className = "data-table cluster-results-table";
+  resultsWrap.appendChild(resultsTable);
+  results.append(resultsTitle, resultsWrap);
+  section.append(header, note, status, tableWrap, results);
   const newCase = newCaseSection({
     getCases: () => lastResult?.cases ?? [],
     templateFolder: templateFolder || "SCRIPT_FABSI",
@@ -2018,6 +2066,8 @@ function clusterCasesSection({ saved, onNeedsPassphrase, templateFolder }) {
       body.appendChild(row);
     });
     table.append(head, body);
+    renderClusterResults(resultsTable, result.cases);
+    results.hidden = !resultsTable.tBodies[0]?.rows.length;
     if (!result.canDownload) {
       showStatus("To download, set the working directory to the CFD-Tool folder that contains finished and inProgress.", "hint");
     }

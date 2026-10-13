@@ -109,6 +109,55 @@ class HomoTableTests(unittest.TestCase):
         code, out = run("--dir", self.root, "--wide")
         self.assertIn("Fz[N]", out.splitlines()[0])
 
+    def test_parts_view_fits_a_phone_and_sorts_by_part(self):
+        weak = make_case(self.root, "weak_front_wing", cza=-3.0, post_log="Job finished at x\n")
+        strong = make_case(self.root, "strong_front_wing", cza=-3.0, post_log="Job finished at x\n")
+        header = HEADER + ',"CzA Undertray Monitor: x","CxA Undertray Monitor: x","CzA Rearwing Monitor: x","CxA Rearwing Monitor: x"'
+        for case, front in ((weak, -0.8), (strong, -1.9)):
+            (case / "plots" / "Coefficients_49.csv").write_text(header + f"\n1000,0.4,-4.5,{front},-1.5,-0.25,-2.1,-0.3,-1.7,-0.9\n", encoding="utf-8")
+        os.environ["COLUMNS"] = "45"
+        try:
+            code, out = run("--dir", self.root, "-p", "--sort", "fw")
+        finally:
+            del os.environ["COLUMNS"]
+        lines = out.splitlines()
+        self.assertEqual(code, 0)
+        self.assertTrue(all(len(line) <= 45 for line in lines), lines)
+        self.assertEqual(lines[0].split()[1:], ["FW", "z", "FW", "x", "UT", "z", "UT", "x", "RW", "z", "RW", "x"])
+        self.assertTrue(lines[1].startswith("strong_f"), lines)
+        self.assertEqual(lines[1].split()[1:], ["-1.90", "-0.25", "-2.10", "-0.30", "-1.70", "-0.90"])
+        self.assertIn("z = CzA, x = CxA", out)
+
+    def test_wide_terminal_shows_totals_forces_and_parts_in_line(self):
+        make_case(self.root, "solving_and_stopped", files=("STARTED", "resTAURANtS.o2"), age_hours=20)
+        make_case(self.root, "done", cza=-3.0, post_log="Job finished at x\n")
+        os.environ["COLUMNS"] = "160"
+        try:
+            code, out = run("--dir", self.root)
+        finally:
+            del os.environ["COLUMNS"]
+        lines = out.splitlines()
+        self.assertTrue(all(title in lines[0] for title in ("State", "Iter", "CzA", "Fz[N]", "Log", "FW z", "RW x")), lines[0])
+        done = next(line for line in lines if line.startswith("done "))
+        self.assertEqual(done.split()[1:3], ["done", "1000"], "the last iteration after the state")
+        rows = [line for line in lines[1:] if not line.startswith("?")]
+        self.assertIn("solve?", out)
+        self.assertEqual(len({len(line) for line in [lines[0]] + rows}), 1, "every line has the same width:\n" + out)
+
+    def test_long_names_keep_their_room(self):
+        make_case(self.root, "L_1012_conc2_bigFW10mmv2lv2_wUT15mm_RW3_BK_lowRW_gurn", cza=-3.0, post_log="Job finished at x\n")
+        os.environ["COLUMNS"] = "110"
+        try:
+            code, plain = run("--dir", self.root)
+            code, parts = run("--dir", self.root, "-p")
+        finally:
+            del os.environ["COLUMNS"]
+        self.assertIn("Fz[N]", plain.splitlines()[0])
+        self.assertNotIn("FW z", plain.splitlines()[0], "no room for the parts next to a 52-character name")
+        self.assertTrue(plain.splitlines()[1].startswith("L_1012_conc2_bigFW10mmv2lv2_wUT15mm_RW3_"), "at least 30 characters of the name")
+        self.assertTrue(all(len(line) <= 110 for line in plain.splitlines()), plain)
+        self.assertTrue(parts.splitlines()[0].split()[1:3] == ["FW", "z"] and "CzA" in parts.splitlines()[0], parts.splitlines()[0])
+
     def test_one_case_in_detail(self):
         make_case(self.root, "1002_homo_test", cza=-5.755, cxa=-1.922, post_log="Job finished at x\n")
         code, out = run("--dir", self.root, "1002")

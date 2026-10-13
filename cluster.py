@@ -10,6 +10,7 @@ WinSCP.com runs only when the user asks for it in the app. See
 docs/STAGE7_FRITZ.md for the design.
 """
 
+import csv
 import os
 import re
 import shutil
@@ -251,6 +252,7 @@ def test_connection(winscp, session, remote_folder=""):
 # --- Step 2: status of the cases on Fritz and downloads -------------------
 
 CASE_PREFIX = "HOMO|"
+RESULT_PREFIX = "HOMOCSV|"
 TOTAL_PREFIX = "HOMO-TOTAL|"
 STALE_HOURS = 12
 # One line per transferred file: "name | 261 KB | 4875.3 KB/s | binary | 100%".
@@ -269,6 +271,8 @@ def case_status_command():
     finished), X plots/POST_DONE, M meshing log, T solver log, R post log,
     P newest post log finished ("Job finished at", written last by post.sh),
     F newest post log has an uncaught macro error (POST_FAILED below).
+    Also prints "HOMOCSV|<name>|h|<header>" and "HOMOCSV|<name>|r|<last row>" of the
+    case's newest plots/Coefficients*.csv, for the results table (parse_results).
     """
     return (
         'for d in */; do d="${d%/}"; '
@@ -280,6 +284,8 @@ def case_status_command():
         'if [ -n "$p" ]; then f="${f}R"; tail -c 4000 "$p" | grep -q "Job finished at" && f="${f}P"; '
         f"grep -E -q '{POST_FAILED}' \"$p\" && f=\"${{f}}F\"; fi; "
         'l=$(ls -t "$d"/*.o* 2>/dev/null | head -n 1); t=0; [ -n "$l" ] && t=$(stat -c %Y "$l"); '
+        'c=$(ls -t "$d"/plots/Coefficients*.csv 2>/dev/null | head -n 1); '
+        f'if [ -n "$c" ]; then echo "{RESULT_PREFIX}$d|h|$(head -n 1 "$c")"; echo "{RESULT_PREFIX}$d|r|$(tail -n 1 "$c")"; fi; '
         f'echo "{CASE_PREFIX}$d|$f|$t"; done'
     )
 
@@ -294,6 +300,27 @@ POST_FAILED = r"^((java|star)\.[A-Za-z0-9_.]*(Exception|Error)|[A-Za-z0-9_]+\.ja
 def status_script(session, remote_folder):
     return ["option batch abort", "option confirm off", open_command(session), f'cd "{remote_folder}"',
             f"call {case_status_command()}", "exit"]
+
+
+def parse_results(output):
+    """{case: {"headers": [...], "values": [...]}}: the header and last row of each case's
+    newest coefficients CSV, from the status command. Cases without a data row are left out."""
+    found = {}
+    for line in output.splitlines():
+        if not line.startswith(RESULT_PREFIX):
+            continue
+        parts = line[len(RESULT_PREFIX):].split("|", 2)
+        if len(parts) != 3 or parts[1] not in ("h", "r"):
+            continue
+        name, kind, text = parts
+        try:
+            cells = next(csv.reader([text.strip()]))
+        except (csv.Error, StopIteration):
+            continue
+        found.setdefault(name, {})["headers" if kind == "h" else "values"] = cells
+    return {name: result for name, result in found.items()
+            if result.get("headers") and result.get("values") and result["values"] != result["headers"]
+            and len(result["values"]) == len(result["headers"])}
 
 
 def case_state(flags):

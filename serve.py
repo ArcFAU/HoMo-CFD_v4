@@ -616,6 +616,9 @@ class Handler(SimpleHTTPRequestHandler):
             return self.send_json({"ok": False, "error": "Could not check Fritz.", "hint": cluster.hint_for(output),
                                    "needsPassphrase": "passphrase" in output.lower(), "output": output.strip()[-cluster.MAX_OUTPUT:]})
         cases = cluster.parse_cases(output)
+        results = cluster.parse_results(output)
+        for case in cases:
+            case["results"] = results.get(case["name"])
         Handler.remote_cases = {case["name"] for case in cases}
         Handler.remote_info = {case["name"]: case for case in cases}
         queue = jobs.get("result")

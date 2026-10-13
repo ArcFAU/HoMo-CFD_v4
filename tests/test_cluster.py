@@ -30,6 +30,12 @@ STATUS_OUTPUT = "\n".join([
     "HOMO|caseF||0",                    # created, not started
     f"HOMO|caseG|SDMTRPF|{NOW - 900}",   # post-processing failed (macro error in the post log)
     "HOMO|bad/name|SDMTRP|1",           # not usable as a folder name
+    # Results: header and last row of the newest coefficients CSV (CRLF file); caseD has no data row yet.
+    'HOMOCSV|caseC|h|"Iteration","CzA Monitor: CzA Monitor","CxA Monitor: CxA Monitor",'
+    '"CzA Frontwing Monitor: CzA Frontwing Monitor","CxA Frontwing Monitor: CxA Frontwing Monitor"\r',
+    "HOMOCSV|caseC|r|1000.0,-5.0,-2.0,-1.8,-0.3\r",
+    'HOMOCSV|caseD|h|"Iteration","CzA Monitor: CzA Monitor"',
+    'HOMOCSV|caseD|r|"Iteration","CzA Monitor: CzA Monitor"',
 ])
 
 
@@ -247,6 +253,12 @@ class StatusTests(unittest.TestCase):
 
     def test_parse_cases(self):
         cases = cluster.parse_cases("noise\n" + STATUS_OUTPUT + "\nHOMO|broken", now=NOW)
+        self.assertFalse(any(case["name"].startswith("caseC|") for case in cases), "result lines are not cases")
+        results = cluster.parse_results(STATUS_OUTPUT + "\nHOMOCSV|caseX|z|bad\nHOMOCSV|broken")
+        self.assertEqual(list(results), ["caseC"], "only cases with a data row")
+        self.assertEqual(results["caseC"]["values"], ["1000.0", "-5.0", "-2.0", "-1.8", "-0.3"])
+        self.assertEqual(results["caseC"]["headers"][1], "CzA Monitor: CzA Monitor")
+        self.assertIn("plots/Coefficients*.csv", cluster.case_status_command())
         self.assertEqual([case["name"] for case in cases], ["caseD", "caseG", "caseC", "caseA", "caseE", "bad/name", "caseF"])
         by_name = {case["name"]: case for case in cases}
         self.assertEqual((by_name["caseC"]["state"], by_name["caseC"]["stale"]), ("ready", False))

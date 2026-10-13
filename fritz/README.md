@@ -1,8 +1,10 @@
 # Results table on Fritz (for Termius on a phone)
 
-`homo-table.py` prints HoMo CFD's results table in a terminal on Fritz: one line
-per case with its state, CzA, CxA and L/D. On a wide screen (or with `--wide`)
-it adds downforce and drag in N, the speed and the age of the last job log.
+`homo-table.py` prints HoMo CFD's results table in a terminal on Fritz, one line
+per case. The table fits the window: always the state, last iteration, CzA, CxA and L/D; with more
+room also downforce and drag in N, the speed and the age of the last job log; with
+still more room the CzA and CxA of the front wing, undertray and rear wing. A group
+is only added while the case names keep 30 characters, so long names stay readable.
 It reads the same files as HoMo CFD and only reads: nothing is changed, started
 or deleted. It needs Python 3.6 or newer, which Fritz's login nodes have.
 
@@ -24,6 +26,8 @@ ht                    # all cases, newest activity first
 ht --sort downforce   # most downforce first (also: drag, ld, name, time)
 ht 1002_homo_test     # one case in detail: every part's CzA and CxA
 ht --wide             # forces, speed and last log also on a narrow screen
+ht -p                 # front wing, undertray, rear wing first: CzA (z) and CxA (x) each
+ht -p --sort fw       # ... most front wing downforce first (also: ut, rw)
 ```
 
 States: `prep` (not started), `mesh`, `solve`, `wait` (solver done, waiting for

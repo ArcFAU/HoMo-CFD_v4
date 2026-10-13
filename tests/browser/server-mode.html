@@ -205,6 +205,14 @@ runTests(async () => {
   const clusterRow = (name) => doc.querySelector(`.cluster-table tr[data-case="${name}"]`);
   check("cases listed with their state", clusterRow("caseC")?.cells[1].textContent === "Ready to download" && clusterRow("caseD")?.cells[1].textContent === "Solving",
     [...doc.querySelectorAll(".cluster-table tbody tr")].map((row) => `${row.cells[0].textContent}:${row.cells[1].textContent}`).join(", "));
+  // Results on Fritz: the last coefficient row per case, with the results table's columns and speed.
+  const resultRow = doc.querySelector('.cluster-results-table tr[data-case="caseC"]');
+  const resultCells = [...(resultRow?.cells ?? [])].map((td) => td.textContent);
+  const resultTitles = [...doc.querySelectorAll(".cluster-results-table thead th")].map((th) => th.textContent);
+  check("Results on Fritz shows each case's last coefficients, forces and parts", !doc.querySelector(".cluster-results").hidden &&
+    resultCells.slice(0, 9).join("|") === `caseC|1000|-5.000|-2.000|2.50|${(5 * dynamicPressure(60)).toFixed(1)}|${(2 * dynamicPressure(60)).toFixed(1)}|-1.800|-0.300` &&
+    resultTitles.slice(7, 13).join(",") === "CzA FW,CxA FW,CzA UT,CxA UT,CzA RW,CxA RW" &&
+    !doc.querySelector('.cluster-results-table tr[data-case="caseD"]'), `${resultTitles.join(",")} | ${resultCells.join("|")}`);
   check("case already in finished is marked", clusterRow("caseA")?.cells[3].textContent === "In finished" && !clusterRow("caseA")?.querySelector("button"),
     clusterRow("caseA")?.textContent);
   check("failed post-processing shown, still downloadable", /Post-processing failed/.test(clusterRow("caseG")?.cells[1].textContent ?? "") &&

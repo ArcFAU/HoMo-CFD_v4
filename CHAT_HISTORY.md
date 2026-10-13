@@ -6357,3 +6357,254 @@ The background watcher of the post job (job 4285206 in `exp`) finished; no new u
 - Removed the three `homo-cfd-serve-*` folders (one `tree-cache.json` test listing each). Diff checked for keys and passwords (none; only log text mentioning passphrases). Committed palettes from maps.colormap, `starccm/mesh.java`, `fritz/homo-table.py`, the results-listing cache and the docs on `night-2026-10-02`, pushed to `origin/night-2026-10-02` and `origin/master`, rebuilt `dist/HoMo-CFD-portable.zip`.
 
 > Done: everything is committed and on GitHub (`master` and `night-2026-10-02`), and the zip is rebuilt with it, including `fritz/homo-table.py` and the new `mesh.java`. Remember to restart HoMo once (⏻, then the desktop shortcut) to get the faster start.
+
+## 2026-10-12 — What does HoMo stand for? (question only)
+
+### User messages (verbatim)
+
+> do you know what HoMo in HoMo-CFD stands for?
+
+### Contributor messages (verbatim)
+
+> I'll check whether the project notes say:
+
+### Work record
+
+- Searched the project: the meaning of "HoMo" is not recorded (only "High Voltage Motorsports" in ABOUT.txt, README and the logo). No changes.
+
+### Final response (verbatim)
+
+> [Said it is not written down in the project; guessed "Hochvolt Motorsport" (German form of the team name), clearly marked as a guess; asked what it stands for and offered to add one line to ABOUT.txt.]
+
+### Follow-up (2026-10-12)
+
+> how about you come up with something
+
+> [Suggested: 1 High vOltage MOtorsport (letters from the team name; recommended), 2 Hochvolt Motorsport, 3 Holistic Monitoring, 4 Hold the Momentum (CFD pun, suggested as a tagline), 5 How's the Model?; offered to put the choice into ABOUT.txt and the README.]
+
+## 2026-10-13 — Fritz table: front wing, undertray and rear wing
+
+### User messages (verbatim)
+
+> do you remember homo-table?
+
+> i would like to change it a bit? i want to add cxa and cxa of front wing, undertray, rearwing as well.
+
+### Contributor messages (verbatim)
+
+> [Answered the first question: summarised `fritz/homo-table.py` (states, CzA/CxA/L/D, --wide forces and speed, detail view, sorting, setup in fritz/README.md) and asked whether something was not working or should change.]
+
+> I'll take "cxa and cxa" to mean **CzA and CxA** of the front wing, undertray and rear wing; correct me if you meant something else.
+>
+> Six more numbers don't fit next to the existing columns on a phone in portrait (45 characters). So I'll add them as a second view, `ht -p` (or `--parts`), with one line per case: front wing, undertray and rear wing, each with CzA and CxA, at two decimals. That fits the phone. I'll also add sorting by a part's downforce (`--sort fw`, `ut` or `rw`). Reading the table code:
+
+> The parts view fits a phone in portrait: 45 characters wide, front wing, undertray and rear wing each with CzA (z) and CxA (x). Long case names get cut to 9 characters; sideways there's room for the full names.
+>
+> Adding tests for the parts view and part sorting, and updating the README:
+
+> The shell turned the `\n` in my test text into a real line break. Fixing the test file directly:
+
+> All 9 script tests pass. Running the full unit suite, then the notes and log:
+
+### Work record
+
+- `fritz/homo-table.py`: `TABLE_PARTS` (FW, UT, RW), `table(rows, wide, parts)`, option `-p/--parts`, sort keys `fw`, `ut`, `rw` (most negative part CzA first, missing values last), legend line "z = CzA, x = CxA", usage lines in the docstring. Python 3.6 syntax checked.
+- Tried on `D:\CFD_tool\finished` at 45 columns with `-p --sort fw`.
+- `tests/test_homo_table.py` (1 new test: 45-column fit, header, values, sort). Docs: `fritz/README.md`, `CHANGELOG.md` (2026-10-13), `STATUS.md`, `tests/README.md`.
+- Checks: `py -m unittest discover -s tests` 93 tests OK. Browser suite not affected (no web changes).
+- Not uploaded to Fritz; not committed.
+
+### Final response (verbatim)
+
+> Done. `ht -p` now shows the front wing, undertray and rear wing, each with CzA (z) and CxA (x). It fits a phone in portrait; this is your local data sorted by front wing downforce:
+>
+> ```
+> Case       FW z  FW x  UT z  UT x  RW z  RW x
+> 1011_try3 -1.95 -0.24 -1.49 -0.33 -2.07 -0.95
+> 1011_try2 -1.74 -0.19 -1.79 -0.33 -2.19 -0.96
+> 0830_mk3  -1.33 -0.23 -2.15 -0.31 -1.98 -0.89
+> ```
+>
+> - `ht -p --sort fw` (or `ut`, `rw`) puts the most downforce of that part first.
+> - The normal `ht` view stays as it was, and `ht <case>` still lists every part in detail.
+> - In portrait, long case names get cut to 9 characters; turn the phone sideways to see them in full.
+>
+> **To use it:** copy the new `D:\HoMo-CFD\fritz\homo-table.py` to `/home/vault/v152dc/v152dc11` again, replacing the old one. Your `ht` shortcut stays as it is. I can do the copy for you if you like.
+>
+> All 93 unit tests pass (one new). Not committed yet.
+
+### Follow-up (2026-10-13)
+
+> not working
+
+> I'll check on Fritz which version of the script is there and what it says when run. It's read-only: the script itself never changes anything.
+
+> The new script is on Fritz: 11,278 bytes from 22:11 today, the same as mine. Running a command needs a shell, though, and the storage host `csnhr` doesn't answer for that. HoMo runs commands through your second session on `fritz.nhr.fau.de`, so I'll try there:
+
+- Read-only on Fritz: `homo-table.py` there matches the new local file (11,278 bytes). A `call` through the csnhr session timed out (no shell there). Through `v152dc11@fritz.nhr.fau.de`: Python 3.9.25; `COLUMNS=45 python3 homo-table.py -p` printed the parts table for all cases (many named `L_1013_...`, cut to 9 characters); `~/.bashrc` line 30 holds the `ht` alias. Nothing changed.
+
+> [Reported that the script runs on Fritz and the alias exists; asked what the user sees: "ht: command not found" (bashrc not loaded, fix via ~/.bash_profile), a Python error (send it), or unusable cut names (offered names on their own line above the numbers); noted that csnhr.nhr.fau.de takes no commands, use fritz.nhr.fau.de.]
+
+### Follow-up (2026-10-13)
+
+> [screenshot: Termius/terminal on fritz1 showing plain `ht` on a wide window: State, CzA, CxA, L/D, Fz[N], Fx[N], km/h, Log for all cases, no part columns; the `jacket_cooling` line with "solve?" shifted by one character]
+
+### Contributor messages (verbatim)
+
+> That's the normal `ht` on a wide screen. The front wing, undertray and rear wing are only in the separate view, `ht -p`, which I didn't make clear enough. Your screenshot also shows a real bug: in the `jacket_cooling` line, "solve?" is one character too wide for its column, so the whole line slides out of place.
+>
+> I'll fix both:
+> - **Alignment:** the State column gets one more character.
+> - **One table that adapts to the screen:** `ht` shows the totals first, then the forces, then the three parts' CzA/CxA, adding each group only as long as the case names keep about 30 characters. A wide terminal then shows everything in one table, and a phone in portrait stays as it is.
+> - **`ht -p`** puts the parts first, so on a phone you get them instead of the totals; with more room, the totals follow.
+
+> The table adapts as planned. At 45 characters it's unchanged. At 110 with your local (short) names, `ht` shows everything in one line per case, and `ht -p` puts the parts first.
+>
+> On Fritz your case names are up to 52 characters long. In a window about as wide as your screenshot, plain `ht` keeps those names whole and leaves the parts out; a wider window or `ht -p` shows them. Updating the tests: a wide terminal shows all three groups, and every line has the same length even with a "solve?" state:
+
+> All 11 script tests pass. Updating the README, changelog and notes, then logging:
+
+### Work record
+
+- `fritz/homo-table.py`: `column_groups()` (totals with State 6 wide, forces, parts), `NAME_ROOM` = 30, `table()` adds groups in order (`-p`: parts, totals, forces; otherwise totals, forces, parts) while names keep 30 characters; first group always; `--wide` always adds the forces. Python 3.6 syntax checked.
+- Tried locally at 45, 110 and 160 columns, with and without `-p`.
+- `tests/test_homo_table.py`: 2 new tests (wide terminal shows all groups with equal line widths including "solve?"; a 52-character name keeps its room at 110 columns, `-p` puts parts first). Docs: `fritz/README.md`, `CHANGELOG.md`, `STATUS.md`, `tests/README.md`.
+- Checks: `py -m unittest discover -s tests` OK (99 tests).
+- Not uploaded to Fritz; not committed.
+
+### Final response (verbatim)
+
+> Fixed. The table now adapts to the window, and the "solve?" line no longer slides out of place.
+>
+> **How it behaves now:**
+> - `ht` always shows the state, CzA, CxA and L/D. With more room it adds downforce, drag, speed and log age, and with still more room the CzA/CxA of the front wing, undertray and rear wing. Your long case names keep at least 30 characters.
+> - Your case names are up to 52 characters long. So in a window as wide as your screenshot, `ht` keeps them whole and leaves the parts out. Make the window a bit wider, or use **`ht -p`**: that puts the parts first and the totals after them.
+> - On the phone in portrait: `ht` as before, `ht -p` shows only the parts.
+>
+> **To use it:** copy the new `D:\HoMo-CFD\fritz\homo-table.py` to `/home/vault/v152dc/v152dc11` again, replacing yesterday's. I can do that for you if you like.
+>
+> All tests pass (99 unit tests). Not committed yet.
+
+### Follow-up (2026-10-13)
+
+> it's working
+
+- The user confirmed the new `homo-table.py` works on Fritz. No changes.
+
+> Good to hear. Not committed yet; say when you want it pushed (with the zip rebuilt).
+
+## 2026-10-13 — Results on Fritz in HoMo's Fritz cluster page
+
+### User messages (verbatim)
+
+> also add one section on cluster part in homo cfd
+
+### Clarifications (question tool; the user's answers verbatim)
+
+- What should the new section in HoMo's Fritz cluster page do? → "nothing with phone. i just thought if we keep this option in HoMo-CFD, we don't need to open WinSCP everytime on the computer just to see the results."
+
+### Contributor messages (verbatim)
+
+> Before I build it, which section do you mean?
+
+> Understood: a **"Results on Fritz"** section in HoMo's Fritz cluster page, so you can see the results of cases still on Fritz without opening WinSCP. It'll show the same values as the main table: CzA, CxA, L/D, forces, and front wing, undertray and rear wing.
+>
+> Checking how HoMo reads case states from Fritz today, so the results can come the same way:
+
+> The Simulations list already reads every case's job files on Fritz with one shell command per refresh. I'll extend that same command to also print the header and last row of each case's newest `Coefficients*.csv`. The results then come with the list you already refresh, with no extra login and nothing installed on Fritz.
+>
+> The forces will use the speed and density set in HoMo's main table, so the numbers match it. Reading the client code for the Simulations list:
+
+> Plan for the section:
+> - **Server (`cluster.py`):** the existing status command also prints, per case, the header and last row of the newest `plots/Coefficients*.csv`. That's read-only, and the case list ignores the extra lines.
+> - **Page:** a "Results on Fritz" table under the Simulations list, with iteration, CzA, CxA, L/D, downforce, drag, and CzA/CxA of the front wing, undertray and rear wing. It uses the main table's calculations, so the numbers match exactly.
+>
+> Checking how the tests fake WinSCP's answers for the case list:
+
+> I'll prefix the new lines with `HOMOCSV|`. The case parser only reads lines starting with `HOMO|`, so it ignores them. Writing the server part:
+
+> Before the page part, a real check on Fritz: running the extended status command exactly as **Refresh** will, read-only, and parsing the results:
+
+> It works on Fritz: one login, 3 seconds, 25 cases, 18 of them with results. The values match `ht`, e.g. 1002_homo_test CzA −5.224.
+>
+> Now the page. A "Results on Fritz" table goes under the Simulations list, filled from the same refresh:
+
+> Now the tests. The fake WinSCP's status answer gets result lines for two cases: `caseC` with a data row, and `caseD` with only a header, which must be left out. Reading the current fake answer and the server test for the case list:
+
+> The shell mangled the escape sequences again: the first edit landed with broken strings, and the others didn't apply. I'll fix the file with the Edit tool, which doesn't go through the shell:
+
+> The `\r` became real carriage-return characters inside the strings. Repairing that with a small script written straight to a file:
+
+> The carriage-return repair worked. Step 2 failed because `test_cluster.py` uses Windows line endings, and that script read it without converting them. Running steps 2–4 again with normal line handling:
+
+> All pass: 99 unit tests and 176 browser checks (1 new). Confirming the new assertions really landed in the unit tests:
+
+> All three are in. Docs and log; then you'll need to restart HoMo once, because the server part changed:
+
+### Work record
+
+- `cluster.py`: `RESULT_PREFIX = "HOMOCSV|"`, status command prints header and last row of the newest `plots/Coefficients*.csv` per case, `parse_results()`. `serve.py`: `api_cluster_cases` adds `results` per case. `web/app.js`: `CLUSTER_RESULT_COLUMNS`, `renderClusterResults()`, "Results on Fritz" block in `clusterCasesSection` (hidden without results). `web/styles.css`: `.cluster-results`.
+- Real check on Fritz (read-only, `status_script` with the saved session): exit 0 in 3.0 s, 25 cases, 18 with results (14 columns each).
+- Tests: `tests/test_cluster.py` (fake status output with result lines incl. CRLF and a header-only file; parse_results assertions), `tests/test_serve.py` (results attached / none without data), `tests/browser/server-mode.html` (1 new check: values, forces at 60 km/h, part columns, header-only case left out). Docs: `CHANGELOG.md`, `STATUS.md`, `tests/README.md`.
+- Checks: `py -m unittest discover -s tests` 99 tests OK; `py tests/run_browser_tests.py` 176/176 passed.
+- Needs a HoMo restart. Not committed.
+
+### Final response (verbatim)
+
+> Done: the Fritz cluster page now has a **"Results on Fritz"** section under the list of simulations. For every case on Fritz that has results, it shows:
+>
+> - iteration, CzA, CxA, L/D,
+> - downforce and drag in N, at the same speed and density as your main results table,
+> - CzA and CxA of the front wing, undertray and rear wing.
+>
+> It comes with the normal **Refresh** of the Simulations list (also every 5 minutes while the page is open), in the same single login. No WinSCP needed, and nothing on Fritz changes. I tried it against your Fritz folder: 3 seconds for all 25 cases, 18 of which have results.
+>
+> **To get it:** restart HoMo once (⏻, then the desktop shortcut), since part of this runs in HoMo's server. Then open **Fritz cluster**.
+>
+> All tests pass: 99 unit tests and 176 browser checks. Not committed yet; say when you want it pushed with the zip rebuilt.
+
+## 2026-10-13 — Fritz table: iteration column
+
+### User messages (verbatim)
+
+> also one more change in homo table, please add iteration column as well.
+
+### Contributor messages (verbatim)
+
+> I'll add **Iter** (the last iteration) right after State in `ht`. On a phone in portrait the case names then get 11 characters instead of 17. `ht -p` stays as it is, since the parts already fill the phone width; with more room, the iteration follows there too.
+
+> The column works: at 45 characters, "1000" sits after the state. Updating the tests and docs:
+
+> Adding Iter made the table 2 characters wider. In a 110-character window, a 52-character case name now loses its last 2 characters to make room for the forces. That's how the 30-character rule is meant to work, but my old test expected the whole name.
+>
+> Updating the test to the actual rule: names keep at least 30 characters, and the table never gets wider than the window. In a slightly wider window the full name still shows:
+
+### Work record
+
+- `fritz/homo-table.py`: "Iter" column (width 5, last row's Iteration, no decimals) after State in the totals group. Python 3.6 syntax checked; tried at 45 and 110 columns.
+- `tests/test_homo_table.py`: wide-terminal test checks the Iter column and value; long-name test now checks at least 30 characters of the name and no line wider than the window. Docs: `fritz/README.md`, `CHANGELOG.md`, `STATUS.md`, `tests/README.md`.
+- Checks: `py -m unittest discover -s tests` OK (99 tests).
+- Not copied to Fritz; not committed.
+
+### Final response (verbatim)
+
+> Done: `ht` now shows **Iter**, the last iteration, right after the state:
+>
+> ```
+> Case         State  Iter     CzA    CxA   L/D
+> 1011_try3     done  1000  -5.648 -1.895  2.98
+> ```
+>
+> On a phone in portrait the case names now get 11 characters (before: 17). In a window just wide enough for your longest names, the last 2 characters of a 52-character name may be cut; one or two characters more width shows them. `ht -p` is unchanged.
+>
+> **To use it:** copy the new `D:\HoMo-CFD\fritz\homo-table.py` to `/home/vault/v152dc/v152dc11` again.
+>
+> All 99 unit tests pass. Not committed yet (together with Results on Fritz); say when you want it pushed.
+
+### Push (2026-10-13)
+
+> push it
+
+- Changes checked for keys and key paths (none). Committed Results on Fritz and the Fritz table changes (parts, fitting groups, State width, Iter) on `night-2026-10-02`, pushed to `origin/night-2026-10-02` and `origin/master`, rebuilt `dist/HoMo-CFD-portable.zip`.
+
+> Pushed: everything is on GitHub (`master` and `night-2026-10-02`), and the zip is rebuilt. Restart HoMo once for Results on Fritz, and copy the new `fritz/homo-table.py` to Fritz for the Iter column.

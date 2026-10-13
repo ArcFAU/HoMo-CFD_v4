@@ -1676,6 +1676,24 @@ select {
   white-space: nowrap;
 }
 
+/* Results on Fritz, under the list of simulations. */
+.cluster-results {
+  margin-top: 18px;
+}
+
+.cluster-results[hidden] {
+  display: none;
+}
+
+.cluster-results h2 {
+  margin: 0 0 8px;
+  font-size: 17px;
+}
+
+.cluster-results-table td:not(:first-child) {
+  text-align: right;
+}
+
 .cluster-state-ready {
   color: #65b891;
 }

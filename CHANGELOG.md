@@ -3,6 +3,12 @@
 User-visible changes, newest first. Detailed reasoning lives in
 `CHAT_HISTORY.md`; decisions in `DECISIONS.md`.
 
+## 2026-10-13
+
+### Added
+- **Results on Fritz** in the Fritz cluster page: under Simulations on Fritz, a table of every case's last coefficients on Fritz (iteration, CzA, CxA, L/D, downforce and drag at the results table's speed, CzA/CxA of front wing, undertray and rear wing), so results can be checked before downloading and without WinSCP. It comes with the same Refresh (one read-only login).
+- **Parts in the Fritz table:** CzA and CxA of the front wing, undertray and rear wing. The table now fits the window: totals, then forces, then the parts, each group added while case names keep 30 characters; `ht -p` (`--parts`) puts the parts first (on a phone: only the parts). `--sort fw`, `ut` or `rw` puts the most downforce of that part first. Fixed: a "solve?" state shifted its line by one character. The table also shows the last iteration (Iter) after the state. Copy the new `fritz/homo-table.py` to Fritz to use it.
+
 ## 2026-10-10
 
 ### Fixed
