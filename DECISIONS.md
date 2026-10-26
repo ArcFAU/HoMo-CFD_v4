@@ -186,6 +186,17 @@ written before post-processing, and WinSCP alone cannot ask SLURM cheaply,
 so the generated `post.sh` writes its own marker. Details:
 `docs/STAGE7_FRITZ.md` sections 4–5.
 
+## 2026-10-14 — Teammates get HoMo CFD through the team's SVN
+
+The unpacked app (with its embeddable Python) lives in an SVN folder every
+member already has; updates are a commit by the maintainer and an SVN Update
+by everyone else. **Why unpacked, not the zip:** SVN then stores only changed
+files, and nobody has to unpack anything. **Why publish never deletes:** a
+file removed by mistake would disappear for the whole team; leftovers are
+listed and deleted knowingly in the commit dialog. HoMo CFD must not write
+into its own folder (settings, logs, caches all go to `%APPDATA%`), else every
+member's checkout would show changes.
+
 ## 2026-10-10 — The results listing is cached on the user's disk
 
 Results usually live on a hard disk; a cold scan of ~50,000 files took 7–15 s

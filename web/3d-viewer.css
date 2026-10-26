@@ -29,6 +29,21 @@
 .cfd3d-empty[hidden],.cfd3d-error[hidden] { display: none; }
 .cfd3d-empty code { color: var(--text); }
 .cfd3d-error { inset: auto 16px 16px; padding: 12px; color: #ffb4ab; background: #3b1719; border: 1px solid #7d3034; border-radius: 8px; white-space: pre-wrap; }
+/* Value under the mouse; follows the pointer. */
+.cfd3d-probe { position: absolute; padding: 6px 9px; font-size: 12px; line-height: 1.45; color: var(--text); background: rgba(12, 18, 25, .88); border: 1px solid var(--border); border-radius: 6px; pointer-events: none; white-space: nowrap; }
+.cfd3d-probe[hidden] { display: none; }
+/* The case's coefficients, top right. */
+.cfd3d-coefficients { position: absolute; top: 12px; right: 12px; max-width: 260px; padding: 8px 10px; font-size: 12px; color: var(--text); background: rgba(12, 18, 25, .85); border: 1px solid var(--border); border-radius: 8px; }
+.cfd3d-coefficients[hidden] { display: none; }
+.cfd3d-coefficients .coefficient-title { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.cfd3d-coefficients .coefficient-title b { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cfd3d-coefficients .coefficient-title button { padding: 0 6px; }
+.cfd3d-coefficients table { width: 100%; border-collapse: collapse; }
+.cfd3d-coefficients td, .cfd3d-coefficients th { padding: 1px 4px; text-align: right; font-weight: 400; color: var(--muted); }
+.cfd3d-coefficients td:first-child { text-align: left; color: var(--muted); }
+.cfd3d-coefficients td + td { color: var(--text); font-variant-numeric: tabular-nums; }
+.cfd3d-coefficients .coefficient-parts { margin-top: 6px; border-top: 1px solid var(--border); }
+.cfd3d-coefficients small { display: block; margin-top: 5px; color: var(--muted); }
 .cfd3d-legend { position: absolute; left: 50%; bottom: 26px; transform: translateX(-50%); display: grid; grid-template-columns: auto minmax(180px, 32vw) auto; align-items: center; gap: 8px; font-size: 12px; text-shadow: 0 1px 3px #000; }
 .cfd3d-legend div { height: 14px; border: 1px solid #8290a0; border-radius: 2px; background: linear-gradient(90deg,#3011a4,#1478df,#21d4c2,#28dc42,#f1df12,#f78b13,#cc1414); }
 .cfd3d-legend b { grid-column: 1 / -1; justify-self: center; font-weight: 500; }

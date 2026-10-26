@@ -3,6 +3,39 @@
 User-visible changes, newest first. Detailed reasoning lives in
 `CHAT_HISTORY.md`; decisions in `DECISIONS.md`.
 
+## 2026-10-17
+
+### Added
+- **3D viewer: value under the mouse.** Pointing at the car or a streamline shows the field value there, the part and the position (x, y, z in m). The scene is drawn once more into the single pixel under the pointer and read back, so the value is exact even on a 13-million-triangle car.
+- **3D viewer: the case's coefficients** in a box at the top right (opened from the results tree): CzA, CxA, L/D, downforce and drag at the results table's speed and density, iteration, and CzA/CxA of the front wing, undertray and rear wing. × hides it.
+
+### Changed
+- 3D viewer: **Vortices** and **Streamlines** start unticked.
+
+## 2026-10-15
+
+### Added
+- **`starccm/mesh.java` writes `MESHED`** after a successful meshing and save. With the one-line change in `starccm/README.md`, a case's `mesh.sh` starts the solver only then, so a failed meshing never costs a solver run.
+- **Replacing the remaining parts:** a CAD/STL file whose name contains `replace` and no group word (e.g. `remaining_replace_v2.stl`) now replaces everything in `z_000_remaining-parts`; other files are still added to that group as before.
+
+## 2026-10-14
+
+### Changed
+- **`starccm/mesh.java`: STL files without the CAD Exchange licence.** STL files in the case folder are now read with STAR-CCM+'s own STL reader, in millimetres, so they need no extra licence. STEP and IGES still need CAD Exchange, which on Fritz is shared and not always free (on 2026-10-14 it was not). After each import the log lists what the part group contains.
+- **A failed CAD import now stops the meshing** (reason in `ERRORS` and the log) instead of meshing and solving with the old parts. `starccm/README.md` shows a one-line change for a case's own `mesh.sh` so the solver is not even submitted then.
+
+### Added
+- **Import-only test:** an empty `IMPORT_ONLY` file in the case folder makes `mesh.java` import the CAD files, log the result and stop without meshing or saving.
+
+## 2026-10-14
+
+### Added
+- **Sharing through SVN:** `py tools/make_portable.py --into <folder>` writes the unpacked app (with its Python) into a folder, e.g. the team's SVN `…\1_Aero\HOMO-CFD`: new and changed files only, nothing deleted, leftovers listed for the commit dialog. Teammates run HoMo CFD from their SVN checkout and get updates with **SVN Update**. The README explains both sides.
+
+### Changed
+- The builds (zip and SVN) ship a teammates' guide as `README.md` (`docs/APP_README.md`: start, first start, SVN updates, what's where) instead of the project README with its developer notes.
+- HoMo CFD no longer writes Python's `__pycache__` into its own folder, so a shared (SVN) folder stays unchanged while it runs.
+
 ## 2026-10-13
 
 ### Added

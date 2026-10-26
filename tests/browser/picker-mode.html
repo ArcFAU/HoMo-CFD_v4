@@ -247,8 +247,10 @@ runTests(async () => {
 
   // Flow parts: the Lambda2 iso-surface has its own checkbox; a part switched off is not drawn.
   const vortexBox = doc3d.querySelector('#part-toggles input[data-kind="vortices"]');
-  check("3d: Lambda2 part gets a Vortices checkbox, on by default", !doc3d.getElementById("part-toggles").hidden && vortexBox?.checked === true &&
-    /Vortices/.test(vortexBox?.parentElement?.textContent ?? ""), doc3d.getElementById("part-toggles").textContent);
+  check("3d: Lambda2 part gets a Vortices checkbox, off at first", !doc3d.getElementById("part-toggles").hidden && vortexBox?.checked === false &&
+    win3d.eval("hiddenParts.has('Lambda2')") === true && /Vortices/.test(vortexBox?.parentElement?.textContent ?? ""), doc3d.getElementById("part-toggles").textContent);
+  vortexBox.checked = true; vortexBox.dispatchEvent(new win3d.Event("change"));
+  check("3d: ticking Vortices shows the Lambda2 part", win3d.eval("hiddenParts.has('Lambda2')") === false);
   vortexBox.checked = false; vortexBox.dispatchEvent(new win3d.Event("change"));
   check("3d: unticking Vortices hides the Lambda2 part", win3d.eval("hiddenParts.has('Lambda2')") === true);
   vortexBox.checked = true; vortexBox.dispatchEvent(new win3d.Event("change"));
@@ -285,7 +287,10 @@ runTests(async () => {
   check("3d: the view is fitted to the surfaces, not the streamlines", win3d.eval("model.lo[0]") === 0 && win3d.eval("model.hi[0]") === 2,
     win3d.eval("JSON.stringify([model.lo, model.hi])"));
   const streamBoxes = doc3d.querySelectorAll('#part-toggles input[data-kind="streamlines"]');
-  check("3d: one Streamlines checkbox for all rows, on by default", streamBoxes.length === 1 && streamBoxes[0].checked, doc3d.getElementById("part-toggles").textContent);
+  check("3d: one Streamlines checkbox for all rows, off at first", streamBoxes.length === 1 && !streamBoxes[0].checked &&
+    win3d.eval("hiddenParts.has('Streamlines 1') && hiddenParts.has('Streamlines 2')"), doc3d.getElementById("part-toggles").textContent);
+  streamBoxes[0].checked = true; streamBoxes[0].dispatchEvent(new win3d.Event("change"));
+  check("3d: ticking Streamlines shows every row", win3d.eval("!hiddenParts.has('Streamlines 1') && !hiddenParts.has('Streamlines 2')"));
   streamBoxes[0].checked = false; streamBoxes[0].dispatchEvent(new win3d.Event("change"));
   check("3d: unticking Streamlines hides every row", win3d.eval("hiddenParts.has('Streamlines 1') && hiddenParts.has('Streamlines 2') && !hiddenParts.has('Lambda2')"));
   streamBoxes[0].checked = true; streamBoxes[0].dispatchEvent(new win3d.Event("change"));
@@ -330,6 +335,30 @@ runTests(async () => {
   const fau = win3d.eval("(() => { const t = paletteTable('faubwr'); const r = paletteTable('rainbow'); return [t[0], t[1], t[2], t[4 * 128], t[4 * 128 + 1], t[4 * 255], t[4 * 255 + 1], r[0], r[1], r[2]].join(','); })()");
   check("3d: STAR-CCM+ colormap blended at its own colour points", fau === "4,49,106,255,254,255,0,82,51,219", fau);
   paletteSelect.value = "rainbow"; paletteSelect.dispatchEvent(new win3d.Event("change"));
+
+  // Value under the mouse, seen from the top (nose up). Canvas position of a model point, in CSS pixels.
+  await showField("PressureCoefficient");
+  preset.value = "top"; preset.dispatchEvent(new win3d.Event("change"));
+  await new Promise((resolve) => setTimeout(resolve, 600));
+  const toCanvas = (x, y, z) => win3d.eval(`(() => { const v = viewBasis(), a = [${x}, ${y}, ${z}].map((c, i) => (c - model.center[i]) / model.radius);
+    const dot = (b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2], w = canvas.clientWidth, h = canvas.clientHeight;
+    const nx = dot(v.right) * zoom * canvas.height / canvas.width + panX, ny = dot(v.up) * zoom + panY;
+    return [(nx + 1) / 2 * w, (1 - ny) / 2 * h]; })()`);
+  const probe = (x, y, z) => { const [cx, cy] = toCanvas(x, y, z); return win3d.eval(`JSON.stringify(probeAt(${cx}, ${cy}))`); };
+  const onWing = JSON.parse(probe(1.5, 0.4, 0) ?? "null");
+  check("3d: the value under the mouse on the car: part, position and the interpolated field value",
+    onWing?.part === "Frontwing" && Math.abs(onWing.x - 1.5) < 0.03 && Math.abs(onWing.y - 0.4) < 0.03 && Math.abs(onWing.z) < 1e-6 && Math.abs(onWing.value - 0.2917) < 0.03, JSON.stringify(onWing));
+  // (The streamline filter is still on width 0.7–0.8 m here: the lines at y = 0.75, the upper row at z = 0.6.)
+  const onLine = JSON.parse(probe(1.5, 0.75, 0.6) ?? "null");
+  check("3d: on a streamline it reads the streamline", onLine?.part === "Streamlines" && Math.abs(onLine.value + 0.5) < 1e-6 && Math.abs(onLine.z - 0.6) < 1e-6, JSON.stringify(onLine));
+  check("3d: nothing under the mouse, no value", probe(5, 5, 0) === "null", probe(5, 5, 0));
+  const [hx, hy] = toCanvas(1.5, 0.4, 0), canvasBox = scene.getBoundingClientRect();
+  scene.dispatchEvent(new win3d.PointerEvent("pointermove", { clientX: canvasBox.left + hx, clientY: canvasBox.top + hy, bubbles: true, pointerId: 1 }));
+  await waitFor(() => !doc3d.getElementById("probe").hidden, 3000);
+  check("3d: moving the mouse shows the readout", /PressureCoefficient 0\.2[89]\d*/.test(doc3d.getElementById("probe").textContent) && /Frontwing/.test(doc3d.getElementById("probe").textContent),
+    doc3d.getElementById("probe").textContent);
+  scene.dispatchEvent(new win3d.PointerEvent("pointerleave", { bubbles: true, pointerId: 1 }));
+  check("3d: no coefficient box for a folder picked in the browser (its simulation is unknown)", doc3d.getElementById("coefficients").hidden);
 
   // A narrow window (laptop with display scaling): the toolbar wraps instead of pushing buttons off screen.
   const frameWidth = viewer3dFrame.style.width;

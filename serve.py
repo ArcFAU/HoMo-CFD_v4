@@ -42,7 +42,10 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlsplit
 
-import cluster
+# Python writes no __pycache__ into the app folder: teammates run HoMo CFD from a
+# shared (SVN) folder, where such files would show up as changes.
+sys.dont_write_bytecode = True
+import cluster  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
 WEB = HERE / "web"

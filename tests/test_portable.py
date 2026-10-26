@@ -53,6 +53,10 @@ class PortableBuildTests(unittest.TestCase):
         self.assertIn("HoMo-CFD/starccm/export3D.java", names)
         self.assertIn("HoMo-CFD/starccm/mesh.java", names)
         self.assertIn("HoMo-CFD/fritz/homo-table.py", names)
+        with zipfile.ZipFile(archive) as built:
+            guide = built.read("HoMo-CFD/README.md").decode("utf-8")
+        self.assertIn("Updates (SVN)", guide, "the teammates' guide, not the project README")
+        self.assertFalse([word for word in ("make_portable", "CHAT_HISTORY", "ChatGPT", "AGENTS.md", "Project history") if word in guide])
         self.assertIn("HoMo-CFD/web/3d-viewer.js", names)
         self.assertFalse([name for name in names if "__pycache__" in name or name.endswith((".ppk", ".sim", ".pyc"))])
         with zipfile.ZipFile(archive) as built:
@@ -61,6 +65,46 @@ class PortableBuildTests(unittest.TestCase):
         self.assertNotIn(b"\n", bat.replace(b"\r\n", b""), "CRLF line endings only")
         self.assertIn(b'start "" "python\\pythonw.exe" serve.py --open --background', bat,
                       "the start script prefers the bundled Python, without a console window")
+
+    def test_publish_into_a_shared_folder(self):
+        built = self.temp / "built"
+        (built / "web").mkdir(parents=True)
+        (built / "serve.py").write_text("v1", encoding="utf-8")
+        (built / "web" / "app.js").write_text("a", encoding="utf-8")
+        target = self.temp / "svn" / "HOMO-CFD"
+        (target / ".svn").mkdir(parents=True)
+        (target / ".svn" / "wc.db").write_text("svn", encoding="utf-8")
+        new, changed, leftovers = make_portable.publish(target, built)
+        self.assertEqual(([str(p) for p in new], changed, leftovers), (["serve.py", str(Path("web/app.js"))], [], []))
+        self.assertEqual(make_portable.publish(target, built), ([], [], []), "a second run changes nothing")
+        stamp = (target / "web" / "app.js").stat().st_mtime_ns
+        (built / "serve.py").write_text("v2", encoding="utf-8")
+        (target / "old.js").write_text("gone from HoMo", encoding="utf-8")
+        new, changed, leftovers = make_portable.publish(target, built)
+        self.assertEqual((new, [str(p) for p in changed], [str(p) for p in leftovers]), ([], ["serve.py"], ["old.js"]))
+        self.assertEqual((target / "serve.py").read_text(encoding="utf-8"), "v2")
+        self.assertTrue((target / "old.js").exists(), "nothing is deleted")
+        self.assertEqual((target / "web" / "app.js").stat().st_mtime_ns, stamp, "unchanged files are left alone")
+        self.assertEqual((target / ".svn" / "wc.db").read_text(encoding="utf-8"), "svn")
+
+    def test_publish_refuses_a_folder_with_other_files(self):
+        target = self.temp / "other"
+        target.mkdir()
+        (target / "report.docx").write_text("x", encoding="utf-8")
+        with self.assertRaises(SystemExit):
+            make_portable.publish(target, self.temp)
+        self.assertEqual([p.name for p in target.iterdir()], ["report.docx"])
+
+    def test_running_the_server_code_writes_no_bytecode_into_the_app_folder(self):
+        app = self.temp / "app"
+        app.mkdir()
+        for name in ("serve.py", "cluster.py"):
+            shutil.copy2(HERE.parent / name, app / name)
+        environment = {key: value for key, value in __import__("os").environ.items() if key != "PYTHONDONTWRITEBYTECODE"}
+        # Started as HoMo CFD starts it (a script; --help stops right after the imports).
+        completed = subprocess.run([sys.executable, "serve.py", "--help"], cwd=app, env=environment, capture_output=True, text=True, timeout=60)
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertFalse(list(app.rglob("__pycache__")), "no __pycache__ next to cluster.py")
 
     def test_rebuild_replaces_the_previous_build(self):
         app = self.temp / "HoMo-CFD"

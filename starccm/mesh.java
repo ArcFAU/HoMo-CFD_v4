@@ -31,6 +31,11 @@ import java.util.Collection;
 
 // The team's meshing macro (template SCRIPT_RANS, 2025-11-13), kept in HoMo CFD with a reworked addCAD():
 // CAD files in the case folder replace a part group before meshing. See starccm/README.md.
+// Changes of 2026-10-14: STL files are read with STAR-CCM+'s own STL reader in millimetres (no add-on licence;
+// STEP/IGES need a CAD Exchange licence, which is shared on Fritz and was not free on 2026-10-14); the contents
+// of a replaced group are logged; a failed import stops the macro before meshing; an IMPORT_ONLY file in the
+// case folder stops it after the import (test mode, nothing saved). A file MESHED is written after a
+// successful meshing and save, so the job script can refuse to start the solver otherwise.
 public class mesh extends StarMacro {
 
     private Simulation simulation_0;
@@ -92,6 +97,17 @@ public class mesh extends StarMacro {
             addCAD();
         } catch (Exception e) {
             erros += "Adding CAD failed: " + e + "\n";
+        }
+
+        // Never mesh a simulation whose CAD swap failed: it would quietly run with the old parts.
+        if (!erros.isEmpty()) {
+            writeErrors();
+            simulation_0.println("addCAD: import failed, meshing skipped (see ERRORS)");
+            return;
+        }
+        if (new File(directory + slash + "IMPORT_ONLY").exists()) {
+            simulation_0.println("IMPORT_ONLY: import checked; no meshing, simulation not saved");
+            return;
         }
 
         if (settings.exists()) {
@@ -1077,6 +1093,13 @@ public class mesh extends StarMacro {
 
         simulation_0.saveState(resolvePath(FileName + ".sim"));
 
+        // Marker for the job script: only now is there a saved volume mesh (a failed meshing throws before).
+        try {
+            new File(directory + slash + "MESHED").createNewFile();
+        } catch (IOException e) {
+            erros += "Writing MESHED failed\n";
+        }
+
 
     }
 
@@ -1091,7 +1114,7 @@ public class mesh extends StarMacro {
     }
 
     // The part group a CAD file replaces, from its name (case ignored): frontwing or FW, undertray or UT,
-    // deflector, mono, rearwing or RW; anything else is added to z_000_remaining-parts. FW, UT and RW count
+    // deflector, mono, rearwing or RW; anything else is added to z_000_remaining-parts ("replace" in the name: replaces that group). FW, UT and RW count
     // as separate words only (e.g. "FW_V1.stp", "1008_RW_V4.step").
     private String groupName(String fileName) {
         String name = fileName.toLowerCase(java.util.Locale.ROOT);
@@ -1132,20 +1155,32 @@ public class mesh extends StarMacro {
                 }
                 java.util.Set<GeometryPart> before = new java.util.HashSet<>(parts.getParts());
                 PartImportManager partImportManager_0 = simulation_0.get(PartImportManager.class);
-                partImportManager_0.importCadPart(resolvePath(file.getPath()), "SharpEdges", 30.0, 5, true, 1.0E-5, true, false, false, false, true, NeoProperty.fromString("{\'NX\': 1, \'STEP\': 1, \'SE\': 1, \'CGR\': 1, \'SW\': 1, \'IFC\': 1, \'ACIS\': 1, \'JT\': 1, \'IGES\': 1, \'CATIAV5\': 1, \'CATIAV4\': 1, \'3DXML\': 1, \'CREO\': 1, \'INV\': 1}"), true, false);
+                if (lower.endsWith(".stl")) {
+                    // STAR-CCM+'s own STL reader (needs no CAD Exchange licence); STL files are in millimetres.
+                    partImportManager_0.importStlPart(resolvePath(file.getPath()), "OneSurfacePerPatch", units_mm, true, 1.0E-5);
+                } else {
+                    partImportManager_0.importCadPart(resolvePath(file.getPath()), "SharpEdges", 30.0, 5, true, 1.0E-5, true, false, false, false, true, NeoProperty.fromString("{\'NX\': 1, \'STEP\': 1, \'SE\': 1, \'CGR\': 1, \'SW\': 1, \'IFC\': 1, \'ACIS\': 1, \'JT\': 1, \'IGES\': 1, \'CATIAV5\': 1, \'CATIAV4\': 1, \'3DXML\': 1, \'CREO\': 1, \'INV\': 1}"), true, false);
+                }
                 java.util.List<GeometryPart> added = new java.util.ArrayList<>(parts.getParts());
                 added.removeAll(before);
                 if (added.isEmpty()) {
                     throw new IllegalStateException("the import created no parts");
                 }
                 int removed = 0;
-                if (target != remaining && replaced.add(groupName)) {
+                // Files for the remaining-parts group are added to it, except files whose name contains "replace"
+                // (e.g. remaining_replace_r0.stl): those replace the whole group, as for the other groups.
+                boolean replaceGroup = target != remaining || lower.contains("replace");
+                if (replaceGroup && replaced.add(groupName)) {
                     Collection<GeometryPart> old = new java.util.ArrayList<>(target.getChildParts().getParts());
                     removed = old.size();
                     target.getPartManager().removeParts(old);
                 }
                 parts.reparentParts(added, target.getChildParts());
                 simulation_0.println("addCAD: " + file.getName() + " -> " + groupName + ": " + added.size() + " part(s) imported, " + removed + " old part(s) removed");
+                for (GeometryPart part : target.getChildParts().getParts()) {
+                    simulation_0.println("addCAD:   " + groupName + " contains " + part.getPresentationName() + " ["
+                            + part.getClass().getSimpleName() + ", " + part.getPartSurfaces().size() + " surface(s)]");
+                }
             } catch (Exception e) {
                 String reason = file.getName() + " (" + groupName + ") not imported: " + e.getMessage();
                 erros += "Adding CAD: " + reason + "\n";

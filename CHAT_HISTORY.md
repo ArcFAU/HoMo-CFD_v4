@@ -6608,3 +6608,341 @@ The background watcher of the post job (job 4285206 in `exp`) finished; no new u
 - Changes checked for keys and key paths (none). Committed Results on Fritz and the Fritz table changes (parts, fitting groups, State width, Iter) on `night-2026-10-02`, pushed to `origin/night-2026-10-02` and `origin/master`, rebuilt `dist/HoMo-CFD-portable.zip`.
 
 > Pushed: everything is on GitHub (`master` and `night-2026-10-02`), and the zip is rebuilt. Restart HoMo once for Results on Fritz, and copy the new `fritz/homo-table.py` to Fritz for the Iter column.
+
+## 2026-10-13 — Keeping teammates updated (question)
+
+### User messages (verbatim)
+
+> it's doen. also is there any way to keep the member updated with the application? one where i don't need to share it everytime i make some updates.
+
+### Work record
+
+- Question only; no changes. The user confirmed Results on Fritz and the new homo-table.py work.
+
+### Final response (verbatim)
+
+> [Offered: 1 a synced team folder (FAUbox/OneDrive/Teams) holding the unpacked app, no code, but updates can arrive while HoMo is open; 2 (recommended) an "Update available" check in HoMo: `make_portable.py --publish` puts a versioned zip in a shared place, HoMo checks it at start and installs on one click without touching settings or results, needs a build version number; 3 GitHub releases, skipped because the repo is private. Asked where a shared copy can live (synced folder, network drive, or a Fritz group folder).]
+
+### Follow-up (2026-10-13)
+
+> okay, bit complex now. let's hold on to the idea for later.
+
+- Recorded the update idea as a later item in `STATUS.md`. No code changes.
+
+> Okay, parked. I noted it in `STATUS.md` as a later item, with the options we discussed, so it's ready when you want it.
+
+## 2026-10-14 — mesh.java: STL without CAD Exchange, stop after a failed import
+
+### User message (verbatim)
+
+> yes, you can change it but do not change anything on SCRIPT_RANS folder on cluster, never.
+
+(Context: answer to Claude Code's offer in the undertray project, `D:\CFD_TOPO`: "HoMo CFD's `starccm/README.md` says STEP and STL files can be swapped in. On Fritz that isn't true without CAD Exchange. I haven't changed anything in HoMo CFD; tell me if you want its macro and README fixed too." That conversation is logged in `D:\CFD_TOPO\CHAT_HISTORY.md`.)
+
+### Work record
+
+- Read-only check on Fritz: `1002_homo_test/mesh.o4317225` (2026-10-09) imported `1008_rearwing_V4.stp` and `frontwing_V1.stp` with the same licence settings, so CAD Exchange exists on Fritz but is a shared licence that was not free on 2026-10-14 (job 4331617: "Asked for 1 license of cadexchange and got 0").
+- `starccm/mesh.java`: STL via `importStlPart` in mm (no add-on licence), group contents logged, stop before meshing after a failed import, `IMPORT_ONLY` test mode. Same file as `D:\CFD_TOPO\starccm\mesh.java`, CRLF kept. Compiled against the STAR-CCM+ 2506 jars with the bundled JDK: OK. Already tested on Fritz in the undertray project (import-only job 4331628).
+- `starccm/README.md`: STL (mm, recommended) vs STEP (needs the shared CAD Exchange licence), the stop after a failed import, an optional guard line for a case's own `mesh.sh` (never the template), the `IMPORT_ONLY` test.
+- `CHANGELOG.md` (2026-10-14), `STATUS.md` note.
+- Nothing changed in `SCRIPT_RANS` on the cluster (user's rule: never).
+- Tests: `py -m unittest discover -s tests -v` gives 99 tests, OK; `py tests/run_browser_tests.py` gives 176 / 176 checks passed.
+- Not committed.
+
+### Final response (verbatim)
+
+> Done. HoMo CFD's macro and README are fixed, and I've saved your rule: nothing in `SCRIPT_RANS` on the cluster is ever changed.
+>
+> **Correction first:** I was wrong earlier that Fritz has *no* CAD Exchange licence. Your 9 October run imported STEP files with the same licence setup, so the licence exists. It's shared, though, and tonight none was free. STL avoids the problem completely because it uses STAR-CCM+'s own reader.
+>
+> **HoMo CFD changes (not committed):**
+> - `starccm/mesh.java` is now the same file as the undertray project's:
+>   - STL is read without CAD Exchange, in millimetres;
+>   - the log shows what each group contains after the swap;
+>   - a failed import stops before meshing, so it never runs with the old parts;
+>   - an `IMPORT_ONLY` file gives an import-only test.
+>
+>   It compiles against STAR-CCM+ 2506 and is already proven on Fritz by tonight's import test.
+> - `starccm/README.md` explains STL (recommended) versus STEP (needs the shared licence), the stop after a failed import, and the import-only test. It also gives an optional one-line change for **a case's own** `mesh.sh`, so the solver isn't submitted after a failed import. It says explicitly: not in the template.
+> - `CHANGELOG.md`, `STATUS.md` and `CHAT_HISTORY.md` are updated. Tests: 99 unit tests and 176/176 browser checks pass.
+>
+> To give teammates the new macro, they copy `starccm/mesh.java` into their own case or template folder. I won't touch `SCRIPT_RANS`.
+>
+> **M2 run:** meshing is in progress (job 4331642). I'll report when the chain is finished.
+
+## 2026-10-14 — Sharing HoMo through SVN (question)
+
+### User messages (verbatim)
+
+> D:\SVN\2027\2_Composites\1_Aero\HOMO-CFD this folder is from svn means every team member will have access to it. do you think it can work? with out messing things up.
+
+### Contributor messages (verbatim)
+
+> It can work well. SVN is just a better version of the "shared folder" idea: teammates get your update when they run **SVN Update**, which they already do for team files. Checking that folder and how SVN is set up on this PC:
+
+> The folder is new and empty, and `D:\SVN` is an SVN working copy. The `svn` command-line tool isn't installed here, so you're probably using TortoiseSVN. Before saying "yes", I'll check the one thing that could make a mess: whether HoMo writes anything into its own folder while running. Every teammate's SVN would then show modified or new files:
+
+### Work record
+
+- `D:\SVN\2027\2_Composites\1_Aero\HOMO-CFD` exists and is empty; `D:\SVN\.svn` marks the working copy; TortoiseSVN installed, no `svn` CLI. HoMo writes settings, tree cache and log to `%APPDATA%\HoMo-CFD`, downloads to the working directory; only Python's `__pycache__` (importing `cluster.py`) would appear in the app folder. No changes made.
+
+### Final response (verbatim)
+
+> [Answered yes, with conditions: HoMo keeps its changing files outside its folder (one fix needed: no __pycache__); proposed publishing the unpacked app into the SVN folder with a build-script option and committing with TortoiseSVN (first commit ~40 MB, later small), teammates SVN Update and run Create desktop shortcut.bat once; quit HoMo before updating (locked Python files), only the publisher edits that folder, never results in it, commit the unpacked app not the zip; asked whether to build the cache fix and the --into option (no SVN commits by Claude).]
+
+### Follow-up (2026-10-14): building it
+
+> go ahead
+
+### Contributor messages (verbatim)
+
+> I'll start with the cache fix in `serve.py`, then the build option. Reading the build script:
+
+> Now the build script. The new `--into FOLDER` option will:
+> - **Copy only new or changed files** into the folder and leave identical ones untouched, so TortoiseSVN shows exactly what changed.
+> - **Never delete anything:** files the app no longer has are only listed, for you to delete in the commit dialog. It never touches `.svn`.
+> - **Refuse to write into a folder that has other files and isn't a HoMo folder**, so a typo in the path can't scatter files around your SVN.
+>
+> Checking how the existing build test is set up:
+
+> Writing the cache fix and the publish option:
+
+> Now tests for both. For `publish`:
+> - an empty folder gets everything;
+> - a second run changes nothing;
+> - a changed file is updated;
+> - a file the app dropped is listed but kept;
+> - `.svn` is left alone;
+> - a folder with other files is refused.
+>
+> For the cache fix: starting the server code from a copy of the app must leave no `__pycache__`.
+
+> The test imported `serve` as a module, so Python cached `serve.py` itself before the fix could act. HoMo starts `serve.py` as a script (`pythonw serve.py …`), and a script is never cached. Checking what the cache folder held, then making the test start it the real way:
+
+> The check passes with the fix and fails without it, and the fix is back in place. Full test runs:
+
+> Both suites pass: 102 unit tests and 176 browser checks. The `__pycache__` in the project folder comes from the tests importing modules directly. Checking it's git-ignored:
+
+> It's ignored, so the project folder is fine. Now filling your SVN folder for the first time. This writes only into that empty folder and commits nothing:
+
+> The SVN folder now holds the app: 61 files, 24 MB. A last check: starting the server code with the bundled Python *in the SVN folder* must leave no new files there:
+
+> Nothing new appeared in the folder, and the bundled Python works from there. Now the docs: the README gets a section for teammates using the SVN folder and one for you on publishing.
+
+> The README changed after I filled the SVN folder, so publishing once more. This also shows that a second run copies only what changed:
+
+### Work record
+
+- `serve.py`: `sys.dont_write_bytecode = True` before `import cluster`. `tools/make_portable.py`: `publish(target, built)` and `--into` (keeps the build folder until published, then removes it; prints new/changed/leftover files and the commit hint).
+- `tests/test_portable.py`: 3 new tests (publish into a shared folder; refuse a folder with other files; no `__pycache__` when `serve.py` starts as a script, confirmed to fail without the fix).
+- Published into `D:\SVN\2027\2_Composites\1_Aero\HOMO-CFD`: 61 new files, 24 MB; smoke test with the bundled Python there (`serve.py --help`) left the file count at 61, no `__pycache__`. Second publish after the README change: 1 changed file. Nothing committed to SVN (TortoiseSVN only; the user commits).
+- Docs: `README.md` (SVN use and publishing), `CHANGELOG.md` (2026-10-14), `STATUS.md` (replaces the parked update item), `DECISIONS.md`, `tests/README.md`.
+- Checks: `py -m unittest discover -s tests` 102 tests OK; `py tests/run_browser_tests.py` 176/176 passed.
+- HoMo project changes not committed to git yet.
+
+### Final response (verbatim)
+
+> Done. Your SVN folder `D:\SVN\2027\2_Composites\1_Aero\HOMO-CFD` now holds the complete app: 61 files, 24 MB, including its own Python. It's not committed yet; that's your step.
+>
+> **You, now:** in Explorer, right-click the `HOMO-CFD` folder → **TortoiseSVN → Add…** (all files), then **SVN Commit…**.
+>
+> **Teammates, once:** **SVN Update**, then double-click `Create desktop shortcut.bat` in that folder. From then on they start HoMo from the desktop.
+>
+> **Your future updates:** run this in the HoMo project folder, then commit with TortoiseSVN:
+> ```
+> py tools/make_portable.py --into "D:\SVN\2027\2_Composites\1_Aero\HOMO-CFD"
+> ```
+> It copies only what changed (the second run just now changed only `README.md`), never deletes anything, and lists files HoMo no longer has so you can delete them in the commit dialog. Teammates then just **SVN Update**; ideally they quit HoMo (⏻) first.
+>
+> **Why it won't mess things up:** HoMo writes nothing into that folder. Settings, logs and the saved results listing go to `%APPDATA%`. I fixed the one exception, Python's cache files, and checked it: starting HoMo's server code from the SVN folder left it exactly as it was. The README in the folder explains the do's and don'ts for teammates.
+>
+> All tests pass: 102 unit tests (3 new) and 176 browser checks. The HoMo project changes aren't pushed to GitHub yet; say if you want that too.
+
+### Follow-up (2026-10-14): only what teammates need
+
+> also just keep the things that they need. I will use our usual folder like always.
+
+### Contributor messages (verbatim)
+
+> You keep working in `D:\HoMo-CFD` as always, and the SVN folder only gets what teammates need to use HoMo. I'll check what's in there that only matters to you as the developer. The likely candidate is the README, since the build copies the project README as it is:
+
+> The README is the problem: the build ships your project README, which mixes the user guide with developer parts (building the zip, publishing to SVN, project history, ChatGPT sync, terminal commands). Everything else in the SVN folder is needed: the app, its Python, the STAR-CCM+ macros, the Fritz table and `ABOUT.txt`.
+>
+> I'll write a separate teammate README that the build ships instead. Your project README stays as it is in `D:\HoMo-CFD`:
+
+> The zip and SVN builds now ship the teammates' guide. In your project README I'll add one line pointing to it, then publish to the SVN folder again:
+
+> The SVN folder now has the teammates' guide as its README; everything else there was already only what they need. Changelog, notes, tests and log:
+
+### Work record
+
+- New `docs/APP_README.md` (teammates' guide: what HoMo is, contact, start/stop, first start with finished/inProgress, SVN updates and don'ts, using it, what's in starccm/ and fritz/). `tools/make_portable.py`: `README.md` removed from `APP_FILES`, `APP_README` copied as `README.md`. Project `README.md`: one line on what teammates get.
+- `tests/test_portable.py`: the shipped README is the guide and contains no developer notes. Republished to `D:\SVN\2027\2_Composites\1_Aero\HOMO-CFD` (1 changed file: README.md). Folder content: ABOUT.txt, Create desktop shortcut.bat, README.md, Start HoMo CFD.bat, cluster.py, serve.py, web/, python/, starccm/, fritz/.
+- Docs: `CHANGELOG.md`, `STATUS.md`, `tests/README.md`.
+- Checks: `py -m unittest discover -s tests` OK (102 tests). Browser suite not affected.
+- Nothing committed (git or SVN).
+
+### Final response (verbatim)
+
+> Done. The SVN folder now holds only what teammates need:
+>
+> - the app (`serve.py`, `cluster.py`, `web\`) with its own Python (`python\`),
+> - `Start HoMo CFD.bat` and `Create desktop shortcut.bat`,
+> - `starccm\` (the macros) and `fritz\` (the phone table), each with its own short README,
+> - `ABOUT.txt`,
+> - a **README written for teammates**: how to start, set the results folder, update through SVN, and what not to touch.
+>
+> Before, the README there was your project README, with developer parts like building the zip, publishing, project history and ChatGPT notes. That one stays in `D:\HoMo-CFD`, where you keep working as always. The zip for sharing gets the teammates' README too.
+>
+> Your routine stays: change things in `D:\HoMo-CFD`, then `py tools/make_portable.py --into "D:\SVN\2027\2_Composites\1_Aero\HOMO-CFD"`, then commit that folder with TortoiseSVN. Nothing is committed yet, in SVN or on GitHub.
+
+## 2026-10-15 — mesh.java: MESHED marker and replacing the remaining parts (from the CFD_TOPO project)
+
+### User request (verbatim)
+
+> go ahead
+
+(Answer to the question whether HoMo CFD's copy of `starccm/mesh.java` should get the CFD_TOPO project's additions.)
+
+### Contributor response (verbatim)
+
+> HoMo CFD's `starccm/mesh.java` now matches the CFD_TOPO project's copy: it writes `MESHED` after a successful meshing and save, and a file with `replace` in its name replaces the parts in z_000_remaining-parts (other files are still added there). README and changelog updated; unit tests 102 OK, browser checks 176/176.
+
+### Work record
+
+- `starccm/mesh.java`: copied from `D:\CFD_TOPO\starccm\mesh.java` (identical apart from CRLF line endings; compiled there against the STAR-CCM+ 2506 jars). Additions: `MESHED` marker; opt-in `replace` for z_000_remaining-parts (needed for a diagnostic that removes parts from that group; without it files are only added).
+- `starccm/README.md`: table row for `replace`, the `MESHED` marker with the guarded `mesh.sh` line, history sentence. `CHANGELOG.md`: 2026-10-15 entry.
+- Tests: `py -m unittest discover -s tests` 102 OK; `py tests/run_browser_tests.py` 176/176 passed.
+
+## 2026-10-17 — 3D viewer: value under the mouse, the case's coefficients, flow parts off at first; SVN folder updated
+
+### User messages (verbatim)
+
+> one thing to add, can you also add the plot values in 3d viewer.
+
+> can you also keep Vortices and streamline by default unchecked
+
+> also update shared folder for others
+
+### Clarifications (question tool; the user's answers verbatim)
+
+- Which values should the 3D viewer show? → "The case's coefficients, Value under the mouse"
+
+### Contributor messages (verbatim)
+
+> "Plot values" could mean a few different things here, so let me check before building:
+
+> Both, then:
+> 1. **Value under the mouse:** pointing at the car or a streamline shows the field value there, plus the part and the position.
+> 2. **The case's coefficients:** a small box with CzA, CxA, L/D, downforce, drag and the front wing, undertray and rear wing, read from the same `Coefficients` file as the results table.
+>
+> For (1), HoMo's car has up to 13 million triangles, so I'll let the graphics card do the picking. It draws the scene once more, invisibly, into a single pixel under the mouse, storing the position and value instead of a colour. That's exact, with no searching through triangles. Reading the current drawing code:
+
+> Before writing it, checking two dependencies: whether the browser can render into floating-point targets, which the exact read-back needs, and how the viewer knows which simulation folder it opened:
+
+> Writing the probe and the coefficients box as one block in the viewer:
+
+> Removing two leftover variables from the probe, then hooking the coefficients into folder opening and the cleanup into the renderer's disposal:
+
+> Now the two boxes in the page and their style:
+
+> Now the tests.
+>
+> **Probe:** on the test car (a flat front wing), with the view from the top:
+> - a point on the wing must return the front wing, its position and the interpolated Cp;
+> - a point on a streamline must return "Streamlines" and the streamline's value;
+> - empty space must return nothing;
+> - moving the mouse must show the readout.
+>
+> I compute the expected Cp by hand from the test data: 0.29 at x 1.5, y 0.4.
+>
+> **Coefficients:** opening the 3D viewer from the results tree must show caseA's values, and opening a folder without a known simulation must show nothing.
+
+> Most of it works:
+> - The coefficients box shows caseA's values correctly.
+> - The value under the mouse on the wing is right: 0.288 against my hand-calculated 0.292, a pixel's worth off.
+>
+> Three failures to look at:
+> 1. **The streamline check:** that's my test's mistake. The streamline bar starts at "Every 2nd", which hides the row and line I aimed at, so the probe correctly found the wing underneath. I'll aim at a visible streamline.
+> 2. **The readout check** expected "0.29…", but the readout rounds to 4 digits and shows 0.2885. That's correct; my pattern was too strict.
+> 3. **"stepping keeps the zoomed position"** in the image viewer: I didn't touch that code. I'll check whether it fails again.
+
+> The image viewer check passed this time, so that one was a one-off timing hiccup, not related to my change. The streamline probe still finds the wing underneath, though. I'll make the failing check print which streamlines are drawn at that moment and which parts are hidden:
+
+> Found it, and it's again my test: at that point in the test sequence, an earlier check had left the streamline filter on width 0.7–0.8 m. So only the lines at y = 0.75 were drawn, and the probe correctly saw the wing at y = 0.5. Aiming at y = 0.75, where the upper row (z = 0.6) lies above everything else:
+
+> Yes. **Vortices** and **Streamlines** will start unticked; you tick them when you want them. Changing the defaults and the two checks that expect them ticked at first:
+
+> Nothing was written: the streamlines entry has a `${…}` inside its tooltip text, so my search for the end of the entry stopped too early. Replacing `on:true` within the entries themselves instead:
+
+> Now the test changes, which the failed script hadn't applied either:
+
+> All 184 browser checks pass, with **Vortices** and **Streamlines** now off when a folder opens. Docs, the teammates' guide, and the log:
+
+> The changelog edit didn't match. Checking why, then I'll also update the shared SVN folder as you asked:
+
+> Someone else has been working on this project in parallel: there are 14 and 15 October changelog entries I didn't write. They cover `starccm/mesh.java` (a `MESHED` marker, STL import without the CAD licence, an `IMPORT_ONLY` test mode). So I'll put my entry above theirs and not touch their changes.
+>
+> Publishing to the shared folder copies the whole current state, including their `mesh.java` work. Before I do that, I'll check in the log whether that work is finished and tested:
+
+> That work was done in your CFD_TOPO session with your approval. It's compiled against STAR-CCM+ and tested, just not committed. So it's fine to publish it with mine; I'll mention it below.
+>
+> Applying my docs with the changelog entry placed above the newest one, then running the unit tests:
+
+> The `sed` replacement didn't match, so the script was unchanged. Changing it with Python instead:
+
+> The docs are in place. Now updating the shared SVN folder for the others:
+
+> The SVN folder is updated: 6 changed files, nothing new or deleted. Writing the log entry:
+
+### Work record
+
+- `web/3d-viewer.js`: `makePicker()`, `disposePicker()`, `probeAt()`, `showProbe()` (pointer move via requestAnimationFrame; hidden while dragging or on leave), `parseCsvLine()`, `monitorKey()`, `forceSettings()`, `caseCoefficients()`, `showCoefficients()` (called at the end of `openFolder`); `disposeRenderer` also clears the picker and both boxes; `FLOW_PARTS` vortices and streamlines `on:false`. `web/3d-viewer.html`/`.css`: `#probe`, `#coefficients`.
+- Tests: `tests/browser/picker-mode.html` (probe on the wing with position and interpolated value, on a streamline, in empty space, readout on pointer move, no coefficient box for a picked folder; default-off checks for Vortices and Streamlines with tick/untick), `tests/browser/server-mode.html` (coefficient box for caseA with forces at 60 km/h and FW values).
+- Docs: `CHANGELOG.md` (2026-10-17, placed above the parallel session's 2026-10-15 entry), `docs/APP_README.md`, `STATUS.md`, `tests/README.md`.
+- Checks: `py tests/run_browser_tests.py` 184/184 passed (one unrelated image-viewer check, "stepping keeps the zoomed position", failed once in an earlier run and passed in the following runs); `py -m unittest discover -s tests` OK.
+- Published to `D:\SVN\2027\2_Composites\1_Aero\HOMO-CFD`: 6 changed files (README.md, starccm/mesh.java and starccm/README.md from the parallel CFD_TOPO session's approved, tested work, web/3d-viewer.css/.html/.js). Not committed to SVN or git.
+
+### Final response (verbatim)
+
+> Done, all three:
+>
+> **1. Value under the mouse:** point at the car or a streamline and a small box shows the field value there, the part, and the position in metres, e.g. "PressureCoefficient −1.42 · Frontwing · x 1.497 y 0.401 z 0.000 m". It's exact even on the full car: the graphics card reads the value at that one pixel.
+>
+> **2. The case's coefficients:** a box at the top right shows CzA, CxA, L/D, downforce and drag (at the speed and density of your results table), the iteration, and CzA/CxA of the front wing, undertray and rear wing. × hides it. It appears when you open the 3D viewer from the results tree, which is how HoMo knows the simulation.
+>
+> **3. Vortices and Streamlines** now start unticked.
+>
+> **Shared folder:** `D:\SVN\…\1_Aero\HOMO-CFD` is updated (6 files). Besides the 3D viewer and the teammates' README, it now also includes the `starccm\mesh.java` and its README from your CFD_TOPO session (STL import without the CAD licence, the `MESHED` marker, stop after a failed import). That work was approved and tested but not committed, and is now in the shared folder too. To pass it on, **commit that folder with TortoiseSVN**; teammates then run **SVN Update**.
+>
+> Tests: 184/184 browser checks and all unit tests pass. Nothing is committed to GitHub yet.
+
+## 2026-10-26 — Suggestions for improvements (question)
+
+### User messages (verbatim)
+
+> wake up..
+
+> is there any imrovement or optimisation that you suggest?
+
+### Contributor messages (verbatim)
+
+> [Answered the first: nothing new since 17 October; listed the uncommitted work (SVN publishing, teammates' README, 3D viewer value readout and coefficients box, flow parts off, mesh.java from the CFD_TOPO session) and offered to push.]
+
+### Work record
+
+- Question only; no changes. Basis: `loadSelectedField` rebuilds the mesh with `toMesh` on every field change; the results table uses only the last row of each fully loaded `Coefficients*.csv` (4.3 MB for 16 cases); most exports are half-car; `CHAT_HISTORY.md` about 7,000 lines; one intermittent image-viewer test.
+
+### Final response (verbatim)
+
+> [Suggested, by value: 1 mean of the last N iterations with a band and a not-converged mark, Δ greyed out below the oscillation; 2 field switching without rebuilding the mesh; 3 server sends only the needed rows of the coefficient files; 4 mirrored full car for half-car exports; 5 housekeeping: push the uncommitted work, archive older chat history, stabilise the intermittent test. Recommended pushing first, then 1; asked which to do.]
+
+## 2026-10-26 — Improvements: housekeeping, faster field switching, last-100 mean, residuals (in progress)
+
+### User messages (verbatim)
+
+> i like (2) and (5). for (1) and (3) we can first try with 100 iterations. also i want to have residual plot from now and on. (4) doesn't matter, keep it as it is.
+
+(The rest of this task is logged below when it is finished.)
+
+- Step 1: pushed the uncommitted work of 2026-10-14 to 2026-10-17 (SVN publishing, teammates' README, 3D viewer value readout and coefficients box, flow parts off at first, and `starccm/mesh.java` from the CFD_TOPO session) to GitHub before starting.

@@ -1,9 +1,13 @@
 """Build the portable HoMo CFD for teammates: the app plus its own Python.
 
     py tools/make_portable.py
+    py tools/make_portable.py --into "D:\\SVN\\2027\\2_Composites\\1_Aero\\HOMO-CFD"
 
 Makes dist/HoMo-CFD/ and dist/HoMo-CFD-portable.zip. A teammate unzips it
 anywhere and double-clicks "Start HoMo CFD.bat"; nothing has to be installed.
+With --into, the unpacked app is also written into that folder (e.g. one in an
+SVN working copy that teammates update): only new and changed files are copied,
+nothing is deleted, and files the app no longer has are listed (see publish).
 Python 3 stdlib only; needs internet the first time to download Python's
 Windows embeddable package from python.org (cached in dist/cache/ and checked
 against its SHA-256, which matches python.org's published SBOM).
@@ -28,7 +32,9 @@ PYTHON_URL = f"https://www.python.org/ftp/python/{PYTHON_VERSION}/{PYTHON_ZIP}"
 PYTHON_SHA256 = "a93abe456ab01bd96d7a085b3cdb6566b3063f4241360d114142fbdb07f0a310"
 
 # What a teammate needs to run the app; never tests, notes, data or secrets.
-APP_FILES = ["serve.py", "cluster.py", "Start HoMo CFD.bat", "Create desktop shortcut.bat", "README.md", "ABOUT.txt"]
+APP_FILES = ["serve.py", "cluster.py", "Start HoMo CFD.bat", "Create desktop shortcut.bat", "ABOUT.txt"]
+# The teammates' guide becomes the app's README.md; the project README is for whoever develops HoMo CFD.
+APP_README = "docs/APP_README.md"
 # starccm/: the STAR-CCM+ macros (3D export, meshing with new CAD parts), which teammates add to their own template.
 # fritz/: the results table for a terminal on Fritz (homo-table.py).
 APP_FOLDERS = ["web", "starccm", "fritz"]
@@ -79,6 +85,7 @@ def build(app=APP, archive=ARCHIVE, package=None, verify=None, keep_folder=False
         if name.endswith((".bat", ".txt")):  # cmd.exe needs CRLF; Notepad shows it best
             text = (app / name).read_bytes().replace(b"\r\n", b"\n")
             (app / name).write_bytes(text.replace(b"\n", b"\r\n"))
+    shutil.copy2(ROOT / APP_README, app / "README.md")
     for name in APP_FOLDERS:
         shutil.copytree(ROOT / name, app / name, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
     python = app / "python"
@@ -109,8 +116,59 @@ def check(app):
     print("Bundled Python", completed.stdout.strip().split()[0], "loads HoMo CFD.")
 
 
+def publish(target, built):
+    """Brings the folder `target` up to the build in `built` for sharing through SVN.
+
+    New and changed files are copied; identical files are left alone, so SVN shows
+    only real changes. Nothing is deleted and .svn is never touched: files the
+    build no longer has are returned, to be deleted in the SVN commit dialog.
+    The folder must be empty or an earlier copy of HoMo CFD (it has serve.py).
+    Returns (new files, changed files, leftover files), as paths relative to target.
+    """
+    target = Path(target)
+    if not target.is_dir():
+        raise SystemExit(f"{target} is not a folder.")
+    existing = [path for path in target.iterdir() if path.name != ".svn"]
+    if existing and not (target / "serve.py").is_file():
+        raise SystemExit(f"Refusing to write into {target}: it holds other files and is not a HoMo CFD folder.")
+    built_files = {path.relative_to(built) for path in built.rglob("*") if path.is_file()}
+    new, changed = [], []
+    for relative in sorted(built_files):
+        source, destination = built / relative, target / relative
+        if destination.is_file():
+            if destination.read_bytes() == source.read_bytes():
+                continue
+            changed.append(relative)
+        else:
+            new.append(relative)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, destination)
+    leftovers = sorted(path.relative_to(target) for path in target.rglob("*")
+                       if path.is_file() and ".svn" not in path.relative_to(target).parts
+                       and path.relative_to(target) not in built_files)
+    return new, changed, leftovers
+
+
 if __name__ == "__main__":
+    import argparse
+
     if sys.platform != "win32":
         raise SystemExit("The portable build is for Windows.")
-    result = build()
+    parser = argparse.ArgumentParser(description="Build the portable HoMo CFD.")
+    parser.add_argument("--into", help="also write the unpacked app into this folder (e.g. in an SVN working copy)")
+    args = parser.parse_args()
+    result = build(keep_folder=bool(args.into))
     print(f"Done: {result} ({result.stat().st_size / 1e6:.1f} MB). Share this zip with your teammates.")
+    if args.into:
+        try:
+            new, changed, leftovers = publish(args.into, APP)
+        finally:
+            shutil.rmtree(APP, ignore_errors=True)
+        print(f"{args.into}: {len(new)} new and {len(changed)} changed file(s); the rest are unchanged.")
+        for path in new + changed:
+            print(f"  {'new    ' if path in new else 'changed'} {path}")
+        if leftovers:
+            print("No longer part of HoMo CFD (delete them in the TortoiseSVN commit dialog):")
+            for path in leftovers:
+                print(f"  {path}")
+        print("Now commit that folder with TortoiseSVN (right-click > SVN Commit…).")

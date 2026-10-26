@@ -171,6 +171,11 @@ runTests(async () => {
     opened[2].contentWindow.eval("model.ix.length / 3") === 5,
     viewer3d?.getElementById("error")?.hidden === false ? viewer3d.getElementById("error").textContent : parts());
   check("3D viewer names the simulation in the window title, no parts line", viewer3d.title === "caseA · 3D viewer — HoMo CFD" && !viewer3d.getElementById("case-name"), viewer3d.title);
+  // The case's coefficients next to the car (caseA: CzA -3.2, CxA -1.25; forces at the table's 60 km/h).
+  await waitFor(() => viewer3d.getElementById("coefficients")?.hidden === false, 10000);
+  const coefficientText = viewer3d.getElementById("coefficients")?.textContent ?? "";
+  check("3D viewer shows the case's coefficients", /caseA/.test(coefficientText) && /CzA−3\.200/.test(coefficientText) && /CxA−1\.250/.test(coefficientText) &&
+    /L\/D2\.56/.test(coefficientText) && coefficientText.includes(`Downforce${(3.2 * dynamicPressure(60)).toFixed(1)} N`) && /FW−1\.100−0\.300/.test(coefficientText) && /60 km\/h/.test(coefficientText), coefficientText);
   // Stage 7 step 1: Fritz cluster settings (fake WinSCP on the test server).
   const clusterButton = doc.getElementById("cluster-settings");
   check("Fritz cluster button shown with serve.py", clusterButton && !clusterButton.hidden);

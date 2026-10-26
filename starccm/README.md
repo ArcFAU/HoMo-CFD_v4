@@ -52,6 +52,7 @@ the part group its name points to (case does not matter):
 | `mono` | C_MONOCOQUE |
 | `rearwing` or the word `RW` | C_REARWING |
 | anything else | nothing; added to z_000_remaining-parts |
+| anything else, with `replace` in the name | z_000_remaining-parts (e.g. `remaining_replace_v2.stl`) |
 
 "Word" means separated by `_`, `-`, spaces or dots: `FW_V1.stp`,
 `1008_RW_V4.step` and `frontwing_v3.stp` all work. Every part the import
@@ -59,10 +60,45 @@ creates goes into the group, so a STEP assembly with many bodies is fine.
 Several files can fill one group: its old parts are removed only once. The CAD
 must be in the car's coordinates (the macro does not move or mirror it).
 
-A file that cannot be imported is skipped; the reason goes to the `ERRORS` file
-in the case folder and to the log (`addCAD: …`), and that group keeps its old
-parts. `mesh.sh` always starts the solver after meshing, so check `ERRORS` (or
-the `addCAD:` lines in `mesh.o…`) before trusting the results.
+**STL or STEP?**
+
+- **STL (recommended on Fritz):** read with STAR-CCM+'s own STL reader, which
+  needs no extra licence. STL files must be in **millimetres** (NX exports STL
+  in the part's unit, mm). Export with a fine tolerance; the surface wrapper
+  re-meshes the surface anyway.
+- **STEP / IGES:** need a **CAD Exchange** licence. On Fritz this licence is
+  shared and is not always free: on 2026-10-09 STEP imports worked, on
+  2026-10-14 the same import got "Could not find CAD Exchange license".
+
+After each import the log lists what the group now contains, e.g.
+`addCAD:   C_UNDERTRAY contains undertray_v3 [MeshPart, 1 surface(s)]`.
+
+**A failed import stops the meshing.** The file and the reason go to the
+`ERRORS` file in the case folder and to the log (`addCAD: … not imported: …`),
+and the macro ends without meshing or saving, so the simulation never runs
+with the old parts by mistake. Fix the file (or wait for a free licence) and
+start the case again. The template's `mesh.sh` still submits the solver after
+the meshing job; that solver job then stops within minutes ("No Volume Mesh
+found"). To stop it from being submitted at all, change the line
+`sbatch rans.sh` in **your case's** `mesh.sh` (not in the template) to:
+
+```sh
+if [ -s ERRORS ]; then echo "ERRORS found, solver not started:"; cat ERRORS; else sbatch rans.sh; fi
+```
+
+**Test only the import:** create an empty file named `IMPORT_ONLY` in the
+case folder. The macro then imports the CAD files, writes the log lines above
+and stops: nothing is meshed or saved. Remove (or rename) the file before the
+real run.
+
+**Meshing done marker:** after a successful meshing and save the macro writes an
+empty file `MESHED` in the case folder. A case's `mesh.sh` can start the solver
+only when it exists (and there is no `ERRORS`), so a meshing that fails for any
+reason never costs a solver run:
+
+```sh
+if [ -s ERRORS ] || [ ! -f MESHED ]; then echo "ERRORS or no MESHED, solver not started"; cat ERRORS 2>/dev/null; else sbatch rans.sh; fi
+```
 
 Changes against the template's version: parts are found by comparing the
 simulation's parts before and after the import (the old code looked for one
@@ -70,7 +106,10 @@ part named like the file, which fails for assemblies and mixed-case names and
 then stopped importing the remaining files); short names FW/UT/RW; one failing
 file no longer stops the others; a missing deflector group no longer stops the
 import; a hard-coded path of a former member, used only to label the scenes
-with the simulation name, is replaced by the case folder's name.
+with the simulation name, is replaced by the case folder's name. Since
+2026-10-14 also: STL through the STL reader in mm, the group contents in the
+log, no meshing after a failed import, and the `IMPORT_ONLY` test; since
+2026-10-15 the `MESHED` marker and `replace` for z_000_remaining-parts.
 
 ## Try it once by hand
 
