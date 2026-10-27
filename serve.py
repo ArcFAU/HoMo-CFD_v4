@@ -29,6 +29,7 @@ import email.utils
 import json
 import mimetypes
 import os
+import re
 import atexit
 import shutil
 import subprocess
@@ -300,6 +301,60 @@ def visible(entry):
     return not entry.name.startswith(".")
 
 
+# Residual columns of STAR-CCM+'s iteration table (segregated and coupled solvers, common turbulence models).
+RESIDUAL_COLUMN = re.compile(r"^(Continuity|[XYZ]-momentum|Energy|Tke|Sdr|Tdr|Intermittency|Re_?theta.*|.*Residual)$", re.IGNORECASE)
+SOLVER_LOG = re.compile(r"\.o\d+$")
+# The total downforce and drag monitors in that table ("CzA", "CxA"; "CzA Monitor" in other templates).
+TOTAL_MONITOR = re.compile(r"^(CzA|CxA)( Monitor)?$")
+
+
+def solver_residuals(folder):
+    """Residual history of a case from STAR-CCM+'s job logs, with the total CzA and CxA per iteration:
+    {"names", "iterations", "values", "monitors": {"names", "values"}}.
+
+    The solver prints a table to its log: a header line ("Iteration  Continuity  X-momentum ...",
+    repeated every 10 iterations) and one line of numbers per iteration, each right-aligned under
+    its name. The residuals are the columns from Continuity up to the first monitor. Only these
+    numbers leave this function: job logs also hold the licence key. Logs are read oldest first,
+    so a continued run's later log wins for repeated iterations.
+    """
+    logs = sorted((path for path in folder.iterdir() if path.is_file() and SOLVER_LOG.search(path.name)),
+                  key=lambda path: path.stat().st_mtime)
+    names, monitors, rows = None, None, {}
+    for log in logs:
+        header = columns = None
+        with log.open("r", encoding="utf-8", errors="replace") as source:
+            for line in source:
+                words = line.split()
+                if len(words) > 1 and words[0] == "Iteration" and words[1] == "Continuity":
+                    header, columns = line.rstrip("\r\n"), None
+                    continue
+                if header is None or not words or not words[0].isdigit():
+                    continue
+                try:
+                    numbers = [float(word) for word in words]
+                except ValueError:
+                    continue
+                if columns is None:
+                    # Each name ends where its column's numbers end.
+                    ends = [match.end() for match in re.finditer(r"\S+", line)]
+                    labels = [header[start:end].strip() for start, end in zip([0] + ends, ends)]
+                    count = next((i for i, label in enumerate(labels[1:]) if not RESIDUAL_COLUMN.match(label)), len(labels) - 1)
+                    totals = {}
+                    for index, label in enumerate(labels):
+                        match = TOTAL_MONITOR.match(label)
+                        if match and match.group(1) not in totals:
+                            totals[match.group(1)] = index
+                    columns = (labels[1:1 + count], len(labels), list(totals.values()))
+                    if (columns[0], list(totals)) != (names, monitors):
+                        names, monitors, rows = columns[0], list(totals), {}
+                if len(words) == columns[1]:
+                    rows[int(words[0])] = (numbers[1:1 + len(names)], [numbers[index] for index in columns[2]])
+    iterations = sorted(rows)
+    return {"names": names or [], "iterations": iterations, "values": [rows[i][0] for i in iterations],
+            "monitors": {"names": monitors or [], "values": [rows[i][1] for i in iterations]}}
+
+
 def list_folder(directory):
     """Visible (name, is_folder) pairs of one folder, sorted by name.
 
@@ -406,6 +461,7 @@ class Handler(SimpleHTTPRequestHandler):
             "/api/tree": self.api_tree,
             "/api/list": self.api_list,
             "/api/file": self.api_file,
+            "/api/residuals": self.api_residuals,
             "/api/cluster": self.api_cluster,
             "/api/cluster/downloads": self.api_cluster_downloads,
             "/api/cluster/new-case": self.api_new_case_tasks,
@@ -847,6 +903,15 @@ class Handler(SimpleHTTPRequestHandler):
             {"name": name, "kind": "directory" if is_folder else "file"}
             for name, is_folder in list_folder(target)
         ])
+
+    def api_residuals(self, relative):
+        """Residual history of the simulation in this folder, from its solver logs (solver_residuals)."""
+        target = self.results_path(relative)
+        if target is None:
+            return
+        if not target.is_dir():
+            return self.send_json({"error": "Not a folder."}, HTTPStatus.BAD_REQUEST)
+        self.send_json(solver_residuals(target))
 
     def api_file(self, relative):
         target = self.results_path(relative)

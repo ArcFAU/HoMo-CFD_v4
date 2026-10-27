@@ -260,7 +260,11 @@ runTests(async () => {
     await waitFor(() => doc3d.getElementById("legend-title").textContent === name, 10000); };
   check("3d: field names with spaces are read from the .case file", [...fieldSelect.options].some((o) => o.value === "Velocity Magnitude"),
     [...fieldSelect.options].map((o) => o.value).join(","));
+  const meshBefore = win3d.eval("model.ix");
   await showField("Velocity Magnitude");
+  check("3d: another field keeps the mesh, with the same values as a full rebuild", win3d.eval("model.ix") === meshBefore && win3d.eval("model.lineIx.length") > 0
+    && win3d.eval("(() => { const full = toMesh(geometryParts); return full.cp.length === model.cp.length && full.cp.every((v, i) => Object.is(v, model.cp[i])) && full.min === model.min && full.max === model.max; })()"),
+    String(win3d.eval("model.lineIx.length")));
   const [vMin, vMax] = rangeOf().split("..").map(Number);
   check("3d: a non-Cp field starts with a range from its own values", vMin >= 10 && vMax <= 30 && vMin < vMax, rangeOf());
   doc3d.getElementById("cp-min").value = "0"; doc3d.getElementById("cp-max").value = "50";

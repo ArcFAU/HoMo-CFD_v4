@@ -155,6 +155,9 @@ const browserState = {
   coefficientReferencePath: "",
   pressureCasePath: "",
   pressureComparePaths: [],
+  residualPaths: [],
+  residualSlots: new Map(), // case path -> colour slot, kept while the case stays in the comparison
+  residualEquation: "Continuity",
   pressureSurface: "FW",
   pressureAxis: "x",
   pressureStationPath: "",
@@ -194,6 +197,8 @@ async function buildFolderNode(handle, path = "", isSection = false, sceneImageC
   }
   if (isSection) return node;
   node.isEnsightFolder = /^3d-data$/i.test(handle.name) && entries.some((child) => child.kind === "file" && /\.case$/i.test(child.name));
+  // SLURM job logs (mesh.o123, resTAURANtS.o124, ...): the solver's holds the residuals.
+  node.hasJobLogs = entries.some((child) => child.kind === "file" && /\.o\d+$/.test(child.name));
   for (const child of entries) {
     // Skip hidden folders such as .git or .vscode; they never hold results.
     if (child.kind !== "directory" || child.name.startsWith(".")) continue;
@@ -299,6 +304,16 @@ function renderFolderNode(node) {
 
   const children = document.createElement("div");
   children.className = "tree-children";
+  if (node.hasJobLogs && node.handle?.homoServer) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "tree-entry image-folder residuals-entry";
+    button.dataset.path = `${node.path}#residuals`;
+    button.textContent = "Residuals";
+    button.title = `Residuals of ${node.name} from its solver log`;
+    button.addEventListener("click", () => openResiduals(node));
+    children.appendChild(button);
+  }
   for (const folder of node.folders) {
     const item = renderFolderNode(folder);
     if (item) children.appendChild(item);
@@ -1245,7 +1260,9 @@ function renderCsvTables(coefficientRows) {
       const sourceRow = data.rows[data.rows.length - 1] ?? [];
       const row = document.createElement("tr");
       if (data.path === referenceRow.path) row.className = "reference-row";
-      row.appendChild(cell("td", simulationNameFromCsvPath(data.path)));
+      const nameCell = cell("td", simulationNameFromCsvPath(data.path));
+      nameCell.prepend(highlightToggle(data.path, row));
+      row.appendChild(nameCell);
       visibleHeaders.forEach((column) => {
         if (browserState.coefficientView === "delta") {
           const value = coefficientValue(data, column.key);
@@ -1373,6 +1390,43 @@ function drawMonitorChart(coefficientRows, header, referenceRow) {
 // Sorting the table by a column: click a header for ascending, again for descending, a third time for the
 // original order. Numbers sort by value (in Δ view by the difference from the reference), the Simulation column
 // by name; empty cells always go last. The choice is remembered.
+// Rows the user highlighted (star before the name), by coefficient file path; remembered per browser.
+const HIGHLIGHT_KEY = "homo-cfd-highlighted-simulations-v1";
+
+function readHighlights() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(HIGHLIGHT_KEY) || "[]");
+    return new Set(Array.isArray(saved) ? saved : []);
+  } catch {
+    return new Set();
+  }
+}
+
+// The star that highlights a table row. It has no text of its own (CSS draws it), so the cell's text
+// stays the simulation's name.
+function highlightToggle(path, row) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "row-highlight";
+  const show = (on) => {
+    row.classList.toggle("highlighted-row", on);
+    button.setAttribute("aria-pressed", String(on));
+    button.title = on ? "Remove the highlight" : "Highlight this row";
+  };
+  button.setAttribute("aria-label", `Highlight ${simulationNameFromCsvPath(path)}`);
+  show(readHighlights().has(path));
+  button.addEventListener("click", () => {
+    const highlights = readHighlights();
+    const on = !highlights.has(path);
+    if (on) highlights.add(path); else highlights.delete(path);
+    try {
+      localStorage.setItem(HIGHLIGHT_KEY, JSON.stringify([...highlights]));
+    } catch {}
+    show(on);
+  });
+  return button;
+}
+
 const TABLE_SORT_KEY = "homo-cfd-coefficient-table-sort-v1";
 const SIMULATION_SORT_KEY = "\u0000simulation";
 
@@ -1484,10 +1538,65 @@ function openColumnDialog() {
   const dialog = document.getElementById("column-dialog");
   const editor = document.getElementById("column-editor");
 
+  // Dragging a row by its grip: the row moves among the others as the pointer passes their middles (the
+  // list scrolls near its edges); the new order is taken from the rows when it is dropped. The pointer is
+  // followed on the window, not on the grip: moving the row in the list ends the grip's pointer capture.
+  const startDrag = (event, row) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    row.classList.add("dragging");
+    let scroll = 0;
+    const move = (moveEvent) => {
+      const box = editor.getBoundingClientRect();
+      scroll = moveEvent.clientY < box.top + 28 ? -8 : moveEvent.clientY > box.bottom - 28 ? 8 : 0;
+      const before = [...editor.children].find((child) => {
+        if (child === row) return false;
+        const rect = child.getBoundingClientRect();
+        return moveEvent.clientY < rect.top + rect.height / 2;
+      });
+      if (before) {
+        if (row.nextElementSibling !== before) editor.insertBefore(row, before);
+      } else if (editor.lastElementChild !== row) {
+        editor.appendChild(row);
+      }
+    };
+    const timer = setInterval(() => { if (scroll) editor.scrollTop += scroll; }, 16);
+    const end = () => {
+      clearInterval(timer);
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", end);
+      window.removeEventListener("pointercancel", end);
+      const order = [...editor.children].map((child) => child.dataset.key);
+      columns.sort((a, b) => order.indexOf(a.key) - order.indexOf(b.key));
+      renderEditor();
+      editor.querySelectorAll(".column-drag-handle")[order.indexOf(row.dataset.key)]?.focus();
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", end);
+    window.addEventListener("pointercancel", end);
+  };
+
   const renderEditor = () => {
     editor.replaceChildren(...columns.map((column, index) => {
       const row = document.createElement("div");
       row.className = "column-config-row";
+      row.dataset.key = column.key;
+      // The grip: drag with the mouse, or ↑/↓ while it has the focus.
+      const handle = document.createElement("button");
+      handle.type = "button";
+      handle.className = "column-drag-handle";
+      handle.title = "Drag to move the column (or use the arrow keys)";
+      handle.setAttribute("aria-label", `Move ${column.label}: drag, or the up and down arrow keys`);
+      handle.addEventListener("pointerdown", (event) => startDrag(event, row));
+      handle.addEventListener("keydown", (event) => {
+        const step = event.key === "ArrowUp" ? -1 : event.key === "ArrowDown" ? 1 : 0;
+        const target = index + step;
+        if (!step || target < 0 || target >= columns.length) return;
+        event.preventDefault();
+        columns.splice(target, 0, ...columns.splice(index, 1));
+        renderEditor();
+        editor.querySelectorAll(".column-drag-handle")[target].focus();
+      });
       const visibility = document.createElement("input");
       visibility.type = "checkbox";
       visibility.checked = column.visible;
@@ -1498,29 +1607,7 @@ function openColumnDialog() {
       labelInput.value = column.label;
       labelInput.setAttribute("aria-label", `Display name for ${column.key}`);
       labelInput.addEventListener("input", () => { column.label = labelInput.value; });
-      const moveUp = document.createElement("button");
-      moveUp.type = "button";
-      moveUp.className = "small-control column-move";
-      moveUp.textContent = "↑";
-      moveUp.title = "Move column left";
-      moveUp.setAttribute("aria-label", `Move ${column.label} left`);
-      moveUp.disabled = index === 0;
-      moveUp.addEventListener("click", () => {
-        [columns[index - 1], columns[index]] = [columns[index], columns[index - 1]];
-        renderEditor();
-      });
-      const moveDown = document.createElement("button");
-      moveDown.type = "button";
-      moveDown.className = "small-control column-move";
-      moveDown.textContent = "↓";
-      moveDown.title = "Move column right";
-      moveDown.setAttribute("aria-label", `Move ${column.label} right`);
-      moveDown.disabled = index === columns.length - 1;
-      moveDown.addEventListener("click", () => {
-        [columns[index], columns[index + 1]] = [columns[index + 1], columns[index]];
-        renderEditor();
-      });
-      row.append(visibility, labelInput, moveUp, moveDown);
+      row.append(handle, visibility, labelInput);
       return row;
     }));
   };
@@ -1860,6 +1947,315 @@ function timeAgo(epochSeconds) {
   if (hours < 48) return `${Math.round(hours)} h ago`;
   return `${Math.round(hours / 24)} days ago`;
 }
+
+// --- residuals -----------------------------------------------------------
+
+// Line colours in this fixed order (validated for the dark panel: lightness band, colour-blind separation
+// of neighbours, contrast). One simulation: one colour per equation. Several: one colour per simulation,
+// kept while it stays in the comparison. Turbulence equations are dashed as well.
+const SERIES_COLORS = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300", "#9085e9", "#e66767"];
+const TURBULENCE_EQUATION = /^(tke|sdr|tdr|intermittency|re_?theta)/i;
+const MAX_RESIDUAL_CASES = 4;
+const residualRequests = new Map(); // case path -> promise of /api/residuals
+
+// Residuals, CzA and CxA per iteration of a simulation, from its STAR-CCM+ solver log (serve.py).
+function residualsOf(path) {
+  if (!residualRequests.has(path)) {
+    const request = serverJson("residuals", path);
+    request.catch(() => residualRequests.delete(path));
+    residualRequests.set(path, request);
+  }
+  return residualRequests.get(path);
+}
+
+// Simulations whose folder has job logs (the cases the Residuals page can show).
+function residualCaseNodes() {
+  const nodes = [];
+  const visit = (node) => {
+    if (node.hasJobLogs) nodes.push(node);
+    node.folders.forEach(visit);
+  };
+  if (browserState.root) visit(browserState.root);
+  return nodes;
+}
+
+function openResiduals(node) {
+  browserState.pressureRequestToken++;
+  browserState.selectedFolder = node;
+  browserState.selectedFile = null;
+  browserState.residualPaths = [node.path];
+  browserState.residualSlots = new Map([[node.path, 0]]);
+  updateTreeSelection();
+  renderResidualWorkspace();
+}
+
+// The Residuals page: one simulation (all equations, CzA and CxA below), or up to four compared
+// (one equation at a time, one line per simulation).
+async function renderResidualWorkspace() {
+  const token = ++browserState.renderToken;
+  const paths = browserState.residualPaths;
+  const nodes = residualCaseNodes();
+  const nameOf = (path) => nodes.find((node) => node.path === path)?.name ?? path.split("/").pop();
+  const colorOf = (path) => SERIES_COLORS[browserState.residualSlots.get(path) ?? 0];
+  el.panels.closest(".app")?.classList.remove("pressure-fullscreen");
+  el.panels.classList.remove("pressure-workspace-layout", "pressure-workspace-with-images");
+  el.summary.hidden = false;
+  const heading = document.createElement("h1");
+  heading.className = "workspace-title";
+  heading.textContent = paths.length === 1 ? `${nameOf(paths[0])} · residuals` : "Residuals";
+  const backButton = document.createElement("button");
+  backButton.type = "button";
+  backButton.className = "small-control";
+  backButton.textContent = "Back to coefficients";
+  backButton.addEventListener("click", () => selectFolder(browserState.selectedFolder ?? browserState.root));
+  el.summary.replaceChildren(heading, backButton);
+
+  const toolbar = document.createElement("section");
+  toolbar.className = "pressure-toolbar residual-toolbar";
+  const caseSelect = document.createElement("select");
+  caseSelect.setAttribute("aria-label", "Add simulation to compare");
+  caseSelect.add(new Option("Compare with…", ""));
+  nodes.filter((node) => !paths.includes(node.path)).forEach((node) => caseSelect.add(new Option(node.name, node.path)));
+  caseSelect.disabled = paths.length >= MAX_RESIDUAL_CASES || caseSelect.options.length < 2;
+  caseSelect.addEventListener("change", () => {
+    if (!caseSelect.value || paths.length >= MAX_RESIDUAL_CASES) return;
+    const used = new Set(browserState.residualSlots.values());
+    browserState.residualSlots.set(caseSelect.value, [...SERIES_COLORS.keys()].find((slot) => !used.has(slot)));
+    paths.push(caseSelect.value);
+    renderResidualWorkspace();
+  });
+  toolbar.appendChild(caseSelect);
+  const chips = document.createElement("div");
+  chips.className = "residual-case-chips";
+  if (paths.length > 1) {
+    paths.forEach((path) => {
+      const chip = document.createElement("span");
+      chip.className = "residual-case-chip";
+      chip.append(lineSwatch(colorOf(path), false), nameOf(path));
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.textContent = "×";
+      remove.setAttribute("aria-label", `Remove ${nameOf(path)}`);
+      remove.addEventListener("click", () => {
+        browserState.residualPaths = paths.filter((entry) => entry !== path);
+        browserState.residualSlots.delete(path);
+        renderResidualWorkspace();
+      });
+      chip.appendChild(remove);
+      chips.appendChild(chip);
+    });
+  }
+  const body = document.createElement("div");
+  body.className = "residual-body";
+  body.appendChild(Object.assign(document.createElement("div"), { className: "workspace-empty", textContent: "Reading the solver logs…" }));
+  el.panels.replaceChildren(toolbar, chips, body);
+
+  const results = await Promise.all(paths.map((path) => residualsOf(path).catch((err) => ({ error: err?.message || "Could not read the residuals." }))));
+  if (token !== browserState.renderToken) return;
+  const notes = [];
+  const cases = [];
+  results.forEach((data, index) => {
+    if (data.error) notes.push(`${nameOf(paths[index])}: ${data.error}`);
+    else if (!data.iterations?.length) notes.push(`${nameOf(paths[index])}: none of its job logs has the solver's iteration table.`);
+    else cases.push({ path: paths[index], name: nameOf(paths[index]), color: colorOf(paths[index]), data });
+  });
+  const cards = notes.map((text) => Object.assign(document.createElement("p"), { className: "error", textContent: text }));
+  if (!cases.length) {
+    body.replaceChildren(...cards);
+    return;
+  }
+
+  const card = (title, ...content) => {
+    const section = document.createElement("section");
+    section.className = "csv-card residual-card";
+    section.append(Object.assign(document.createElement("h2"), { className: "csv-card-title", textContent: title }), ...content);
+    return section;
+  };
+  const span = (data) => `iterations ${data.iterations[0]}–${data.iterations[data.iterations.length - 1]}`;
+  if (cases.length === 1) {
+    const { data, color } = cases[0];
+    const series = data.names.map((name, index) => ({ label: name, color: SERIES_COLORS[index % SERIES_COLORS.length],
+      dashed: TURBULENCE_EQUATION.test(name), x: data.iterations, y: data.values.map((row) => row[index]) }));
+    cards.push(card(`Residuals, ${span(data)}`, residualLegend(series), lineChart(series, { log: true, label: "Residuals" })));
+    ["CzA", "CxA"].forEach((monitor) => {
+      const index = data.monitors?.names.indexOf(monitor) ?? -1;
+      if (index < 0) return;
+      cards.push(card(`${monitor} (total)`, lineChart([{ label: monitor, color, x: data.iterations, y: data.monitors.values.map((row) => row[index]) }], { label: monitor })));
+    });
+  } else {
+    const equations = [...new Set(cases.flatMap(({ data }) => data.names))];
+    if (!equations.includes(browserState.residualEquation)) browserState.residualEquation = equations[0];
+    const equationSelect = document.createElement("select");
+    equationSelect.setAttribute("aria-label", "Equation");
+    equations.forEach((name) => equationSelect.add(new Option(name, name)));
+    equationSelect.value = browserState.residualEquation;
+    equationSelect.addEventListener("change", () => {
+      browserState.residualEquation = equationSelect.value;
+      renderResidualWorkspace();
+    });
+    toolbar.appendChild(equationSelect);
+    const perCase = (column, names, rows) => cases.map(({ name, color, data }) => {
+      const index = names(data).indexOf(column);
+      return index < 0 ? null : { label: name, color, x: data.iterations, y: rows(data).map((row) => row[index]) };
+    }).filter(Boolean);
+    const equation = browserState.residualEquation;
+    cards.push(card(`${equation} residual`, lineChart(perCase(equation, (data) => data.names, (data) => data.values), { log: true, label: `${equation} residual` })));
+    ["CzA", "CxA"].forEach((monitor) => {
+      const series = perCase(monitor, (data) => data.monitors?.names ?? [], (data) => data.monitors.values);
+      if (series.length) cards.push(card(`${monitor} (total)`, lineChart(series, { label: monitor })));
+    });
+  }
+  body.replaceChildren(...cards);
+}
+
+// Legend for the single-simulation residual chart: each equation's line and its last residual.
+function residualLegend(series) {
+  const legend = document.createElement("ul");
+  legend.className = "residual-legend";
+  series.forEach(({ label, color, dashed, y }) => {
+    const item = document.createElement("li");
+    item.append(lineSwatch(color, dashed), `${label} `);
+    const value = document.createElement("span");
+    value.className = "residual-value";
+    value.textContent = formatSeriesValue(y[y.length - 1], true);
+    item.appendChild(value);
+    legend.appendChild(item);
+  });
+  return legend;
+}
+
+function lineSwatch(color, dashed) {
+  const namespace = "http://www.w3.org/2000/svg";
+  const swatch = document.createElementNS(namespace, "svg");
+  swatch.setAttribute("class", "residual-swatch");
+  swatch.setAttribute("viewBox", "0 0 22 6");
+  const line = document.createElementNS(namespace, "line");
+  Object.entries({ x1: 1, y1: 3, x2: 21, y2: 3, stroke: color, "stroke-width": 2, "stroke-linecap": "round" })
+    .forEach(([key, value]) => line.setAttribute(key, String(value)));
+  if (dashed) line.setAttribute("stroke-dasharray", "5 3");
+  swatch.appendChild(line);
+  return swatch;
+}
+
+function formatSeriesValue(value, log) {
+  if (!Number.isFinite(value)) return "–";
+  return log ? value.toExponential(2) : value.toFixed(3);
+}
+
+// Index of the x value nearest to target in an ascending array.
+function nearestIndex(values, target) {
+  let low = 0, high = values.length - 1;
+  while (high - low > 1) {
+    const middle = (low + high) >> 1;
+    if (values[middle] < target) low = middle; else high = middle;
+  }
+  return Math.abs(values[high] - target) < Math.abs(values[low] - target) ? high : low;
+}
+
+// Line chart over iterations, log scale (residuals) or linear (CzA, CxA). A linear scale fits the values
+// after the first 10 % of the iterations, so the start-up does not flatten the rest (lines are clipped).
+// Hover: a crosshair with every line's value at that iteration.
+function lineChart(series, { log = false, label = "" } = {}) {
+  const namespace = "http://www.w3.org/2000/svg";
+  const width = 960, height = log ? 360 : 240, left = 64, right = 16, top = 12, bottom = 34;
+  const plotWidth = width - left - right, plotHeight = height - top - bottom;
+  const first = Math.min(...series.map((line) => line.x[0])), last = Math.max(...series.map((line) => line.x[line.x.length - 1]));
+  const x = (iteration) => left + (last === first ? plotWidth / 2 : (iteration - first) / (last - first) * plotWidth);
+  let low = Infinity, high = -Infinity;
+  const settled = first + 0.1 * (last - first);
+  series.forEach((line) => line.y.forEach((value, at) => {
+    if (log ? !(value > 0) : !Number.isFinite(value) || line.x[at] < settled) return;
+    low = Math.min(low, value); high = Math.max(high, value);
+  }));
+  if (low > high) { low = log ? 1e-6 : 0; high = log ? 1 : 1; }
+  let ticks, y;
+  if (log) {
+    const lowDecade = Math.floor(Math.log10(low)), highDecade = Math.max(lowDecade + 1, Math.ceil(Math.log10(high)));
+    ticks = Array.from({ length: highDecade - lowDecade + 1 }, (_, index) => 10 ** (lowDecade + index));
+    y = (value) => top + (highDecade - Math.log10(value)) / (highDecade - lowDecade) * plotHeight;
+  } else {
+    const pad = Math.max((high - low) * 0.08, Math.abs(high) * 1e-4, 1e-9);
+    ticks = createTicks(low - pad, high + pad, 7);
+    const bottomValue = Math.min(low - pad, ticks[0]), topValue = Math.max(high + pad, ticks[ticks.length - 1]);
+    y = (value) => top + (topValue - value) / (topValue - bottomValue) * plotHeight;
+  }
+  const element = (tag, attributes, text) => {
+    const node = document.createElementNS(namespace, tag);
+    Object.entries(attributes).forEach(([key, value]) => node.setAttribute(key, String(value)));
+    if (text !== undefined) node.textContent = text;
+    return node;
+  };
+  const svg = element("svg", { class: "residual-chart", viewBox: `0 0 ${width} ${height}`, role: "img",
+    "aria-label": `${label} over iterations ${first}–${last}${log ? ", log scale" : ""}: ${series.map((line) => line.label).join(", ")}` });
+  const clipId = `chart-clip-${++lineChart.count}`;
+  const clip = element("clipPath", { id: clipId });
+  clip.appendChild(element("rect", { x: left, y: top, width: plotWidth, height: plotHeight }));
+  svg.appendChild(clip);
+  ticks.forEach((tick) => {
+    svg.appendChild(element("line", { class: "residual-grid", x1: left, x2: width - right, y1: y(tick), y2: y(tick) }));
+    svg.appendChild(element("text", { class: "residual-tick", x: left - 6, y: y(tick) + 4, "text-anchor": "end" },
+      log ? `1e${Math.round(Math.log10(tick))}` : formatTick(tick)));
+  });
+  createTicks(first, last, 7).forEach((tick) => {
+    svg.appendChild(element("text", { class: "residual-tick", x: x(tick), y: height - bottom + 16, "text-anchor": "middle" }, String(Math.round(tick))));
+  });
+  svg.appendChild(element("text", { class: "residual-tick", x: left + plotWidth / 2, y: height - 4, "text-anchor": "middle" }, "Iteration"));
+  svg.appendChild(element("line", { class: "residual-axis", x1: left, x2: width - right, y1: top + plotHeight, y2: top + plotHeight }));
+  series.forEach((line) => {
+    let path = "";
+    line.y.forEach((value, at) => {
+      if (log ? !(value > 0) : !Number.isFinite(value)) return;
+      path += `${path ? "L" : "M"}${x(line.x[at]).toFixed(1)},${y(value).toFixed(1)}`;
+    });
+    const drawn = element("path", { class: "residual-line", d: path, stroke: line.color, "clip-path": `url(#${clipId})` });
+    if (line.dashed) drawn.setAttribute("stroke-dasharray", "6 4");
+    drawn.appendChild(element("title", {}, line.label));
+    svg.appendChild(drawn);
+  });
+
+  const crosshair = element("line", { class: "residual-crosshair", y1: top, y2: top + plotHeight, visibility: "hidden" });
+  const dots = series.map((line) => element("circle", { class: "residual-dot", r: 4, fill: line.color, visibility: "hidden" }));
+  svg.append(crosshair, ...dots);
+  const wrap = document.createElement("div");
+  wrap.className = "residual-chart-wrap";
+  const tooltip = document.createElement("div");
+  tooltip.className = "residual-tooltip";
+  tooltip.hidden = true;
+  wrap.append(svg, tooltip);
+  const hide = () => {
+    tooltip.hidden = true;
+    crosshair.setAttribute("visibility", "hidden");
+    dots.forEach((dot) => dot.setAttribute("visibility", "hidden"));
+  };
+  svg.addEventListener("pointerleave", hide);
+  svg.addEventListener("pointermove", (event) => {
+    const box = svg.getBoundingClientRect();
+    const pointerX = (event.clientX - box.left) * width / box.width;
+    if (pointerX < left || pointerX > width - right) return hide();
+    const target = Math.round(first + (pointerX - left) / plotWidth * (last - first));
+    crosshair.setAttribute("x1", x(target));
+    crosshair.setAttribute("x2", x(target));
+    crosshair.setAttribute("visibility", "visible");
+    const rows = series.map((line, index) => {
+      const at = nearestIndex(line.x, target), value = line.y[at];
+      const shown = Math.abs(line.x[at] - target) <= 1 && (log ? value > 0 : Number.isFinite(value));
+      dots[index].setAttribute("visibility", shown ? "visible" : "hidden");
+      if (shown) { dots[index].setAttribute("cx", x(line.x[at])); dots[index].setAttribute("cy", y(value)); }
+      const row = document.createElement("div");
+      row.append(lineSwatch(line.color, line.dashed), `${line.label} `, cell("span", shown ? formatSeriesValue(value, log) : "–"));
+      return row;
+    });
+    tooltip.replaceChildren(cell("strong", `Iteration ${target}`), ...rows);
+    tooltip.hidden = false;
+    const scale = box.width / width;
+    const flip = x(target) > width * 0.66;
+    tooltip.style.left = `${x(target) * scale + (flip ? -12 : 12)}px`;
+    tooltip.style.transform = flip ? "translateX(-100%)" : "";
+    tooltip.style.top = `${top * scale + 8}px`;
+  });
+  return wrap;
+}
+lineChart.count = 0;
 
 // Columns of Results on Fritz: the results table's names for the monitors and computed columns.
 const CLUSTER_RESULT_COLUMNS = ["Iteration", "CzA", "CxA", "L/D", "Downforce [N]", "Drag [N]",

@@ -3,6 +3,26 @@
 User-visible changes, newest first. Detailed reasoning lives in
 `CHAT_HISTORY.md`; decisions in `DECISIONS.md`.
 
+## 2026-10-27
+
+### Added
+- **Residuals page: CzA and CxA** (totals) per iteration under the residuals, from the same solver log.
+- **Highlight rows** in the results table: the ☆ before a simulation's name tints its row (★); click again to remove. Remembered, also in the Δ view.
+- **Compare up to 4 simulations** on the Residuals page (**Compare with…**): one line per simulation, one equation at a time (select), and their CzA and CxA. Point at a chart to read every value at that iteration.
+
+### Changed
+- **Customize columns:** drag a column by its grip (⠿) instead of the ↑/↓ buttons; with the grip focused, the arrow keys still move it.
+- **3D viewer opens about twice as fast:** the 12-million-triangle car of `1016_V4_W` now opens in about 3 s instead of 5–6.5 s (data read straight into memory instead of through a file copy, all geometry files downloaded at once, faster mesh building).
+
+## 2026-10-26
+
+### Added
+- **Residuals:** every simulation with a solver log (`resTAURANtS.o…` or any job log with STAR-CCM+'s iteration table) has a **Residuals** entry in the results tree: Continuity, X/Y/Z-momentum, Tke and Sdr on a log scale, every value at the iteration under the mouse. Read from the logs already in each case folder, so it works for old simulations too; no macro change.
+
+### Changed
+- Faster field switching in the 3D viewer: it no longer rebuilds the mesh (about 2 s → 0.5–0.8 s on a 12-million-triangle car on the laptop's GPU).
+- The table toolbar wraps onto a second line on small screens instead of squeezing the title and filter.
+
 ## 2026-10-17
 
 ### Added

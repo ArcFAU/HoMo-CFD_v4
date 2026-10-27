@@ -219,8 +219,39 @@ def write_case(case_dir, name):
     (plots / "Coefficients_49.csv").write_text("\n".join(rows) + "\n", encoding="utf-8")
     (plots / "DONE").write_text("", encoding="utf-8")
 
+    write_solver_log(case_dir / "resTAURANtS.o4100", name)
     if name == "caseA":
         write_ensight(case_dir / "3D-data")
+
+
+# STAR-CCM+'s iteration table in the solver's job log: names right-aligned over their columns, the header
+# repeated every 10 iterations, other output in between (the real logs also hold the licence key).
+SOLVER_LOG_NAMES = ["Continuity", "X-momentum", "Y-momentum", "Z-momentum", "Tke", "Sdr", "CzA Front (percentage)", "CzA", "CxA", "CzA Frontwing"]
+
+
+# caseB: residuals twice as large, CzA 0.1 lower.
+def solver_cza(iteration, name="caseA"):
+    return -3.0 - iteration / 100 - (0.1 if name == "caseB" else 0)
+
+
+def solver_residual(iteration, column, name="caseA"):
+    return 10 ** (-(iteration / 10) - column / 2) * (2 if name == "caseB" else 1)
+
+
+def write_solver_log(path, name):
+    # Columns are 15 wide, wider for long names ("CzA Front (percentage)"), as in STAR-CCM+'s logs.
+    widths = [max(15, len(name) + 1) for name in SOLVER_LOG_NAMES]
+    header = f"{'Iteration':>14}" + "".join(f"{name:>{width}}" for name, width in zip(SOLVER_LOG_NAMES, widths))
+    lines = ["Starting STAR-CCM+ parallel server", "podkey FAKE-LICENCE-KEY-0000"]
+    for iteration in range(1, 31):
+        if iteration % 10 == 1:
+            lines += ["", header]
+        residuals = [solver_residual(iteration, column, name) for column in range(6)]
+        values = residuals + [0.45, solver_cza(iteration, name), -1.25, -1.1]
+        lines.append(f"{iteration:>14}" + "".join(f"{value:>{width}.6e}" for value, width in zip(values, widths)))
+        if iteration == 15:
+            lines.append("  2 processes still running")  # starts with a digit, but is no table row
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def build(root):

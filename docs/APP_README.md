@@ -43,10 +43,13 @@ this folder, in `%APPDATA%\HoMo-CFD`, so updates keep them.
 
 - **Results table:** every simulation's final coefficients, with Downforce [N] and
   Drag [N] at the speed you set above the table. Click a column header to sort;
-  **Δ vs reference** shows differences to one simulation; **Customize columns**
-  renames, hides and reorders columns.
+  ☆ before a name highlights its row; **Δ vs reference** shows differences to one
+  simulation; **Customize columns** renames, hides and reorders columns (drag them
+  by the grip).
 - **Results tree** (left): section images (comparison window for up to 4 cases),
-  pressure plots, 3D scene pictures, and **3D-data · 3D viewer** for the 3D car.
+  pressure plots, 3D scene pictures, **Residuals** (residuals, CzA and CxA from
+  the solver log; compare up to 4 simulations) and **3D-data · 3D viewer** for
+  the 3D car.
 - **3D viewer:** field, palette, view; streamlines (choose how many and where they
   start), vortices and surface flow (tick them; they start off). Point at the car or a
   streamline to read the value there; the box at the top right shows the case's

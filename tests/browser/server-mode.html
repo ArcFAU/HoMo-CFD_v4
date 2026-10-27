@@ -42,6 +42,93 @@ runTests(async () => {
   [...doc.querySelectorAll(".table-mode-switch button")].find((button) => button.textContent === "Values").click();
   await waitFor(() => headerCells(doc).includes("Downforce [N]"));
 
+  // Residuals, CzA and CxA from the solver logs (fixture: 30 iterations; caseB's residuals twice caseA's, CzA 0.1 lower).
+  const residualsEntry = doc.querySelector('.residuals-entry[data-path="caseA#residuals"]');
+  check("Residuals entry for each case with a job log", residualsEntry && doc.querySelectorAll(".residuals-entry").length === 2);
+  residualsEntry.click();
+  await waitFor(() => doc.querySelector(".residual-chart") || doc.querySelector("#panels .error"), 10000);
+  const residualCards = () => [...doc.querySelectorAll(".residual-card")];
+  const residualLines = [...residualCards()[0].querySelectorAll(".residual-line")];
+  check("CzA and CxA charts under the residuals", residualCards().map((card) => card.querySelector("h2").textContent).slice(1).join("|") === "CzA (total)|CxA (total)" &&
+    residualCards()[1].querySelectorAll(".residual-line").length === 1, residualCards().map((card) => card.querySelector("h2").textContent).join("|"));
+  check("residual chart: one line per equation, turbulence dashed", residualLines.length === 6 &&
+    residualLines.map((line) => line.getAttribute("stroke-dasharray") ? "-" : "|").join("") === "||||--" &&
+    doc.querySelector(".workspace-title")?.textContent === "caseA · residuals" && /iterations 1–30/.test(doc.querySelector(".residual-card h2")?.textContent ?? ""),
+    `${residualLines.length} ${doc.querySelector(".residual-card h2")?.textContent}`);
+  check("residual legend: names and last residuals", [...doc.querySelectorAll(".residual-legend li")].map((li) => li.textContent).join("|") ===
+    ["Continuity", "X-momentum", "Y-momentum", "Z-momentum", "Tke", "Sdr"].map((name, column) => `${name} ${(10 ** (-3 - column / 2)).toExponential(2)}`).join("|"),
+    [...doc.querySelectorAll(".residual-legend li")].map((li) => li.textContent).join("|"));
+  const residualSvg = doc.querySelector(".residual-chart"), residualBox = residualSvg.getBoundingClientRect();
+  residualSvg.dispatchEvent(new PointerEvent("pointermove", { clientX: residualBox.left + residualBox.width / 2, clientY: residualBox.top + 50, bubbles: true }));
+  const residualTip = doc.querySelector(".residual-tooltip");
+  check("hovering the residual chart shows every residual at that iteration", !residualTip.hidden && /^Iteration 1[56]/.test(residualTip.textContent) &&
+    residualTip.querySelectorAll("div").length === 6, residualTip.textContent);
+  // Compare: one equation at a time, one line per case; CzA and CxA per case.
+  const compareSelect = doc.querySelector(".residual-toolbar select");
+  compareSelect.value = "caseB"; compareSelect.dispatchEvent(new Event("change"));
+  await waitFor(() => doc.querySelectorAll(".residual-case-chip").length === 2 && residualCards().length === 3, 10000);
+  check("comparing two cases: a line per case in each chart", residualCards().map((card) => card.querySelector("h2").textContent).join("|") === "Continuity residual|CzA (total)|CxA (total)" &&
+    residualCards().every((card) => card.querySelectorAll(".residual-line").length === 2) && doc.querySelector(".workspace-title")?.textContent === "Residuals",
+    residualCards().map((card) => card.querySelector("h2").textContent).join("|"));
+  const equationSelect = doc.querySelectorAll(".residual-toolbar select")[1];
+  equationSelect.value = "Sdr"; equationSelect.dispatchEvent(new Event("change"));
+  await waitFor(() => residualCards()[0]?.querySelector("h2").textContent === "Sdr residual", 10000);
+  const czaSvg = residualCards()[1].querySelector(".residual-chart"), czaBox = czaSvg.getBoundingClientRect();
+  czaSvg.dispatchEvent(new PointerEvent("pointermove", { clientX: czaBox.left + czaBox.width / 2, clientY: czaBox.top + 50, bubbles: true }));
+  const czaTip = residualCards()[1].querySelector(".residual-tooltip");
+  const iterationAt = Number(czaTip.textContent.match(/^Iteration (\d+)/)?.[1]);
+  check("CzA hover lists each case's value", !czaTip.hidden && czaTip.textContent.includes(`caseA ${(-3 - iterationAt / 100).toFixed(3)}`) &&
+    czaTip.textContent.includes(`caseB ${(-3.1 - iterationAt / 100).toFixed(3)}`), czaTip.textContent);
+  [...doc.querySelectorAll(".residual-case-chip")].find((chip) => chip.textContent.startsWith("caseB")).querySelector("button").click();
+  await waitFor(() => doc.querySelector(".workspace-title")?.textContent === "caseA · residuals" && residualCards()[0]?.querySelectorAll(".residual-line").length === 6, 10000);
+  check("removing the second case shows one case again", !doc.querySelector(".residual-case-chip"));
+  doc.querySelector(".summary .small-control").click();
+  await waitFor(() => doc.querySelector(".data-table tbody tr"), 10000);
+  check("Back to coefficients", rowNames(doc).join(",") === "caseA", rowNames(doc).join(","));
+  doc.querySelector(".tree-root").click();
+  await waitFor(() => rowNames(doc).length === 2, 10000);
+
+  // Highlighting rows: the star before the name; remembered, also after the table is drawn again.
+  const tableRow = (name) => [...doc.querySelectorAll(".data-table tbody tr")].find((tr) => tr.cells[0].textContent === name);
+  tableRow("caseB").querySelector(".row-highlight").click();
+  check("the star highlights its row, the name stays the cell's text", tableRow("caseB")?.classList.contains("highlighted-row") &&
+    !tableRow("caseA")?.classList.contains("highlighted-row") && tableRow("caseB").querySelector(".row-highlight").getAttribute("aria-pressed") === "true");
+  [...doc.querySelectorAll(".table-mode-switch button")].find((button) => button.textContent === "Δ vs reference").click();
+  await waitFor(() => headerCells(doc).includes("Δ Downforce [N]"));
+  check("a highlighted row stays highlighted (Δ view, remembered)", tableRow("caseB")?.classList.contains("highlighted-row") &&
+    JSON.parse(app.contentWindow.localStorage.getItem("homo-cfd-highlighted-simulations-v1")).length === 1);
+  [...doc.querySelectorAll(".table-mode-switch button")].find((button) => button.textContent === "Values").click();
+  await waitFor(() => headerCells(doc).includes("Downforce [N]"));
+  tableRow("caseB").querySelector(".row-highlight").click();
+  check("clicking the star again removes the highlight", !tableRow("caseB")?.classList.contains("highlighted-row") &&
+    app.contentWindow.localStorage.getItem("homo-cfd-highlighted-simulations-v1") === "[]");
+
+  // Customize columns: drag a row by its grip (or ↑/↓ on the grip) to reorder the columns.
+  doc.querySelector(".customize-columns").click();
+  const editorKeys = () => [...doc.querySelectorAll("#column-editor .column-config-row")].map((row) => row.querySelector("input[type=text]").value);
+  const before = editorKeys();
+  check("column rows have a drag grip, no arrow buttons", doc.querySelectorAll("#column-editor .column-drag-handle").length === before.length && !doc.querySelector("#column-editor .column-move"));
+  // Like a real drag: after the first step the row has moved, so the pointer events go to whatever is
+  // under the pointer, not to the grip.
+  const grip = doc.querySelector("#column-editor .column-drag-handle");
+  const gripX = grip.getBoundingClientRect().left + 5;
+  const rowBottom = (index) => doc.querySelectorAll("#column-editor .column-config-row")[index].getBoundingClientRect().bottom - 2;
+  const pointer = (type, y, target = doc.elementFromPoint(gripX, y) ?? doc.body) =>
+    target.dispatchEvent(new PointerEvent(type, { bubbles: true, button: 0, pointerId: 7, clientX: gripX, clientY: y }));
+  pointer("pointerdown", grip.getBoundingClientRect().top + 5, grip);
+  for (const index of [1, 2, 3]) pointer("pointermove", rowBottom(index));
+  pointer("pointerup", rowBottom(3));
+  const dragged = editorKeys();
+  check("dragging the first column down three places", dragged.slice(0, 4).join("|") === [before[1], before[2], before[3], before[0]].join("|"), dragged.slice(0, 5).join("|"));
+  doc.querySelectorAll("#column-editor .column-drag-handle")[3].dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }));
+  check("↑ on the grip moves it back up one place", editorKeys().slice(0, 4).join("|") === [before[1], before[2], before[0], before[3]].join("|") &&
+    doc.activeElement === doc.querySelectorAll("#column-editor .column-drag-handle")[2], editorKeys().slice(0, 4).join("|"));
+  doc.getElementById("column-save").click();
+  check("the table follows the new order", headerCells(doc).slice(1, 5).join("|") === [before[1], before[2], before[0], before[3]].join("|"), headerCells(doc).slice(0, 5).join("|"));
+  doc.querySelector(".customize-columns").click();
+  doc.getElementById("column-reset").click();
+  await waitFor(() => headerCells(doc).slice(1, 4).join("|") === before.slice(0, 3).join("|"), 5000);
+
   // Forces: F = ½ · ρ · v² · (−CzA), default 60 km/h and ρ = 1.18415 kg/m³.
   check("Downforce [N] at 60 km/h", cellFor(doc, "caseA", "Downforce [N]") === (3.2 * dynamicPressure(60)).toFixed(1), cellFor(doc, "caseA", "Downforce [N]"));
   check("Drag [N] at 60 km/h", cellFor(doc, "caseB", "Drag [N]") === (1.4 * dynamicPressure(60)).toFixed(1), cellFor(doc, "caseB", "Drag [N]"));
@@ -112,8 +199,11 @@ runTests(async () => {
   // Stepping must not flash: same panel, image swapped in already sized, zoomed position kept.
   const panelBefore = viewer.querySelectorAll(".compare-image-panel")[1];
   const stepStage = viewer.querySelectorAll(".compare-image-stage")[1];
-  key(win, "+"); key(win, "+"); await idle(win); await sleep(100);
-  stepStage.scrollLeft = 40; stepStage.scrollTop = 30; await sleep(100);
+  key(win, "+"); key(win, "+"); await idle(win);
+  // Scroll only once the zoom has made the image larger than its panel (else the browser keeps 0,0).
+  await waitFor(() => stepStage.scrollWidth > stepStage.clientWidth + 40 && stepStage.scrollHeight > stepStage.clientHeight + 30, 5000);
+  stepStage.scrollLeft = 40; stepStage.scrollTop = 30;
+  await waitFor(() => stepStage.scrollLeft === 40 && stepStage.scrollTop === 30, 2000);
   const panBefore = `${stepStage.scrollLeft},${stepStage.scrollTop}`;
   const imageBefore = stepStage.querySelector("img");
   const unsized = [];

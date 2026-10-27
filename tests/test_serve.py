@@ -14,6 +14,7 @@ import shutil
 import sys
 import tempfile
 import threading
+import time
 import unittest
 from pathlib import Path
 
@@ -162,6 +163,35 @@ class ApiTests(ServeTestCase):
         connection.close()
         status, _ = self.request("GET", "/api/file?path=caseA/plots/Coefficients_49.csv", headers={"If-Modified-Since": modified})
         self.assertEqual(status, 304)
+
+    def test_residuals_from_the_solver_log(self):
+        status, data = self.request("GET", "/api/residuals?path=caseA")
+        answer = json.loads(data)
+        self.assertEqual(status, 200)
+        self.assertEqual(answer["names"], ["Continuity", "X-momentum", "Y-momentum", "Z-momentum", "Tke", "Sdr"], "up to the first monitor")
+        self.assertEqual(answer["iterations"], list(range(1, 31)))
+        self.assertAlmostEqual(answer["values"][14][5], fixture.solver_residual(15, 5), delta=1e-12)
+        self.assertNotIn(b"LICENCE", data)
+        self.assertEqual(answer["monitors"]["names"], ["CzA", "CxA"], "the totals, not CzA Front or CzA Frontwing")
+        self.assertEqual(answer["monitors"]["values"][29], [fixture.solver_cza(30), -1.25])
+        status, data = self.request("GET", "/api/residuals?path=caseA/plots")
+        self.assertEqual((status, json.loads(data)["iterations"]), (200, []), "no job log: no residuals")
+        status, _ = self.request("GET", "/api/residuals?path=../")
+        self.assertEqual(status, 400)
+
+    def test_residuals_of_a_continued_run(self):
+        folder = self.temp / "continued"
+        folder.mkdir()
+        header = f"{'Iteration':>14}{'Continuity':>15}{'Tke':>15}{'CzA':>15}"
+        (folder / "run.o1").write_text(f"{header}\n{1:>14}{1.0:>15}{1.0:>15}{-3.0:>15}\n{2:>14}{0.5:>15}{0.5:>15}{-3.0:>15}\n", encoding="utf-8")
+        later = folder / "run.o2"
+        later.write_text(f"{header}\n{2:>14}{0.4:>15}{0.4:>15}{-3.1:>15}\n{3:>14}{0.2:>15}{0.2:>15}{-3.1:>15}\n", encoding="utf-8")
+        os.utime(later, (time.time() + 60, time.time() + 60))
+        (folder / "mesh.o0").write_text("Iteration 1 of the mesher\n", encoding="utf-8")
+        result = serve.solver_residuals(folder)
+        self.assertEqual(result["names"], ["Continuity", "Tke"])
+        self.assertEqual(result["iterations"], [1, 2, 3])
+        self.assertEqual(result["values"], [[1.0, 1.0], [0.4, 0.4], [0.2, 0.2]], "the later log wins")
 
     def test_paths_outside_results_are_rejected(self):
         for path in ("../serve.py", "caseA/../../serve.py", "..%2Fserve.py", "%2E%2E/serve.py",

@@ -186,6 +186,19 @@ written before post-processing, and WinSCP alone cannot ask SLURM cheaply,
 so the generated `post.sh` writes its own marker. Details:
 `docs/STAGE7_FRITZ.md` sections 4–5.
 
+## 2026-10-27 — Residuals come from the solver log; the table keeps the final iteration
+
+**Final iteration stays:** a mean of the last 100 iterations (with ± band,
+"not settled" mark and greyed Δ, and the server sending only those rows) was
+built on 2026-10-26 and reverted on 2026-10-27 at the user's request: "i think
+the changes are very minor over 100 iterations, in that maner it is useless to
+do (1), (3)."
+**Residuals from the job log:** STAR-CCM+ prints its iteration table (residuals
+and monitors) to the solver's SLURM log, which HoMo already downloads with each
+case. Parsing it needs no macro change (the template `SCRIPT_RANS` stays
+untouched) and covers old runs. `serve.py` returns only the parsed numbers,
+never log text: the logs hold the licence key.
+
 ## 2026-10-14 — Teammates get HoMo CFD through the team's SVN
 
 The unpacked app (with its embeddable Python) lives in an SVN folder every

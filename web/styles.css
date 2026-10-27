@@ -452,6 +452,136 @@ select {
   stroke-width: 1;
 }
 
+/* Residuals (app.js residualChart): log-scale lines, recessive grid. */
+.residual-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+  margin: 0 0 10px;
+  padding: 0;
+  list-style: none;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.residual-legend li,
+.residual-tooltip div {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.residual-value,
+.residual-tooltip span {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.residual-swatch {
+  width: 22px;
+  height: 6px;
+  flex: none;
+}
+
+.residual-chart-wrap {
+  position: relative;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.residual-chart {
+  display: block;
+  width: 100%;
+  min-width: 720px;
+  height: auto;
+}
+
+.residual-grid {
+  stroke: #263041;
+  stroke-width: 1;
+}
+
+.residual-axis {
+  stroke: #3a4658;
+  stroke-width: 1;
+}
+
+.residual-tick {
+  fill: var(--muted);
+  font-size: 11px;
+}
+
+.residual-line {
+  fill: none;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.residual-crosshair {
+  stroke: var(--muted);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
+
+.residual-dot {
+  stroke: var(--panel);
+  stroke-width: 2;
+}
+
+.residual-body {
+  display: grid;
+  gap: 16px;
+}
+
+.residual-case-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 6px 12px 0;
+}
+
+.residual-case-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 4px 3px 10px;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.residual-case-chip button {
+  border: 0;
+  padding: 0 5px;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.residual-case-chip button:hover,
+.residual-case-chip button:focus-visible {
+  color: var(--text);
+}
+
+.residual-tooltip {
+  position: absolute;
+  z-index: 2;
+  display: grid;
+  gap: 3px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #0c1219;
+  color: var(--text);
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
 .monitor-zero-line {
   stroke: #e8eef6;
   stroke-width: 1.5;
@@ -537,9 +667,44 @@ select {
 
 .column-config-row {
   display: grid;
-  grid-template-columns: 24px minmax(0, 1fr) 34px 34px;
+  grid-template-columns: 22px 24px minmax(0, 1fr);
   align-items: center;
   gap: 6px;
+  border-radius: 5px;
+}
+
+/* The row being dragged (app.js openColumnDialog). */
+.column-config-row.dragging {
+  background: #1a2732;
+  outline: 1px solid var(--accent);
+}
+
+.column-drag-handle {
+  width: 22px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+  cursor: grab;
+  touch-action: none;
+}
+
+.column-drag-handle::before {
+  content: "⠿";
+}
+
+.column-drag-handle:hover,
+.column-drag-handle:focus-visible {
+  color: var(--text);
+  background: #1a2732;
+}
+
+.column-config-row.dragging .column-drag-handle {
+  cursor: grabbing;
 }
 
 .column-config-row input[type="text"] {
@@ -550,10 +715,6 @@ select {
   border: 1px solid var(--border);
   border-radius: 5px;
   padding: 6px 8px;
-}
-
-.column-move {
-  padding: 4px;
 }
 
 .column-dialog-actions {
@@ -928,6 +1089,44 @@ select {
   background: #111a22;
 }
 
+/* Rows the user highlighted with the star before the name (app.js highlightToggle). */
+.data-table tbody tr.highlighted-row td {
+  background: rgb(229 182 75 / 14%);
+}
+
+.data-table tbody tr.highlighted-row td:first-child {
+  box-shadow: inset 3px 0 0 #e5b64b;
+}
+
+.row-highlight {
+  width: 16px;
+  margin-right: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #5f6d7f;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.row-highlight::before {
+  content: "☆";
+}
+
+.row-highlight:hover,
+.row-highlight:focus-visible {
+  color: var(--text);
+}
+
+.row-highlight[aria-pressed="true"] {
+  color: #e5b64b;
+}
+
+.row-highlight[aria-pressed="true"]::before {
+  content: "★";
+}
+
 .panel {
   display: flex;
   flex-direction: column;
@@ -1111,12 +1310,14 @@ select {
   font-size: 13px;
 }
 
+/* Wraps onto a second line on small screens (laptop) rather than squeezing the title and filter. */
 .summary {
   overflow-x: auto;
   border-bottom: 1px solid var(--border);
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
+  gap: 8px 12px;
   padding: 10px 20px;
   flex: none;
 }
