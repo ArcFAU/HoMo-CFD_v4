@@ -5636,3 +5636,28 @@ Final response (verbatim):
 - `tests/browser/server-mode.html`: the drag check moves three steps and dispatches each event to `elementFromPoint`; with the old listeners it fails (3 checks, verified), with the fix it passes.
 - `STATUS.md` updated.
 - Checks: `py -m unittest discover -s tests -v`: 108 tests OK. `py tests/run_browser_tests.py`: 201/201 checks passed.
+
+## 2026-10-27 — Push and SVN update
+
+### User messages (verbatim)
+
+> okay, push it and also update svn version.
+
+### Contributor responses
+
+The contributor's short progress notes between steps are in the Claude Code session transcript and are not repeated here.
+
+Final response (verbatim):
+
+> Both done.
+>
+> - **GitHub:** commit `609c8fd` ("Residuals page with CzA/CxA and comparison, faster 3D viewer, row highlights, dragging columns") is pushed to `night-2026-10-02` and `master`. This log entry follows as a second small commit.
+> - **SVN folder** (`D:\SVN\2027\2_Composites\1_Aero\HOMO-CFD`): updated with 6 changed files (README.md, serve.py, and 4 files in `web\`), nothing new and nothing to delete. I checked that they match the project and that no `__pycache__` got in.
+>
+> **Your step:** right-click the folder → **SVN Commit…** in TortoiseSVN. Teammates then get it with **SVN Update** (after quitting HoMo CFD with ⏻). Restart your own HoMo CFD too, so the server part (residuals with CzA/CxA) is active.
+
+### Work record
+
+- `git commit` 609c8fd (all work of 2026-10-26/27, including `CHAT_HISTORY_2026-09.md`), pushed to `origin/night-2026-10-02` and `origin/master` (both were at 50b999a). Diff checked for licence keys: only mentions and the fixture's fake line.
+- `py tools/make_portable.py --into "D:\SVN\2027\2_Composites\1_Aero\HOMO-CFD"`: build OK (bundled Python 3.14.8 loads HoMo CFD, zip 12.5 MB); 0 new, 6 changed files (README.md, serve.py, web/3d-viewer.js, web/app.js, web/server-fs.js, web/styles.css); published files compared byte for byte with the project; no `__pycache__`. SVN commit left to the user (TortoiseSVN).
+- This entry committed and pushed separately.
