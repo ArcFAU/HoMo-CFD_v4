@@ -50,10 +50,11 @@ this folder, in `%APPDATA%\HoMo-CFD`, so updates keep them.
   pressure plots, 3D scene pictures, **Residuals** (residuals, CzA and CxA from
   the solver log; compare up to 4 simulations) and **3D-data · 3D viewer** for
   the 3D car.
-- **3D viewer:** field, palette, view; streamlines (choose how many and where they
-  start), vortices and surface flow (tick them; they start off). Point at the car or a
-  streamline to read the value there; the box at the top right shows the case's
-  coefficients.
+- **3D viewer** (from the tree, or the button at the bottom of the sidebar): pick any
+  simulation with 3D data from its **Simulation** list; field, palette, view;
+  streamlines (choose how many and where they start), vortices and surface flow
+  (tick them; they start off). Point at the car or a streamline to read the value
+  there; the box at the top right shows the case's coefficients.
 - **Cluster** (bottom of the sidebar): connect to Fritz through your WinSCP saved
   session. Then **Simulations on Fritz** shows every case's state with Download
   and Start, **Results on Fritz** shows their coefficients before downloading, and

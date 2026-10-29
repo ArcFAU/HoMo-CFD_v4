@@ -5,6 +5,8 @@
 /* Streamline choice: a second, smaller bar, only for folders with streamlines. */
 .cfd3d-subbar { min-height: 0; padding: 6px 14px; flex-wrap: wrap; font-size: 12px; }
 .cfd3d-subbar[hidden] { display: none; }
+/* Toolbar controls and the legend set their own display; hidden ones (nothing loaded yet) must still hide. */
+.range-control[hidden],.cfd3d-legend[hidden] { display: none; }
 .cfd3d-subbar strong { min-width: 210px; font-weight: 600; }
 #stream-every { width: 110px; }
 #stream-width { width: 80px; }
@@ -13,6 +15,8 @@
 .range-control { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
 .range-control input,.range-control select { width: 150px; padding: 6px; color: var(--text); background: #0c1219; border: 1px solid var(--border); border-radius: 5px; }
 .range-control input { width: 74px; }
+/* Simulation list (3d-viewer.js loadCaseList): room for long case names. */
+.case-control select { width: 210px; }
 #view-preset { width: 160px; }
 .shading-control input { width: auto; }
 .part-toggles { gap: 10px; }

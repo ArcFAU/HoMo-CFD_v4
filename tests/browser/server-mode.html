@@ -266,6 +266,23 @@ runTests(async () => {
   const coefficientText = viewer3d.getElementById("coefficients")?.textContent ?? "";
   check("3D viewer shows the case's coefficients", /caseA/.test(coefficientText) && /CzA−3\.200/.test(coefficientText) && /CxA−1\.250/.test(coefficientText) &&
     /L\/D2\.56/.test(coefficientText) && coefficientText.includes(`Downforce${(3.2 * dynamicPressure(60)).toFixed(1)} N`) && /FW−1\.100−0\.300/.test(coefficientText) && /60 km\/h/.test(coefficientText), coefficientText);
+  // The Simulation list: every 3D-data folder of the results folder (only caseA has one), the open one selected.
+  await waitFor(() => viewer3d.getElementById("case-select")?.options.length > 1, 10000);
+  const viewerCases = [...viewer3d.getElementById("case-select").options].map((option) => `${option.textContent}=${option.value}`);
+  check("3D viewer lists the simulations with 3D data, the open one selected", viewerCases.slice(1).join(",") === "caseA=caseA/3D-data" &&
+    viewer3d.getElementById("case-select").value === "caseA/3D-data" && viewer3d.getElementById("open-folder").hidden, viewerCases.join(","));
+  // The sidebar's 3D viewer button: an empty viewer with the list; choosing a simulation opens it.
+  doc.getElementById("open-3d-viewer").click();
+  await waitFor(() => opened[3]?.contentDocument?.getElementById("case-select")?.options.length > 1, 15000);
+  const emptyViewer = opened[3].contentDocument;
+  check("3D viewer button: choose a simulation from the list", /Choose a simulation/.test(emptyViewer.getElementById("message").textContent) &&
+    !emptyViewer.getElementById("case-control").hidden, emptyViewer.getElementById("message").textContent);
+  emptyViewer.getElementById("case-select").value = "caseA/3D-data";
+  emptyViewer.getElementById("case-select").dispatchEvent(new Event("change"));
+  await waitFor(() => emptyViewer.getElementById("legend")?.hidden === false || emptyViewer.getElementById("error")?.hidden === false, 30000);
+  check("choosing a simulation loads its 3D data", emptyViewer.getElementById("legend").hidden === false && opened[3].contentWindow.eval("model.ix.length / 3") === 5 &&
+    emptyViewer.title === "caseA · 3D viewer — HoMo CFD", emptyViewer.getElementById("error").textContent);
+
   // Stage 7 step 1: Fritz cluster settings (fake WinSCP on the test server).
   const clusterButton = doc.getElementById("cluster-settings");
   check("Fritz cluster button shown with serve.py", clusterButton && !clusterButton.hidden);

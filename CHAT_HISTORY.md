@@ -5661,3 +5661,59 @@ Final response (verbatim):
 - `git commit` 609c8fd (all work of 2026-10-26/27, including `CHAT_HISTORY_2026-09.md`), pushed to `origin/night-2026-10-02` and `origin/master` (both were at 50b999a). Diff checked for licence keys: only mentions and the fixture's fake line.
 - `py tools/make_portable.py --into "D:\SVN\2027\2_Composites\1_Aero\HOMO-CFD"`: build OK (bundled Python 3.14.8 loads HoMo CFD, zip 12.5 MB); 0 new, 6 changed files (README.md, serve.py, web/3d-viewer.js, web/app.js, web/server-fs.js, web/styles.css); published files compared byte for byte with the project; no `__pycache__`. SVN commit left to the user (TortoiseSVN).
 - This entry committed and pushed separately.
+
+## 2026-10-27 — Loose ends? (question)
+
+### User messages (verbatim)
+
+> any loose ends?
+
+### Contributor responses (verbatim)
+
+> Nothing half-done in the code; everything is committed, pushed and tested. What's still open:
+>
+> **Waiting on you**
+> - **SVN Commit** of `D:\SVN\2027\2_Composites\1_Aero\HOMO-CFD` in TortoiseSVN. Until then teammates don't get the update.
+> - **Restart your HoMo CFD** (⏻, then start it). Until then the Residuals page can't load, because your running server doesn't have it yet.
+>
+> **Small things I noticed**
+> - The top of `STATUS.md` still says "Last updated: 2026-10-06". The entries below are current, only that date is stale.
+> - The Residuals page keeps each simulation's data until you reload the page. For a case that is still running and being downloaded, reload to see new iterations. Finished cases aren't affected.
+> - One browser-test run printed a harmless "connection reset" message from the test server (the browser closed a download early); the checks passed and it didn't come back.
+> - This answer's chat-history entry isn't committed yet; it will go with the next commit.
+>
+> **Still on the table from my earlier list**
+> - The analysis of when your runs actually settle (could shorten the 1000 iterations and save Fritz hours). Not started; say if you want it.
+>
+> Want me to fix the STATUS date and commit it together with this log entry?
+
+### Work record
+
+- No files changed apart from this log. Not committed yet.
+
+## 2026-10-27 — Smaller text in the Monitor comparison
+
+### User messages (verbatim)
+
+> can you reduce the font size in Monitor comparison
+
+### Contributor responses
+
+The contributor's short progress notes between steps are in the Claude Code session transcript and are not repeated here.
+
+Final response (verbatim):
+
+> Done. The chart's text was set small, but the chart stretches to the window width, so on your big monitor everything grew with it (up to about 1.7× there).
+>
+> - The labels are now smaller (9.5 instead of 11 in chart units).
+> - The chart stops growing at 1200 px wide.
+>
+> On a 1920-px-wide screen the names and values are now about the size of the table text; on the laptop they're a little smaller than before. Reload the HoMo CFD tab to see it.
+>
+> Tests: 108 unit tests and 201 browser checks pass. Not committed or pushed yet (together with the last log entry); say "push it" and I'll also update the SVN folder.
+
+### Work record
+
+- `web/styles.css`: `.monitor-chart` `max-width: 1200px`; `.monitor-tick-label`, `.monitor-value-label`, `.monitor-case-label` font size 11 → 9.5. Checked in headless Chrome at 1366 and 1920 px (scale capped at 1.25, label 16 px box at 1920).
+- `CHANGELOG.md` line added.
+- Checks: `py -m unittest discover -s tests -v`: 108 tests OK. `py tests/run_browser_tests.py`: 201/201 checks passed.

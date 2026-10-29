@@ -440,10 +440,12 @@ select {
   background: #0c1219;
 }
 
+/* The chart scales with its width (viewBox 960 wide); capped so its text stays small on wide screens. */
 .monitor-chart {
   display: block;
   width: 100%;
   min-width: 720px;
+  max-width: 1200px;
   height: auto;
 }
 
@@ -592,7 +594,7 @@ select {
 .monitor-case-label {
   fill: var(--muted);
   font-family: "Segoe UI", system-ui, sans-serif;
-  font-size: 11px;
+  font-size: 9.5px;
 }
 
 .monitor-case-label {

@@ -7,10 +7,13 @@ User-visible changes, newest first. Detailed reasoning lives in
 
 ### Added
 - **Residuals page: CzA and CxA** (totals) per iteration under the residuals, from the same solver log.
+- **3D viewer: Simulation list** of every simulation in `finished` with 3D data; choosing one opens it, also to switch cases without going back to the tree. The sidebar's **3D viewer** button now opens the viewer with this list (the folder picker stays only when HoMo CFD runs without its server).
 - **Highlight rows** in the results table: the ☆ before a simulation's name tints its row (★); click again to remove. Remembered, also in the Δ view.
 - **Compare up to 4 simulations** on the Residuals page (**Compare with…**): one line per simulation, one equation at a time (select), and their CzA and CxA. Point at a chart to read every value at that iteration.
 
 ### Changed
+- 3D viewer: before a simulation is open, Field, View and the colour legend no longer show (empty).
+- **Monitor comparison:** smaller text, and the chart no longer grows past 1200 px wide, so it stays small on big screens.
 - **Customize columns:** drag a column by its grip (⠿) instead of the ↑/↓ buttons; with the grip focused, the arrow keys still move it.
 - **3D viewer opens about twice as fast:** the 12-million-triangle car of `1016_V4_W` now opens in about 3 s instead of 5–6.5 s (data read straight into memory instead of through a file copy, all geometry files downloaded at once, faster mesh building).
 
