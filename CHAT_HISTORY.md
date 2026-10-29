@@ -5717,3 +5717,38 @@ Final response (verbatim):
 - `web/styles.css`: `.monitor-chart` `max-width: 1200px`; `.monitor-tick-label`, `.monitor-value-label`, `.monitor-case-label` font size 11 → 9.5. Checked in headless Chrome at 1366 and 1920 px (scale capped at 1.25, label 16 px box at 1920).
 - `CHANGELOG.md` line added.
 - Checks: `py -m unittest discover -s tests -v`: 108 tests OK. `py tests/run_browser_tests.py`: 201/201 checks passed.
+
+## 2026-10-29 — 3D viewer: Simulation list instead of a bare folder button; push and SVN update
+
+### User messages (verbatim)
+
+> can you do something about 3d-view button. right now, it's kinda useless. either remove it or maake open all the 3d data (listed and then select one to load it) available in the finished folder.
+
+(sent while the work was running:)
+
+> once done, update svn and git
+
+### Contributor responses
+
+The contributor's short progress notes between steps are in the Claude Code session transcript and are not repeated here.
+
+Final response (verbatim):
+
+> Done, and both Git and the SVN folder are updated.
+>
+> **The 3D viewer button now opens a viewer with a Simulation list:** every simulation in `finished` that has 3D data (28 right now). Pick one and it loads. The same list is there when you open a case from the tree, so you can switch to another simulation without going back. The "Open 3D-data folder" button is gone when HoMo runs normally; it only stays for the rare case without HoMo's server.
+>
+> Also fixed along the way: an empty viewer showed Field, View and a colour legend with nothing loaded. Those now stay hidden until a simulation is open.
+>
+> - **Git:** commit `10b8953` pushed to `night-2026-10-02` and `master`. It includes the smaller Monitor comparison text from before. This log entry follows as a small second commit.
+> - **SVN folder:** 6 files changed (README.md and 5 files in `web\`), all checked identical to the project. **Your step:** right-click → **SVN Commit…** in TortoiseSVN. This includes the previous update if you haven't committed that yet.
+>
+> Tests: 108 unit tests and 204 browser checks pass. Reload the HoMo CFD tab (or restart HoMo CFD if you haven't since the residuals update).
+
+### Work record
+
+- `web/3d-viewer.html`: `#case-control` with `#case-select` in the toolbar. `web/3d-viewer.js`: `ensightFolders()`, `syncCaseSelect()`, `showCaseList()`, `loadCaseList()` (only when `/api/config` has a results root; saved listing, then a fresh scan), change handler opening `ServerDirectoryHandle(path, …)` (list disabled while loading); `openFolder` calls `syncCaseSelect()`. `web/3d-viewer.css`: list width; `.range-control[hidden]`, `.cfd3d-legend[hidden]` hide. `web/index.html`: button tooltip.
+- Tests: 3 new checks in `tests/browser/server-mode.html` (list from the tree with the open case selected; sidebar button: empty viewer with the list, choosing caseA loads it).
+- Docs: `CHANGELOG.md`, `STATUS.md`, `tests/README.md`, `docs/APP_README.md`.
+- Checks: `py -m unittest discover -s tests -v`: 108 tests OK. `py tests/run_browser_tests.py`: 204/204 checks passed. Real results: 28 simulations listed; screenshots of the empty viewer checked.
+- `git commit` 10b8953, pushed to `origin/night-2026-10-02` and `origin/master`. `py tools/make_portable.py --into "D:\SVN\2027\2_Composites\1_Aero\HOMO-CFD"`: 0 new, 6 changed (README.md, web/3d-viewer.css, web/3d-viewer.html, web/3d-viewer.js, web/index.html, web/styles.css); compared byte for byte; no `__pycache__`. SVN commit left to the user. This entry committed and pushed separately.
