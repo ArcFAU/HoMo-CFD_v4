@@ -117,7 +117,9 @@ def state(case):
     elif has("plots/DONE"):
         current = "waiting-post"
     elif has("STARTED"):
-        current = "solving" if glob.glob(os.path.join(case, "resTAURANtS.o*")) else "meshing"
+        # The solver job is called UPSIRANS since 2026-11-01 (resTAURANtS before), and its log is named after it.
+        solver_logs = glob.glob(os.path.join(case, "UPSIRANS.o*")) + glob.glob(os.path.join(case, "resTAURANtS.o*"))
+        current = "solving" if solver_logs else "meshing"
     else:
         current = "prepared"
     log = newest(os.path.join(case, "*.o*"))

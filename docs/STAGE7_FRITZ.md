@@ -128,7 +128,7 @@ Findings behind these answers (read-only checks on this PC):
   cluster here.
 - **Licence key:** not stored in CFD-Tool (jar or config) or in any `Settings`
   file; it appears only in already generated job scripts and in the job log
-  (`resTAURANtS.o…`). It came from the CFD-Tool setup of whoever prepared those
+  (`UPSIRANS.o…`, `resTAURANtS.o…` before 2026-11-01). It came from the CFD-Tool setup of whoever prepared those
   cases.
 - **Run settings** in `Settings` (`Run Settings/…`): mesh/RANS nodes and hours,
   post hours, accelerated post-processing, download options (`Download

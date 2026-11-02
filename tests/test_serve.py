@@ -455,6 +455,20 @@ class ClusterApiTests(ApiTests):
         self.assertEqual(self.wait_for_task("new1"), "done")
         self.assertEqual(self.fake.uploads[-1], [(["mesh.sh"], "new1/"), ("Vehicle State/Velocity : 60.0\n", "new1/Settings"),
                                                  (str(sim), "new1/")])
+        # CAD files go into the new folder with the .sim; unusable ones stop the request before anything runs.
+        frontwing, rearwing = self.temp / "frontwing_v3.stl", self.temp / "RW_V4.step"
+        frontwing.write_bytes(b"solid")
+        rearwing.write_bytes(b"ISO-10303")
+        runs = len(self.fake.scripts)
+        for cad, message in (([str(self.temp / "missing.stl")], "was not found"), ([str(sim)], "is not a CAD file")):
+            status, data = self.post("/api/cluster/new-case", {"name": "new2", "settings": settings, "simPath": str(sim), "cadPaths": cad})
+            self.assertEqual(status, 400)
+            self.assertIn(message, data["error"])
+        self.assertEqual(len(self.fake.scripts), runs, "nothing ran on Fritz")
+        status, data = self.post("/api/cluster/new-case", {"name": "new2", "settings": settings, "simPath": str(sim),
+                                                           "cadPaths": [str(frontwing), str(rearwing)]})
+        self.assertEqual((status, self.wait_for_task("new2")), (200, "done"))
+        self.assertEqual(self.fake.uploads[-1][2:], [(str(sim), "new2/"), (str(frontwing), "new2/"), (str(rearwing), "new2/")])
         # Start: only prepared cases from the last list, and only once.
         self.assertEqual(self.post("/api/cluster/submit", {"case": "caseD"})[0], 409)
         self.assertEqual(self.post("/api/cluster/submit", {"case": "notListed"})[0], 400)

@@ -196,6 +196,8 @@ def main():
     working_dir = fixture.build(temp)
     base_sim = temp / "base.sim"  # stands in for a base .sim on this computer
     base_sim.write_bytes(b"not a real simulation")
+    cad_file = temp / "frontwing_v3.stl"  # a CAD file to upload with a new simulation
+    cad_file.write_bytes(b"solid test")
     handler = make_handler(serve, working_dir)
     server = serve.Server(("127.0.0.1", 0), handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
@@ -205,7 +207,7 @@ def main():
     pages = [
         ("first-start", lambda: handler.working_dir.set(None, None), f"/test/first-start.html?dir={working_dir}"),
         ("server-mode", lambda: handler.working_dir.set(working_dir, "test"),
-         f"/test/server-mode.html?sim={quote(str(base_sim))}"),
+         f"/test/server-mode.html?sim={quote(str(base_sim))}&cad={quote(str(cad_file))}"),
         ("picker-mode", lambda: None, "/test/picker-mode.html"),
     ]
     failures = 0

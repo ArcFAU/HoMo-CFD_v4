@@ -268,7 +268,8 @@ def case_status_command():
 
     Prints "HOMO|<name>|<flags>|<newest job log, epoch s>" per folder that has
     Settings, STARTED or plots. Flags: S STARTED, D plots/DONE (solver
-    finished), X plots/POST_DONE, M meshing log, T solver log, R post log,
+    finished), X plots/POST_DONE, M meshing log, T solver log (UPSIRANS.o…, or
+    resTAURANtS.o… from before the job was renamed on 2026-11-01), R post log,
     P newest post log finished ("Job finished at", written last by post.sh),
     F newest post log has an uncaught macro error (POST_FAILED below).
     Also prints "HOMOCSV|<name>|h|<header>" and "HOMOCSV|<name>|r|<last row>" of the
@@ -279,7 +280,8 @@ def case_status_command():
         '[ -e "$d/Settings" ] || [ -e "$d/STARTED" ] || [ -d "$d/plots" ] || continue; f=; '
         '[ -e "$d/STARTED" ] && f="${f}S"; [ -e "$d/plots/DONE" ] && f="${f}D"; '
         '[ -e "$d/plots/POST_DONE" ] && f="${f}X"; '
-        'ls "$d"/mesh.o* >/dev/null 2>&1 && f="${f}M"; ls "$d"/resTAURANtS.o* >/dev/null 2>&1 && f="${f}T"; '
+        'ls "$d"/mesh.o* >/dev/null 2>&1 && f="${f}M"; '
+        '{ ls "$d"/UPSIRANS.o* || ls "$d"/resTAURANtS.o*; } >/dev/null 2>&1 && f="${f}T"; '
         'p=$(ls -t "$d"/post.o* 2>/dev/null | head -n 1); '
         'if [ -n "$p" ]; then f="${f}R"; tail -c 4000 "$p" | grep -q "Job finished at" && f="${f}P"; '
         f"grep -E -q '{POST_FAILED}' \"$p\" && f=\"${{f}}F\"; fi; "
@@ -502,8 +504,37 @@ FOLDER_CREATED = "HOMO-CREATED"
 CASE_UPLOADED = "HOMO-UPLOADED"
 
 
-def new_case_script(session, remote_folder, template, case, template_dir, settings_file, sim_file):
-    """Create <case> as a copy of the template with the edited Settings and the .sim.
+# CAD files that starccm/mesh.java imports from the case folder before meshing.
+CAD_SUFFIXES = (".stp", ".step", ".igs", ".iges", ".stl")
+MAX_CAD_FILES = 20
+
+
+def check_cad_files(paths, sim_name):
+    """The CAD files to upload with a new case, as Paths: absolute, existing, a CAD type, safe for the
+    WinSCP script, and with different names (they all land in the case folder). Raises ValueError."""
+    if paths is None:
+        return []
+    if not isinstance(paths, list) or len(paths) > MAX_CAD_FILES:
+        raise ValueError(f"Choose at most {MAX_CAD_FILES} CAD files.")
+    files, names = [], {sim_name.lower(), "settings"}
+    for raw in paths:
+        path = Path(raw.strip().strip('"')) if isinstance(raw, str) else None
+        if path is None or not path.is_absolute() or UNSAFE.search(str(path)):
+            raise ValueError(f"Not a usable CAD file path: {raw}")
+        if path.suffix.lower() not in CAD_SUFFIXES:
+            raise ValueError(f"{path.name} is not a CAD file ({', '.join(CAD_SUFFIXES)}).")
+        if not path.is_file():
+            raise ValueError(f"{path} was not found on this computer.")
+        if path.name.lower() in names:
+            raise ValueError(f"Two files are called {path.name}; they would overwrite each other in the case folder.")
+        names.add(path.name.lower())
+        files.append(path)
+    return files
+
+
+def new_case_script(session, remote_folder, template, case, template_dir, settings_file, sim_file, cad_files=()):
+    """Create <case> as a copy of the template with the edited Settings, the .sim and any CAD files
+    (mesh.java swaps them in before meshing).
 
     One login and only WinSCP's own commands: "call" (a shell command) needs a
     second login, which NHR's jump host sometimes refuses, and does not stop
@@ -521,6 +552,7 @@ def new_case_script(session, remote_folder, template, case, template_dir, settin
         f'put -filemask="|Settings" "{template_dir}\\*" "{case}/"',
         f'put "{settings_file}" "{case}/Settings"',
         f'put "{sim_file}" "{case}/"',
+        *[f'put "{cad}" "{case}/"' for cad in cad_files],
         f"echo {CASE_UPLOADED}",
         "exit",
     ]
@@ -561,12 +593,13 @@ def parse_jobs(output):
     return jobs
 
 
-def run_new_case(winscp, task, session, remote_folder, template, case, settings_file, sim_file):
+def run_new_case(winscp, task, session, remote_folder, template, case, settings_file, sim_file, cad_files=()):
     """Background task: create the case on Fritz in one WinSCP run (see
     new_case_script), then remove the temporary Settings and template files."""
     template_dir = tempfile.mkdtemp(prefix="homo-cfd-template-")
     reached = set()
-    steps = {TEMPLATE_FETCHED: "Creating the folder…", FOLDER_CREATED: "Uploading Settings and the .sim file…"}
+    uploads = f"Settings, the .sim and {len(cad_files)} CAD file{'' if len(cad_files) == 1 else 's'}" if cad_files else "Settings and the .sim file"
+    steps = {TEMPLATE_FETCHED: "Creating the folder…", FOLDER_CREATED: f"Uploading {uploads}…"}
 
     def on_line(line):
         task.on_line(line)
@@ -577,7 +610,7 @@ def run_new_case(winscp, task, session, remote_folder, template, case, settings_
 
     try:
         task.message = f"Reading the template folder {template}…"
-        code = winscp.stream(new_case_script(session, remote_folder, template, case, template_dir, settings_file, sim_file),
+        code = winscp.stream(new_case_script(session, remote_folder, template, case, template_dir, settings_file, sim_file, cad_files),
                              on_line, lambda process: setattr(task, "process", process))
         log = "\n".join(task.log)
         hint = hint_for(log)

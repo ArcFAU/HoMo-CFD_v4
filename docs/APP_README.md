@@ -58,7 +58,9 @@ this folder, in `%APPDATA%\HoMo-CFD`, so updates keep them.
 - **Cluster** (bottom of the sidebar): connect to Fritz through your WinSCP saved
   session. Then **Simulations on Fritz** shows every case's state with Download
   and Start, **Results on Fritz** shows their coefficients before downloading, and
-  **New simulation on Fritz** creates a case from the template.
+  **New simulation on Fritz** creates a case from the template, optionally with
+  new CAD files (they replace the front wing, undertray, … by their names; see
+  `starccm/README.md`).
 
 ## Also in this folder
 

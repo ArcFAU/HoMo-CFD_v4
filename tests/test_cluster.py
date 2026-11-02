@@ -6,6 +6,7 @@
 import os
 import re
 import shutil
+import subprocess
 import sys
 import tempfile
 import threading
@@ -265,6 +266,21 @@ class StatusTests(unittest.TestCase):
         self.assertEqual((by_name["caseD"]["state"], by_name["caseD"]["stale"]), ("solving", False))
         self.assertEqual((by_name["caseE"]["state"], by_name["caseE"]["stale"]), ("post", True))
 
+    def test_solver_log_under_both_job_names(self):
+        # The solver job is UPSIRANS since 2026-11-01 (resTAURANtS before); SLURM names its log after the job.
+        bash = shutil.which("bash")
+        if not bash:
+            self.skipTest("no bash to run the status command")
+        root = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, root)
+        for name, logs in {"new": ("mesh.o1", "UPSIRANS.o2"), "old": ("mesh.o1", "resTAURANtS.o2"), "mesh": ("mesh.o1",)}.items():
+            os.makedirs(os.path.join(root, name))
+            for log in ("STARTED",) + logs:
+                open(os.path.join(root, name, log), "w").close()
+        result = subprocess.run([bash, "-c", cluster.case_status_command()], cwd=root, capture_output=True, text=True, timeout=60)
+        states = {case["name"]: case["state"] for case in cluster.parse_cases(result.stdout, now=time.time())}
+        self.assertEqual(states, {"new": "solving", "old": "solving", "mesh": "meshing"}, result.stderr)
+
     def test_status_script_is_read_only(self):
         lines = cluster.status_script("Fritz", "/home/vault/g/u")
         command = lines[-2]
@@ -363,6 +379,27 @@ class NewCaseTests(unittest.TestCase):
         self.assertEqual(lines[6], 'mkdir "new1"', "mkdir (fails if new1 exists) comes before any upload")
         self.assertEqual(lines[8:11], ['put -filemask="|Settings" "C:\\t\\tpl\\*" "new1/"',
                                        'put "C:\\t\\s" "new1/Settings"', 'put "D:\\base.sim" "new1/"'])
+
+    def test_create_uploads_cad_files_after_the_sim(self):
+        lines = cluster.new_case_script("Fritz", "/home/vault/g/u", "SCRIPT_FABSI", "new1", "C:\\t\\tpl", "C:\\t\\s", "D:\\base.sim",
+                                        ["D:\\cad\\frontwing_v3.stl", "D:\\cad\\RW V4.step"])
+        self.assertEqual(lines[10:14], ['put "D:\\base.sim" "new1/"', 'put "D:\\cad\\frontwing_v3.stl" "new1/"',
+                                        'put "D:\\cad\\RW V4.step" "new1/"', f"echo {cluster.CASE_UPLOADED}"],
+                         "in the same login, after mkdir, before the upload is marked complete")
+
+    def test_cad_files_checked(self):
+        folder = Path(tempfile.mkdtemp(prefix="homo-cfd-cad-test-"))
+        self.addCleanup(shutil.rmtree, folder, True)
+        for name in ("FW_v1.stp", "ut.STL", "notes.txt", "base.sim"):
+            (folder / name).write_bytes(b"x")
+        self.assertEqual(cluster.check_cad_files(None, "base.sim"), [])
+        self.assertEqual([path.name for path in cluster.check_cad_files([str(folder / "FW_v1.stp"), f'"{folder / "ut.STL"}"'], "base.sim")],
+                         ["FW_v1.stp", "ut.STL"], "quotes from a pasted path are dropped; the suffix's case does not matter")
+        for bad in ("text", [str(folder / "notes.txt")], [str(folder / "missing.stl")], ["relative.stl"],
+                    [str(folder / "FW_v1.stp"), str(folder / "FW_v1.stp")], [str(folder / 'a"b.stl')], [1],
+                    [str(folder / "FW_v1.stp")] * (cluster.MAX_CAD_FILES + 1)):
+            with self.subTest(paths=bad), self.assertRaises(ValueError):
+                cluster.check_cad_files(bad, "base.sim")
 
     def run_new_case(self, fake, name, template="SCRIPT_FABSI"):
         handle, temp_name = tempfile.mkstemp(prefix="homo-cfd-settings-test-")

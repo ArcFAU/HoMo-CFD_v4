@@ -197,7 +197,7 @@ async function buildFolderNode(handle, path = "", isSection = false, sceneImageC
   }
   if (isSection) return node;
   node.isEnsightFolder = /^3d-data$/i.test(handle.name) && entries.some((child) => child.kind === "file" && /\.case$/i.test(child.name));
-  // SLURM job logs (mesh.o123, resTAURANtS.o124, ...): the solver's holds the residuals.
+  // SLURM job logs (mesh.o123, UPSIRANS.o124 or resTAURANtS.o124 before 2026-11-01, ...): the solver's holds the residuals.
   node.hasJobLogs = entries.some((child) => child.kind === "file" && /\.o\d+$/.test(child.name));
   for (const child of entries) {
     // Skip hidden folders such as .git or .vscode; they never hold results.
@@ -2546,7 +2546,8 @@ function newCaseSection({ getCases, templateFolder, onCreated }) {
   const intro = document.createElement("p");
   intro.className = "hint";
   intro.textContent = `Creates a new folder on Fritz as a copy of the template folder (${templateFolder}: job scripts and macros), ` +
-    "with the Settings below and your base .sim. It never changes an existing folder. Start it afterwards from the list above. " +
+    "with the Settings below, your base .sim and any CAD files (the template's mesh.java swaps them in before meshing). " +
+    "It never changes an existing folder. Start it afterwards from the list above. " +
     "Nodes and run times come from the template's job scripts; the Run Settings values here do not change them.";
 
   const field = (labelText, control) => {
@@ -2568,13 +2569,24 @@ function newCaseSection({ getCases, templateFolder, onCreated }) {
   const browse = Object.assign(document.createElement("button"), { type: "button", className: "small-control", textContent: "Browse…" });
   const simRow = field("Base .sim", sim);
   simRow.appendChild(browse);
+  // Optional CAD files, uploaded into the new folder; starccm/mesh.java swaps each into its part group before meshing.
+  const cadFiles = []; // [{ path, size }]
+  const cadPath = Object.assign(document.createElement("input"), { type: "text", id: "new-case-cad", className: "working-dir-input",
+    placeholder: "Optional: CAD file on this computer (.stp, .step, .igs, .iges, .stl)" });
+  const cadAdd = Object.assign(document.createElement("button"), { type: "button", className: "small-control", id: "new-case-cad-add", textContent: "Add" });
+  const cadBrowse = Object.assign(document.createElement("button"), { type: "button", className: "small-control", textContent: "Browse…" });
+  const cadRow = field("CAD files", cadPath);
+  cadRow.append(cadAdd, cadBrowse);
+  const cadList = Object.assign(document.createElement("ul"), { className: "cad-file-list", id: "new-case-cad-list" });
+  const cadNote = Object.assign(document.createElement("p"), { className: "hint", id: "new-case-cad-note", hidden: true,
+    textContent: "STEP and IGES need the CAD Exchange licence on Fritz, which is not always free; STL (in mm) needs none." });
   const editor = document.createElement("div");
   editor.className = "settings-editor";
   editor.id = "new-case-settings";
   const create = Object.assign(document.createElement("button"), { type: "button", className: "primary", id: "new-case-create",
     textContent: "Create on Fritz", disabled: true });
   const status = Object.assign(document.createElement("p"), { className: "cluster-status", hidden: true });
-  section.append(summary, intro, field("Name", name), sourceRow, editor, simRow, create, status);
+  section.append(summary, intro, field("Name", name), sourceRow, editor, simRow, cadRow, cadList, cadNote, create, status);
 
   const showStatus = (text, kind) => {
     status.textContent = text;
@@ -2648,6 +2660,50 @@ function newCaseSection({ getCases, templateFolder, onCreated }) {
     }
   });
 
+  const fileName = (path) => path.split(/[\\/]/).pop();
+  const renderCadFiles = () => {
+    cadList.replaceChildren(...cadFiles.map((file, index) => {
+      const item = document.createElement("li");
+      const name = fileName(file.path);
+      const group = cadPartGroup(name);
+      const action = group === "z_000_remaining-parts" && !/replace/i.test(name) ? `added to ${group}` : `replaces ${group}`;
+      item.append(cell("strong", name), ` → ${action}`);
+      if (file.size) item.append(cell("span", ` · ${(file.size / 1e6).toFixed(1)} MB`));
+      item.title = file.path;
+      const remove = Object.assign(document.createElement("button"), { type: "button", textContent: "×" });
+      remove.setAttribute("aria-label", `Remove ${name}`);
+      remove.addEventListener("click", () => { cadFiles.splice(index, 1); renderCadFiles(); });
+      item.appendChild(remove);
+      return item;
+    }));
+    cadNote.hidden = !cadFiles.some((file) => /\.(stp|step|igs|iges)$/i.test(file.path));
+  };
+  const addCadFile = (path, size = null) => {
+    const name = fileName(path);
+    if (!/\.(stp|step|igs|iges|stl)$/i.test(name)) return showStatus(`${name} is not a CAD file (.stp, .step, .igs, .iges, .stl).`, "error");
+    if (cadFiles.some((file) => fileName(file.path).toLowerCase() === name.toLowerCase())) return showStatus(`${name} is already in the list.`, "error");
+    cadFiles.push({ path, size });
+    renderCadFiles();
+    showStatus("", "hint");
+  };
+  cadAdd.addEventListener("click", () => {
+    const path = cadPath.value.trim().replace(/^"|"$/g, "");
+    if (!path) return;
+    addCadFile(path);
+    if (cadFiles.some((file) => file.path === path)) cadPath.value = "";
+  });
+  cadBrowse.addEventListener("click", async () => {
+    cadBrowse.disabled = true;
+    try {
+      const result = await postServerJson("cluster/browse-cad", { initial: "" });
+      (result.files ?? []).forEach((file) => addCadFile(file.path, file.size));
+    } catch (err) {
+      showStatus(err?.message || "Could not open the file dialog.", "error");
+    } finally {
+      cadBrowse.disabled = false;
+    }
+  });
+
   const pollTask = async (caseName) => {
     try {
       const tasks = await (await fetch("/api/cluster/new-case")).json();
@@ -2669,11 +2725,12 @@ function newCaseSection({ getCases, templateFolder, onCreated }) {
     const settings = [...editor.querySelectorAll("input[data-key]")].map((input) => [input.dataset.key, input.value]);
     const caseName = name.value.trim();
     const changed = editor.querySelectorAll("input.changed").length;
+    const cad = cadFiles.length ? ` and ${cadFiles.length} CAD file${cadFiles.length === 1 ? "" : "s"}` : "";
     if (!window.confirm(`Create ${caseName || "(no name)"} on Fritz from ${loaded} (${changed} changed setting${changed === 1 ? "" : "s"}) ` +
-      "and upload the .sim? Nothing is started yet.")) return;
+      `and upload the .sim${cad}? Nothing is started yet.`)) return;
     create.disabled = true;
     try {
-      await postServerJson("cluster/new-case", { name: caseName, settings, simPath: sim.value });
+      await postServerJson("cluster/new-case", { name: caseName, settings, simPath: sim.value, cadPaths: cadFiles.map((file) => file.path) });
       pollTask(caseName);
     } catch (err) {
       showStatus(err?.message || "Could not create the simulation.", "error");
@@ -2681,6 +2738,18 @@ function newCaseSection({ getCases, templateFolder, onCreated }) {
     }
   });
   return section;
+}
+
+// The part group starccm/mesh.java swaps a CAD file into, from its name (as mesh.java's groupName(), same order).
+function cadPartGroup(fileName) {
+  const name = fileName.toLowerCase().replace(/(.)\.[^.]*$/, "$1");
+  const words = name.split(/[^a-z0-9]+/);
+  if (name.includes("frontwing") || name.includes("front_wing") || words.includes("fw")) return "C_FRONTWING";
+  if (name.includes("deflector")) return "C_UNDERTRAY_DEFLECTORS";
+  if (name.includes("undertray") || words.includes("ut")) return "C_UNDERTRAY";
+  if (name.includes("mono")) return "C_MONOCOQUE";
+  if (name.includes("rearwing") || name.includes("rear_wing") || words.includes("rw")) return "C_REARWING";
+  return "z_000_remaining-parts";
 }
 
 function jobDescription(item) {

@@ -3,6 +3,16 @@
 User-visible changes, newest first. Detailed reasoning lives in
 `CHAT_HISTORY.md`; decisions in `DECISIONS.md`.
 
+## 2026-11-02
+
+### Added
+- **CAD files with a new simulation:** **New simulation on Fritz** has a **CAD files** row (Browse… for several at once, or paste a path and Add). They upload into the new folder with the .sim, in the same WinSCP login, so WinSCP itself is no longer needed for this. The list shows which part group the template's `mesh.java` will swap each file into (same name rules), and a note when a STEP/IGES file needs the CAD Exchange licence.
+
+## 2026-11-01
+
+### Changed
+- **Solver job renamed UPSIRANS** (was `resTAURANtS`), so its log is now `UPSIRANS.o…`. **Simulations on Fritz** and `fritz/homo-table.py` recognise a solving case by either log name, so old and new simulations both show the right state. Residuals already read any job log.
+
 ## 2026-10-27
 
 ### Added

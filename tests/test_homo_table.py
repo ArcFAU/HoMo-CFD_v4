@@ -61,12 +61,14 @@ class HomoTableTests(unittest.TestCase):
         make_case(self.root, "prep", files=())
         make_case(self.root, "meshing", files=("STARTED", "mesh.o1"))
         make_case(self.root, "solving", files=("STARTED", "mesh.o1", "resTAURANtS.o2"))
+        make_case(self.root, "solving-new-name", files=("STARTED", "mesh.o1", "UPSIRANS.o3"))
         make_case(self.root, "waiting", files=("STARTED", "plots/DONE"))
         make_case(self.root, "post", cza=-3.0, files=("plots/DONE",), post_log="running\n")
         make_case(self.root, "done", cza=-3.0, files=("plots/DONE",), post_log="...\nJob finished at Fri Oct  9\n")
         make_case(self.root, "failed", cza=-3.0, post_log="java.lang.RuntimeException: Settings\nJob finished at Fri\n")
         states = {row["name"]: row["state"] for row in homo_table.cases(self.root)}
-        self.assertEqual(states, {"prep": "prepared", "meshing": "meshing", "solving": "solving", "waiting": "waiting-post",
+        self.assertEqual(states, {"prep": "prepared", "meshing": "meshing", "solving": "solving",
+                                  "solving-new-name": "solving", "waiting": "waiting-post",
                                   "post": "post", "done": "ready", "failed": "post-failed"})
 
     def test_forces_at_each_cases_own_speed(self):

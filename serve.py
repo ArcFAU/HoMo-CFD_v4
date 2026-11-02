@@ -237,6 +237,14 @@ $dialog.Filter = 'STAR-CCM+ simulation (*.sim)|*.sim|All files (*.*)|*.*'
 if ($start -and (Test-Path -LiteralPath $start -PathType Container)) { $dialog.InitialDirectory = $start }
 if ($dialog.ShowDialog($owner) -eq [System.Windows.Forms.DialogResult]::OK) { [Console]::Out.Write($dialog.FileName) }
 """
+CAD_DIALOG = DIALOG_SETUP + """
+$dialog = New-Object System.Windows.Forms.OpenFileDialog
+$dialog.Title = $env:HOMO_DIALOG_TITLE
+$dialog.Multiselect = $true
+$dialog.Filter = 'CAD files (*.stp;*.step;*.igs;*.iges;*.stl)|*.stp;*.step;*.igs;*.iges;*.stl|All files (*.*)|*.*'
+if ($start -and (Test-Path -LiteralPath $start -PathType Container)) { $dialog.InitialDirectory = $start }
+if ($dialog.ShowDialog($owner) -eq [System.Windows.Forms.DialogResult]::OK) { [Console]::Out.Write($dialog.FileNames -join "`n") }
+"""
 
 
 def powershell_dialog(script, title, start):
@@ -294,6 +302,29 @@ def browse_for_sim(initial):
     finally:
         root.destroy()
     return chosen or None
+
+
+def browse_for_cad(initial):
+    """Native dialog for CAD files (several at once); returns the chosen paths (empty when cancelled)."""
+    if not tkinter_available():
+        chosen = powershell_dialog(CAD_DIALOG, "Choose CAD files for the new simulation", initial)
+        return chosen.splitlines() if chosen else []
+    import tkinter
+    from tkinter import filedialog
+
+    root = tkinter.Tk()
+    root.withdraw()
+    root.attributes("-topmost", True)
+    try:
+        chosen = filedialog.askopenfilenames(
+            parent=root,
+            title="Choose CAD files for the new simulation",
+            initialdir=initial or str(Path.home()),
+            filetypes=[("CAD files", " ".join(f"*{suffix}" for suffix in cluster.CAD_SUFFIXES)), ("All files", "*.*")],
+        )
+    finally:
+        root.destroy()
+    return list(chosen or [])
 
 
 def visible(entry):
@@ -493,6 +524,7 @@ class Handler(SimpleHTTPRequestHandler):
             "/api/cluster/download/cancel": self.api_cluster_cancel,
             "/api/cluster/settings-file": self.api_settings_file,
             "/api/cluster/browse-sim": self.api_browse_sim,
+            "/api/cluster/browse-cad": self.api_browse_cad,
             "/api/cluster/new-case": self.api_new_case,
             "/api/cluster/submit": self.api_submit,
             "/api/quit": self.api_quit,
@@ -771,6 +803,21 @@ class Handler(SimpleHTTPRequestHandler):
         path = Path(chosen)
         self.send_json({"path": str(path), "size": path.stat().st_size if path.is_file() else None})
 
+    def api_browse_cad(self, body):
+        """Native dialog for the CAD files of a new simulation (several at once)."""
+        if not dialogs_available():
+            return self.send_json({"error": "File dialog unavailable; paste the path instead."}, HTTPStatus.NOT_IMPLEMENTED)
+        if not self.browse_lock.acquire(blocking=False):
+            return self.send_json({"error": "A file dialog is already open."}, HTTPStatus.CONFLICT)
+        try:
+            chosen = browse_for_cad(body.get("initial") if isinstance(body.get("initial"), str) else None)
+        except (OSError, RuntimeError):
+            return self.send_json({"error": "The file dialog could not open; paste the path instead."}, HTTPStatus.NOT_IMPLEMENTED)
+        finally:
+            self.browse_lock.release()
+        files = [Path(path) for path in chosen]
+        self.send_json({"files": [{"path": str(path), "size": path.stat().st_size if path.is_file() else None} for path in files]})
+
     def api_new_case_tasks(self, _path):
         self.send_json({case: task.describe() for case, task in self.creating.items()})
 
@@ -785,6 +832,10 @@ class Handler(SimpleHTTPRequestHandler):
         sim = Path(body["simPath"].strip().strip('"')) if isinstance(body.get("simPath"), str) and body["simPath"].strip() else None
         if sim is None or not sim.is_absolute() or not sim.is_file() or sim.suffix.lower() != ".sim" or cluster.UNSAFE.search(str(sim)):
             return self.send_json({"error": "Choose the base .sim file on this computer."}, HTTPStatus.BAD_REQUEST)
+        try:
+            cad_files = cluster.check_cad_files(body.get("cadPaths"), sim.name)
+        except ValueError as err:
+            return self.send_json({"error": str(err)}, HTTPStatus.BAD_REQUEST)
         if not saved["session"] or not saved["remoteFolder"]:
             return self.send_json({"error": "Save your WinSCP session and remote folder first."}, HTTPStatus.BAD_REQUEST)
         if case in Handler.remote_cases or case == saved["templateFolder"]:
@@ -793,13 +844,14 @@ class Handler(SimpleHTTPRequestHandler):
             if any(task.state == "running" for task in self.creating.values()):
                 return self.send_json({"error": "Another new simulation is being created; wait for it."}, HTTPStatus.CONFLICT)
             task = cluster.Download(case)
-            task.bytes_total = sim.stat().st_size
+            task.bytes_total = sim.stat().st_size + sum(path.stat().st_size for path in cad_files)
             self.creating[case] = task
         handle, settings_file = tempfile.mkstemp(prefix="homo-cfd-settings-")
         with os.fdopen(handle, "w", encoding="utf-8", newline="\n") as file:
             file.write(cluster.format_settings(pairs))
         threading.Thread(target=cluster.run_new_case, daemon=True, args=(
-            self.winscp, task, saved["session"], saved["remoteFolder"], saved["templateFolder"], case, settings_file, str(sim))).start()
+            self.winscp, task, saved["session"], saved["remoteFolder"], saved["templateFolder"], case, settings_file, str(sim),
+            [str(path) for path in cad_files])).start()
         self.send_json(task.describe())
 
     def api_submit(self, body):

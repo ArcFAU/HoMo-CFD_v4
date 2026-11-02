@@ -1935,6 +1935,47 @@ select {
   font-weight: 650;
 }
 
+/* CAD files for a new simulation: name → the part group mesh.java swaps it into, size, remove. */
+.cad-file-list {
+  display: grid;
+  gap: 4px;
+  margin: 4px 0 8px;
+  padding: 0;
+  list-style: none;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.cad-file-list:empty {
+  display: none;
+}
+
+.cad-file-list li {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.cad-file-list strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.cad-file-list button {
+  margin-left: 6px;
+  padding: 0 5px;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.cad-file-list button:hover,
+.cad-file-list button:focus-visible {
+  color: var(--text);
+}
+
 .settings-editor {
   margin: 10px 0;
 }

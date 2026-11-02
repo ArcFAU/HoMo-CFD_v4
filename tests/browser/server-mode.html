@@ -377,8 +377,21 @@ runTests(async () => {
   velocity.dispatchEvent(new app.contentWindow.Event("input"));
   check("changed setting is highlighted", velocity.classList.contains("changed"));
   doc.getElementById("new-case-sim").value = new URLSearchParams(location.search).get("sim");
+  // CAD files: pasted paths are added to a list that shows the part group mesh.java swaps each into.
+  const cadInput = doc.getElementById("new-case-cad"), cadAdd = doc.getElementById("new-case-cad-add");
+  cadInput.value = "D:\\cad\\notes.txt"; cadAdd.click();
+  check("a file that is no CAD file is refused", /not a CAD file/.test(doc.querySelector(".cluster-new-case .cluster-status")?.textContent ?? "") &&
+    !doc.querySelector("#new-case-cad-list li"), doc.querySelector(".cluster-new-case .cluster-status")?.textContent);
+  cadInput.value = `"${new URLSearchParams(location.search).get("cad")}"`; cadAdd.click();
+  cadInput.value = "D:\\cad\\remaining_replace_v2.stp"; cadAdd.click();
+  const cadItems = [...doc.querySelectorAll("#new-case-cad-list li")].map((item) => item.textContent.replace(/×$/, ""));
+  check("CAD files listed with the part group they replace", cadItems.join("|") === "frontwing_v3.stl → replaces C_FRONTWING|remaining_replace_v2.stp → replaces z_000_remaining-parts" &&
+    !doc.getElementById("new-case-cad-note").hidden && cadInput.value === "", cadItems.join("|"));
+  doc.querySelectorAll("#new-case-cad-list li button")[1].click();
+  check("× removes a CAD file; the STEP note goes with it", doc.querySelectorAll("#new-case-cad-list li").length === 1 && doc.getElementById("new-case-cad-note").hidden);
   doc.getElementById("new-case-create").click();
   await waitFor(() => /new1: Created on Fritz/.test(doc.querySelector(".cluster-new-case .cluster-status")?.textContent ?? ""), 15000);
+  check("the confirmation names the CAD files", /and upload the \.sim and 1 CAD file\?/.test(confirmed[1] ?? ""), confirmed[1]);
   check("new simulation is created after confirming", /1 changed setting/.test(confirmed[1] ?? "") &&
     /Created on Fritz/.test(doc.querySelector(".cluster-new-case .cluster-status")?.textContent ?? ""),
     `${confirmed[1]} | ${doc.querySelector(".cluster-new-case .cluster-status")?.textContent}`);

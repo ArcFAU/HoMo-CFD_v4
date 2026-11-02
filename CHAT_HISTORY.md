@@ -5752,3 +5752,91 @@ Final response (verbatim):
 - Docs: `CHANGELOG.md`, `STATUS.md`, `tests/README.md`, `docs/APP_README.md`.
 - Checks: `py -m unittest discover -s tests -v`: 108 tests OK. `py tests/run_browser_tests.py`: 204/204 checks passed. Real results: 28 simulations listed; screenshots of the empty viewer checked.
 - `git commit` 10b8953, pushed to `origin/night-2026-10-02` and `origin/master`. `py tools/make_portable.py --into "D:\SVN\2027\2_Composites\1_Aero\HOMO-CFD"`: 0 new, 6 changed (README.md, web/3d-viewer.css, web/3d-viewer.html, web/3d-viewer.js, web/index.html, web/styles.css); compared byte for byte; no `__pycache__`. SVN commit left to the user. This entry committed and pushed separately.
+
+## 2026-11-01 — Solver job renamed UPSIRANS (resTAURANtS before)
+
+### User request (verbatim)
+
+> can you make a change that the name becames from restaurants to "UPSIRANS". change it everywhere but for SCRIPT_RANS tell me what to do.
+
+### Contributor responses
+
+The contributor's short progress notes between steps are in the Claude Code session transcript and are not repeated here.
+
+Final response (verbatim):
+
+> Done. The solver job is now called **UPSIRANS** everywhere I'm allowed to touch. One side effect: its log is now named `UPSIRANS.o<jobid>` instead of `resTAURANtS.o<jobid>`, so I also updated everything that recognised a solving case by that name.
+>
+> **On Fritz** (one login, checksums verified):
+> - `RANS_2/rans.sh`, `RANS_2_2606/rans.sh` and the project's own job script: `#SBATCH --job-name=UPSIRANS`.
+> - The two test cases (their solver hadn't started yet). `1101_CF_roll1m` was already solving under the old name, so I left it.
+> - The project's helper scripts (`new_adjoint.sh`, `post3d_for.sh`) and your `homo-table.py` on Fritz now accept both names. Each was replaced only after its checksum matched the known original.
+>
+> **HoMo CFD** (local, not committed): **Simulations on Fritz** (`cluster.py`) and `fritz/homo-table.py` recognise either log name, so old and new runs both show the right state; Residuals already read any job log. New tests cover both names, including one that runs the real status command in bash. Tests: 109 unit tests OK, 204/204 browser checks. The changelog is updated.
+>
+> **CFD_TOPO:** the results checker and both helper scripts accept both names, with one new test; 71 tests OK.
+>
+> **What you do in SCRIPT_RANS** (I didn't touch it): in `SCRIPT_RANS/rans.sh`, change line 3
+> ```
+> #SBATCH --job-name=resTAURANtS
+> ```
+> to
+> ```
+> #SBATCH --job-name=UPSIRANS
+> ```
+> In WinSCP, open the file, edit, save. Or in a Fritz terminal:
+> ```
+> sed -i 's/^#SBATCH --job-name=resTAURANtS$/#SBATCH --job-name=UPSIRANS/' /home/vault/v152dc/v152dc11/SCRIPT_RANS/rans.sh
+> grep job-name /home/vault/v152dc/v152dc11/SCRIPT_RANS/rans.sh
+> ```
+> Nothing else in that folder needs to change for the rename.
+>
+> **Before teammates' runs use the new name:** their HoMo CFD needs this update. An older HoMo would show a UPSIRANS run as "meshing" while it's solving. Tell me if I should commit, push and update the SVN folder. If the team's CFD-Tool watches job names, it would need the same change. I can't see its code from here.
+
+### Work record
+
+- The name is the SLURM job name in `rans.sh` (`#SBATCH --job-name=resTAURANtS`); SLURM names the solver log after it, so code that detects a solving case by `resTAURANtS.o*` now also accepts `UPSIRANS.o*`.
+- `cluster.py` (status command flag T), `fritz/homo-table.py` (state "solving"); `web/app.js` comment, `docs/STAGE7_FRITZ.md`, `CHANGELOG.md`.
+- Tests: `tests/test_cluster.py` new `test_solver_log_under_both_job_names` (runs the status command in bash on sample folders), `tests/test_homo_table.py` new UPSIRANS case. `py -m unittest discover -s tests -v`: 109 tests OK. `py tests/run_browser_tests.py`: 204/204 checks passed.
+- On Fritz (work for the CFD_TOPO project, recorded there): job name changed in `RANS_2/rans.sh`, `RANS_2_2606/rans.sh`, `_CFD_TOPO_files/job_scripts/rans.sh` and two not-yet-solving test cases; `homo-table.py` in the case folder replaced by the new version after its checksum matched the committed one. SCRIPT_RANS not accessed.
+- Not committed or pushed; SVN folder not updated (not asked).
+
+## 2026-11-02 — "check": CFD_TOPO macro tests and roll run (no HoMo change)
+
+### Request (verbatim)
+
+> check
+
+### Response (verbatim)
+
+> All three runs have meshed and solved. Post-processing is finished for the 2606 test; the 2506 test and roll1m are still post-processing.
+>
+> **Macro test** (V4_K, standard mesh, half car; mean of the last 200 of 1000 iterations):
+>
+> | | 2506 (`RANS_2`) | 2606 (`RANS_2_2606`) |
+> |---|---|---|
+> | CzA | **−6.935** | **−6.786** |
+> | CxA | −1.960 | −1.947 |
+> | CzA front wing / undertray / rear wing | −2.252 / −2.362 / −2.065 | −2.249 / −2.254 / −2.025 |
+> | Cells | 27.85 M | 27.98 M |
+> | Solver time | 24 min | 24 min |
+> | Post time | still running at 53 min | 47 min |
+>
+> - **2506 with the optimised macros gives −6.935, exactly the V4_K standard reference.** The macro changes don't change the result.
+> - **All macros work on 2606:** mesh, solver and post (including the 3D export) ran without errors.
+> - **2606 gives 2.1 % less downforce**, almost all of it from the undertray (−0.11) and the rear wing (−0.04). Iteration-to-iteration swing is about 0.01, so this is a real difference, not noise. I can't tell yet whether it comes from the slightly different mesh or from 2606's changed solver defaults. Either way, **2606 results can't be compared with the 2506 results so far.** My recommendation: stay on 2506 for the optimisation. Switch only together with a new 2606 baseline and the comparison cases rerun.
+> - **Speed:** the solver is the same speed on both. 2606 post was faster (2506 is still running). Meshing looked a few minutes faster on 2606 (23 vs 28 min), but those times come from file timestamps that include queue wait, so they're not reliable. The 2606 mesh log shows about half the memory per process (9 vs 17 GB).
+> - **Parallel Surface Remesher:** 2606 did run it in parallel (log: "number of processors used for Parallel Remesher is capped to 16"). But my macro's own log line ("run in serial … -> false") is missing. So parallel is probably 2606's default, and my switch found nothing to switch. I haven't worked out why yet.
+>
+> **Roll −1° only** (`1101_CF_roll1m`, full car, fine mesh): CzA **−6.142**, CxA −1.868; front wing −2.146, undertray −1.849, rear wing −1.947.
+> - Treat these as rough. CzA was still drifting over the last 200 iterations (−0.07; the project limit is 0.03), and the solver log reports 25 cells with negative volume.
+> - Without ref0, which failed meshing, I can't isolate the roll effect. The undertray loses at least as much here as in y3s10r1_m (−1.925). That fits "the loss follows the floor's lowest edge, not steer", but it isn't proof.
+>
+> I logged in twice, read only (the first coefficient download went to the wrong local folder). sacct was refused again. Results are saved in `STATUS.md`, `runs\N4a_ref_roll\RUN.md` and the macro README, with the coefficient files next to them.
+>
+> Next useful step: fix the front wing so ref0 meshes. Without it, none of the off-axis numbers can be isolated.
+
+### Work record
+
+- CFD_TOPO work only (recorded in `D:\CFD_TOPO\CHAT_HISTORY.md` and `STATUS.md`); two read-only Fritz logins.
+- No HoMo CFD files changed besides this log, so no tests run. The UPSIRANS rename from 2026-11-01 is still uncommitted.
