@@ -5840,3 +5840,42 @@ Final response (verbatim):
 
 - CFD_TOPO work only (recorded in `D:\CFD_TOPO\CHAT_HISTORY.md` and `STATUS.md`); two read-only Fritz logins.
 - No HoMo CFD files changed besides this log, so no tests run. The UPSIRANS rename from 2026-11-01 is still uncommitted.
+
+## 2026-11-02 — CAD files with a new simulation (no WinSCP needed); push and SVN update
+
+### User messages (verbatim)
+
+> i was thinking if i use homo-cfd and wan to upload the step file i still need to open winSCP.
+
+(sent while the work was running:)
+
+> update SVN aswell and push.
+
+### Contributor responses
+
+The contributor's short progress notes between steps are in the Claude Code session transcript and are not repeated here.
+
+Final response (verbatim):
+
+> Done: you can now upload CAD files from HoMo CFD, and Git and SVN are both updated.
+>
+> **New simulation on Fritz** has a new **CAD files** row:
+> - **Browse…** picks several files at once (.stp, .step, .igs, .iges, .stl), or paste a path and press **Add**.
+> - Each file is listed with what `mesh.java` will do with it, e.g. `frontwing_v3.stl → replaces C_FRONTWING`, using the same name rules as the macro. × removes a file.
+> - If a STEP or IGES file is in the list, a one-line note reminds you that it needs the CAD Exchange licence on Fritz; STL (in mm) doesn't.
+> - **Create on Fritz** uploads them into the new folder together with the .sim, in the same single WinSCP login (no extra login). Files that don't exist or aren't CAD files are refused before anything runs on Fritz.
+>
+> One thing I couldn't check from here [U]: this only works if your template's `mesh.java` (RANS_2 or RANS_2_2606) is the HoMo version with the CAD import. If you're not sure, I can compare it with `starccm/mesh.java` in one read-only login. I won't touch SCRIPT_RANS.
+>
+> **Git:** commit `a9d3006` pushed to `night-2026-10-02` and `master`. It also carries the UPSIRANS job rename from your other session (1 November), which was finished but not yet committed. This log entry follows as a small second commit.
+> **SVN folder:** 6 changed files (cluster.py, serve.py, web\app.js, web\styles.css, fritz\homo-table.py, README.md), all identical to the project. **Your step:** **SVN Commit…** in TortoiseSVN. The `homo-table.py` copy on Fritz was already updated by that session.
+>
+> Tests: 111 unit tests and 208 browser checks pass. **Restart HoMo CFD** (⏻, then start it) so the server part is active.
+
+### Work record
+
+- `cluster.py`: `CAD_SUFFIXES`, `MAX_CAD_FILES`, `check_cad_files()`; `new_case_script(..., cad_files)` adds one `put` per file after the .sim; `run_new_case(..., cad_files)` (progress text counts them). `serve.py`: `api_new_case` takes `cadPaths` (checked before any WinSCP run; sizes in the progress total), `/api/cluster/browse-cad`, `browse_for_cad()` (tkinter `askopenfilenames` or PowerShell `CAD_DIALOG`, multi-select; run with the dialog stubbed: returns the path, spaces kept). `web/app.js`: CAD files row, list with `cadPartGroup()` (mesh.java `groupName()` order), STEP/IGES note, confirmation, `cadPaths` sent. `web/styles.css`: `.cad-file-list`.
+- Tests: `test_cluster.py` (script order; file checks), `test_serve.py` (refused paths run nothing; uploads after the .sim), `server-mode.html` (4 checks), `run_browser_tests.py` gives the page a stand-in STL.
+- Docs: `CHANGELOG.md`, `STATUS.md`, `tests/README.md`, `docs/APP_README.md`.
+- Checks: `py -m unittest discover -s tests -v`: 111 tests OK. `py tests/run_browser_tests.py`: 208/208 checks passed.
+- `git commit` a9d3006 (with the 2026-11-01 UPSIRANS rename), pushed to `origin/night-2026-10-02` and `origin/master`. `py tools/make_portable.py --into "D:\SVN\2027\2_Composites\1_Aero\HOMO-CFD"`: 0 new, 6 changed; compared byte for byte; no `__pycache__`. SVN commit left to the user. No Fritz login in this task. This entry committed and pushed separately.
