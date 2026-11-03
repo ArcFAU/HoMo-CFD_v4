@@ -6696,3 +6696,27 @@ Final response (verbatim):
 - Tests: `OpenAppTests` (2) in `test_serve.py`; `test_portable.py` expects `--app`.
 - Docs: `CHANGELOG.md`, `STATUS.md`, `tests/README.md`, `docs/APP_README.md`.
 - Checks: `py -m unittest discover -s tests -v`: 113 tests OK. `py tests/run_browser_tests.py`: 213/213 checks passed. The app window itself was not opened here (headless only).
+
+## 2026-11-03 — Push and SVN update (Downforce vs drag, own window)
+
+### User messages (verbatim)
+
+> update svn and git.
+
+### Contributor responses
+
+The contributor's short progress notes between steps are in the Claude Code session transcript and are not repeated here.
+
+Final response (verbatim):
+
+> Both updated.
+>
+> - **Git:** commit `52e8850` ("Downforce vs drag chart; HoMo CFD opens in its own window") pushed to `night-2026-10-02` and `master`. This log entry follows as a small second commit.
+> - **SVN folder:** 6 changed files (serve.py, web\app.js, web\styles.css, README.md and both .bat files), all checked identical to the project. **Your step:** **SVN Commit…** in TortoiseSVN.
+>
+> After their SVN Update, teammates get the Downforce vs drag chart right away. For the own window they run `Create desktop shortcut.bat` once; the README tells them.
+
+### Work record
+
+- Licence-key scan of the diff: only a log line that mentions masking (no key). `git commit` 52e8850, pushed to `origin/night-2026-10-02` and `origin/master`.
+- `py tools/make_portable.py --into "D:\SVN\2027\2_Composites\1_Aero\HOMO-CFD"`: 0 new, 6 changed (Create desktop shortcut.bat, README.md, serve.py, Start HoMo CFD.bat, web/app.js, web/styles.css); compared with the project; both scripts use `--app --background`; no `__pycache__`. SVN commit left to the user. This entry committed and pushed separately.
