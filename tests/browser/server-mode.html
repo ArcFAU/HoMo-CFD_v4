@@ -103,6 +103,27 @@ runTests(async () => {
   check("clicking the star again removes the highlight", !tableRow("caseB")?.classList.contains("highlighted-row") &&
     app.contentWindow.localStorage.getItem("homo-cfd-highlighted-simulations-v1") === "[]");
 
+  // Monitor comparison: Bars, or Downforce vs drag (a dot per simulation, constant-L/D lines); the star highlights a dot too.
+  const monitorCard = () => doc.querySelector(".monitor-chart-card");
+  monitorCard().open = true;
+  monitorCard().querySelector('[data-mode="tradeoff"]').click();
+  const tradeoffDots = () => [...doc.querySelectorAll(".tradeoff-dot")];
+  check("Downforce vs drag: a dot per simulation with constant-L/D lines; the chart stays open", tradeoffDots().length === 2 &&
+    doc.querySelectorAll(".tradeoff-ld-line").length > 0 && monitorCard().open && !monitorCard().querySelector(".monitor-chart-controls") &&
+    app.contentWindow.localStorage.getItem("homo-cfd-monitor-chart-mode-v1") === "tradeoff", `${tradeoffDots().length} dots`);
+  tableRow("caseB").querySelector(".row-highlight").click();
+  const caseBDot = tradeoffDots().find((dot) => dot.dataset.path.startsWith("caseB/"));
+  check("starring a row turns its dot gold and names it", caseBDot?.classList.contains("highlighted") && caseBDot.querySelector(".tradeoff-name")?.textContent === "caseB");
+  tableRow("caseB").querySelector(".row-highlight").click();
+  check("unstarring removes it again", !caseBDot.classList.contains("highlighted") && !caseBDot.querySelector(".tradeoff-name"));
+  const dotBox = caseBDot.querySelector("circle").getBoundingClientRect();
+  doc.querySelector(".tradeoff-chart").dispatchEvent(new PointerEvent("pointermove", { clientX: dotBox.left + dotBox.width / 2, clientY: dotBox.top + dotBox.height / 2, bubbles: true }));
+  const tradeoffTip = doc.querySelector(".tradeoff-plot .residual-tooltip");
+  check("hovering a dot shows its forces and L/D", !tradeoffTip.hidden && tradeoffTip.textContent ===
+    `caseBDownforce ${(3.5 * dynamicPressure(60)).toFixed(1)} N · Drag ${(1.4 * dynamicPressure(60)).toFixed(1)} NL/D 2.50 · CzA -3.500 · CxA -1.400`, tradeoffTip.textContent);
+  monitorCard().querySelector('[data-mode="bars"]').click();
+  check("back to Bars", !!monitorCard().querySelector(".monitor-chart-controls select") && !doc.querySelector(".tradeoff-dot"));
+
   // Customize columns: drag a row by its grip (or ↑/↓ on the grip) to reorder the columns.
   doc.querySelector(".customize-columns").click();
   const editorKeys = () => [...doc.querySelectorAll("#column-editor .column-config-row")].map((row) => row.querySelector("input[type=text]").value);

@@ -5879,3 +5879,820 @@ Final response (verbatim):
 - Docs: `CHANGELOG.md`, `STATUS.md`, `tests/README.md`, `docs/APP_README.md`.
 - Checks: `py -m unittest discover -s tests -v`: 111 tests OK. `py tests/run_browser_tests.py`: 208/208 checks passed.
 - `git commit` a9d3006 (with the 2026-11-01 UPSIRANS rename), pushed to `origin/night-2026-10-02` and `origin/master`. `py tools/make_portable.py --into "D:\SVN\2027\2_Composites\1_Aero\HOMO-CFD"`: 0 new, 6 changed; compared byte for byte; no `__pycache__`. SVN commit left to the user. No Fritz login in this task. This entry committed and pushed separately.
+
+## 2026-11-02 — owner: other project accounts can't be opened
+
+### Request (verbatim)
+
+> there are other accouns as well. i am the manager but i can not access them. /home/vault/v152dc
+
+### Response (verbatim)
+
+> You can't open them because of ordinary Linux file permissions. Being manager doesn't change that. I checked with one read-only login:
+>
+> - All five accounts (`v152dc10`, `11` = you, `13`, `14`, `15`) are in the same group `v152dc`.
+> - But every account folder in `/home/vault/v152dc` is `drwx------`: only its owner can open it, not the group and not you. That's the default for new accounts. Your own folder is the same, so they can't see yours either.
+> - The manager role in the NHR portal is for managing accounts (adding people, extending them). It doesn't give file access, and the admins won't open other users' folders for you.
+>
+> So each account owner has to share their folder with you once. They run this in their own Fritz terminal (read access for you only, including files they create later):
+> ```
+> setfacl -m u:v152dc11:x /home/vault/v152dc/$USER
+> setfacl -R -m u:v152dc11:rX,d:u:v152dc11:rX /home/vault/v152dc/$USER
+> getfacl /home/vault/v152dc/$USER
+> ```
+> - To share with the whole team instead of just you: `chmod -R g+rX /home/vault/v152dc/$USER`.
+> - If they keep cases elsewhere, e.g. `$WORK` (`/home/atuin/v152dc/$USER`) or `$HOME`, they run the same lines for that folder too.
+> - I haven't tested `setfacl` on vault; `getfacl` works there. If it's refused, the `chmod` line works.
+> - To take the access back later: `setfacl -R -x u:v152dc11,d:u:v152dc11 /home/vault/v152dc/$USER`.
+>
+> Once they've done it, I can read their cases like the `L_` folders: read and extract only, never change anything.
+>
+> One more thing: if one of these people has left, ask NHR support before their account expires. After expiry their data is deleted, and as manager you can't recover it.
+
+### Work record
+
+- One read-only Fritz login: `id`, `ls -la /home/vault/v152dc`, `getfacl` of the account folders, `ls -ld` of the
+  project areas. Result: group v152dc for all; every account folder mode 700 with no ACL; atuin/hpc project areas
+  exist. Nothing opened inside other accounts, nothing changed.
+- No code changed, so no tests run.
+
+## 2026-11-02 — owner: "nevermind then." (other accounts dropped)
+
+### Request (verbatim)
+
+> nevermind then.
+
+### Response (verbatim)
+
+> OK, I'm leaving the other accounts alone. When the post jobs for the 2506 test and roll1m finish, tell me and I'll collect them.
+
+### Work record
+
+- Nothing changed; no login.
+
+## 2026-11-02 ~16:05–16:30 — owner: "check" (collect the finished post)
+
+### Request (verbatim)
+
+> check
+
+### Response (verbatim)
+
+During the work (verbatim):
+
+> All three post jobs have finished. Their output isn't in `plots/`, so I'm checking how earlier collected results were laid out locally before fetching.
+>
+> There's 91 GB free on D:, so I'll fetch the post output in one login. I'm skipping the .sim files, STLs, job logs and scripts, which keeps the logs out of the project folder.
+>
+> The download is still running in the background after 10 minutes. I'll take one look at what's in the log so far.
+>
+> The three cases add up to about 15 GB without the .sim files: about 3.7 GB for each test and 7.7 GB for roll1m. The two tests are mostly done and roll1m has started, at about 12 MB/s, so it needs roughly another 10–15 minutes. I'll report when it's finished.
+>
+> The download finished without errors. But the local folders are about half the size `du` reported on Fritz, so I'm checking whether anything is missing.
+
+Final:
+
+> All three post-processing jobs finished without errors, and I've downloaded their results.
+>
+> | Run | Post time | Files | Local folder |
+> |---|---|---|---|
+> | 2506 test | 61 min | 2244 | `runs\RANS_2_macros_2026-11-01\test_results\2506` |
+> | 2606 test | 47 min | 2244 | `runs\RANS_2_macros_2026-11-01\test_results\2606` |
+> | roll1m | 106 min | 2724 | `runs\N4a_ref_roll\result_roll1m` |
+>
+> - Each folder has the section images (Cp, CpT, velocity, Lambda2), pressure distributions, 3D images and the 3D data, 7.6 GB in all. I left out the .sim files, STLs, job logs and scripts.
+> - The two tests produced exactly the same set of files. So the 2606 post creates the same output as 2506, just 14 minutes faster on this case.
+> - The local folders are about half the size Fritz's `du` shows, by the same factor in every folder. The file counts are complete, so it's probably just how the vault disk counts space.
+> - roll1m is the first full-car run with section images (y −800 … 800). It isn't straight flow, though; that still needs ref0.
+>
+> Your `1101_TEST3` post was running on Fritz; I didn't touch it. D: has 82 GB free.
+
+### Work record
+
+- Two read-only Fritz logins: (1) queue and post-log status; (2) folder sizes, then WinSCP `get` with an exclude mask
+  (`*.sim`, `*.sim~`, STLs, job logs, `.java`, `.sh`, backups, STARTED/MESHED, files > 500 MB). 7197 transfers at 100 %,
+  no errors. Nothing changed on Fritz.
+- Written: the three result folders; `STATUS.md`, `runs\N4a_ref_roll\RUN.md`, `runs\RANS_2_macros_2026-11-01\README.md`.
+- No code changed, so no tests run.
+
+## 2026-11-03 ~00:25 — owner: front-wing height study on 1101_TEST3 (proposal, nothing started)
+
+### Request (verbatim)
+
+> can you do some parametric studies with 1101_TEST3. i wanna see the effect of the front wing height. tell me before starting it.
+
+> what now?
+
+### Response (verbatim)
+
+> Here's the plan. Nothing has been started yet.
+>
+> **What TEST3 is** (from its 3D data and results): the V4 car with the PI front wing and a new undertray. Half car, standard mesh, 35/35, 50 km/h. Result: CzA −6.563, CxA −2.056; front wing −2.420, undertray −1.820, rear wing −2.046. The front wing's lowest point is **35.0 mm**, so there's 5 mm of room above the 30 mm rule. Its highest point is 322 mm; the project notes give < 350 mm ahead of the front tyres (T 8.2.1).
+>
+> **Study: move the whole front wing up or down, everything else exactly as TEST3**
+>
+> | Case | Wing move | Wing lowest point | Why |
+> |---|---|---|---|
+> | FH0 | 0 | 35 mm | control: TEST3's wing exported and put back unchanged. Must reproduce −6.563 within ~0.03, or the swap itself is the effect |
+> | FH−5 | −5 mm | 30 mm | at the rule limit |
+> | FH+5 | +5 mm | 40 mm | |
+> | FH+10 | +10 mm | 45 mm | |
+> | FH+20 | +20 mm | 55 mm | top at 342 mm, still under 350 |
+>
+> - **How:** each case is a new folder made with `new_case.sh`: the V4 base sim plus TEST3's undertray and the moved wing as STLs exported from TEST3's 3D data. This is the same method as the earlier wing tests. TEST3 itself is not touched.
+> - **Post:** coefficients and 3D data only, to keep the cost down. I can add full section images for FH0 and the extremes if you want them.
+> - **Cost:** about 280 core-h per case, about 1,400 core-h for all five. That's an estimate from the 1101_T_R2 logs. If the queue is free, about 1.5 h until results.
+> - **What you get:** CzA, CxA and front balance against wing height, plus how the undertray reacts. The earlier W1 test found the floor also loses when the wing centre goes up.
+> - **Before submitting** I check each offset for clearance to the nose and wheels; that computation is still running. If a moved wing would touch something, I drop or shorten that offset and tell you.
+> - **Risk:** exported wing surfaces have failed meshing before (K3 at x ≈ 2.03). If a case fails, I stop and report rather than retrying.
+>
+> **Another reading of "front wing height":** changing the car's front ride height (FRH 30 / 40 instead of 35). The whole car then pitches and the wing moves with it. That needs no geometry change, just Settings, and could be a second small set afterwards.
+>
+> Say **ok** to start the five cases above. Or change the offsets or the post, or tell me you meant ride height.
+
+### Work record
+
+- Three read-only Fritz logins: TEST3 folder, Settings, job lines, template comparison, Coefficients (1); 3D-data and
+  mesh-log extract (2; the macro download failed on WinSCP syntax, not retried). Nothing changed on Fritz.
+- TEST3: half car, standard mesh, 35/35, 50 km/h, base `UPSI_V4_PI_FW_Copy.sim`, 2506, owner's mesh.java; last 200:
+  CzA −6.563 (std 0.039, drift +0.040), CxA −2.056, FW −2.420, UT −1.820, RW −2.046. Settings identical to
+  1015_V4_PI_FW. Part extents from its 3D-data: front wing = PI wing (x 1673–2421, z 35.0–322.3); undertray new
+  (x 68–1840, z ≥ 34.5); mono, Remaining, rear wing, wheels = V4.
+- Clearance of the moved wing to the other parts: computation still running locally at the time of the response.
+- No code changed, so no tests run.
+
+## 2026-11-03 ~00:45–01:40 — owner: "ok" (front-wing height study submitted)
+
+### Request and clarifications (verbatim)
+
+> ok
+
+> i go to sleep till 7AM.
+
+> v4k_a1's front with was morphed i believe, but it can not be manufactured due to it's weired shape.
+
+### Response (verbatim)
+
+During the work:
+
+> Starting. First the clearance result, then the STL export.
+>
+> The project's base Settings match TEST3's (only x-section Lambda2 differs, which doesn't matter for a 3D-data post), so no Settings changes are needed. Exporting the wing and undertray STLs.
+>
+> The first clearance check is too slow because it rebuilt the search trees for every offset. I'll stop it and run a faster version that builds each tree once.
+>
+> Important finding: the wing touches the nose (`mono`) at about x 1800, y ±180, z 190. Those are probably the wing mounts. Moving the whole wing rigidly would push the mounts into the nose (up) or open a thin gap (down). Thin gaps are exactly what broke meshing on K3. Checking where the mounts are, so I can move the wing elements and stretch the mounts instead.
+>
+> The wing is fixed to the nose: it touches the nose underside at x 1760–1840, y ±180, z 189–199, and the upper flap elements reach z 315. A rigid move would therefore push those points into the nose or open a thin gap. The clean way is to move the wing by dz and fade the move to zero near that contact patch, which stretches the mount as a real longer or shorter mount would. Checking the existing helpers I can reuse for this.
+>
+> I'll add a small tool, `code\fw_height.py`, for this move plus a unit test. Then I'll generate the five wings and check each one against the nose, the wheels and the rules before submitting anything.
+>
+> You're asleep until 7, and you've already approved the study, so I'll continue tonight. The only change is the mount detail found above; it doesn't change what the study measures. If any check fails, or a case fails meshing, I stop and don't retry, and you'll find the report here in the morning.
+>
+> The tool and its 4 tests pass. Generating the wings now. dz 0 is written to a scratch file only so its rule findings can serve as the baseline; FH0 itself uses the exported wing unchanged.
+>
+> Two findings:
+> - **FH−5 breaks a rule.** Lowering by 5 mm puts the wing into the T 2.1.4 keep-out cuboid at x 2262–2361, |y| 320–374, where it sits only about 1 mm above the limit today. In practice the wing can hardly go lower.
+> - **The raised wings push a few points into the nose:** 6, 14 and 92 points at +5, +10 and +20 mm. That would intersect the surfaces and break meshing.
+>
+> Locating those points.
+>
+> Most of these are artefacts of the column test: points already touching the nose that move by less than 0.1 mm. The real problem is at +20. The wing's inner edge runs 0–25 mm under the nose for 150 mm (x 1760–1910, |y| 178–210). So the junction is a strip, not a patch, and moving it 20 mm up closes that gap. I'll keep the whole strip within 25 mm under the nose fixed and fade the move from there.
+>
+> I've noted the V4K_a1 point: a morphed wing that can't be built is no use as a result. This study avoids that. Every wing element moves rigidly, as a block, and only the inner neck that joins the nose stretches, like a longer or shorter mount. I'll measure exactly which part of the wing is not moved rigidly, so you can judge it in the morning.
+>
+> 95 % of the wing moves rigidly. 1.3 % stays fixed: the junction strip under the nose (x 1760–1910, |y| 178–211). The 3.6 % in between is the upper part of the inner neck (x 1760–1980, |y| 179–289, z 147–226), which stretches like a longer mount. The steepest stretch is 0.37 mm per mm at +20 and 0.09 at +5. So the wing elements keep their shape, unlike the V4K_a1 morph.
+>
+> Checking `new_case.sh` defaults before uploading.
+>
+> I'll upload into a new folder, `_CFD_TOPO_files/fh_1103`, so no existing file can be overwritten, and the script aborts if that folder already exists. Cases are created and submitted only if every checksum on Fritz matches.
+>
+> All five cases are submitted and pending (mesh jobs 4421221–4421225). Now I'll run the project tests, since I added code, and write the records.
+>
+> The shell choked on the quoting. I'll write the three files with the file tool instead.
+
+Final:
+
+> All five front-wing height cases are submitted on Fritz. When you wake up they should be done or close to it.
+>
+> | Case | Front wing | Lowest point | Note |
+> |---|---|---|---|
+> | `1103_FH0` | as TEST3 (exported, unchanged) | 35 mm | control: must reproduce TEST3's −6.563 |
+> | `1103_FHm5` | −5 mm | 30 mm | **not legal**: enters the T 2.1.4 keep-out at x 2262–2361, \|y\| 320–374. Kept as a sensitivity point |
+> | `1103_FHp5` | +5 mm | 40 mm | rules OK |
+> | `1103_FHp10` | +10 mm | 45 mm | rules OK |
+> | `1103_FHp20` | +20 mm | 55 mm | rules OK, top at 342 mm (< 350) |
+>
+> **One change from the plan:** I didn't move the wing fully rigidly. It's fixed to the nose: it touches it at x 1760–1840, |y| ±180, and its inner edge runs within 25 mm under the nose for 150 mm.
+> - A rigid move would have pushed the wing into the nose, or opened a thin gap that probably wouldn't mesh.
+> - Instead, that junction strip stays where it is (1.3 % of the surface) and 95 % of the wing moves rigidly.
+> - In between, the upper inner neck (3.6 %) stretches like a longer or shorter mount. The steepest stretch is 0.37 mm per mm at +20 and 0.09 at +5.
+> - So the wing elements keep their exact shape. That's not a free-form morph like V4K_a1's.
+> - Nothing is pushed into the nose, and the wheels stay at least 17 mm away.
+>
+> **Setup:** each case is the V4 base sim plus TEST3's undertray and the moved wing, all exported from TEST3's 3D data. It's a half car on the standard mesh at 35/35 and 50 km/h, the same as TEST3. Post is 3D data only. Cost is about 1,400 core-h in total (estimate). TEST3 itself is untouched.
+>
+> **Two things lower the confidence:**
+> - TEST3's own result still drifted a little over the last 200 iterations (+0.04). Differences between cases smaller than about 0.04 won't mean much.
+> - I'll compare every case against FH0, not TEST3, so the swap itself cancels out.
+>
+> **New tool:** `code\fw_height.py`, with tests; all 76 project tests pass. Details are in `runs\FH_fw_height\RUN.md`.
+>
+> Say "check" when you're up and I'll collect the results and plot CzA, CxA and balance against wing height.
+
+### Work record
+
+- Local: `ensight_to_stl.py` exports of TEST3's front wing and undertray; new `code\fw_height.py` (+ `code\test_fw_height.py`,
+  5 tests): vertical move faded to 0 towards the nose junction (touch < 1 mm or < 25 mm under the nose), radius 80 mm;
+  nose-penetration, wheel and FS rule checks. First version (contact patch only) pushed 6/14/92 points into the nose
+  at +5/+10/+20 → junction strip added → 0. FH−5: T 2.1.4 variable keep-out finding (kept as sensitivity).
+- One Fritz login: new folder `_CFD_TOPO_files/fh_1103` (batch abort if it existed), STLs + SHA256SUMS uploaded, all OK;
+  `BASE_SIM=UPSI_V4.sim new_case.sh 1103_FH* fh_1103/undertray_fh.stl+fh_1103/frontwing_fh_*.stl 3d 48`: mesh jobs
+  4421221 (FH0), 4421222 (FHm5), 4421223 (FHp5), 4421224 (FHp10), 4421225 (FHp20), all pending. Nothing else changed.
+- Written: `runs\FH_fw_height\` (STLs, SHA256SUMS, RUN.md), `STATUS.md`. Memory: manufacturable shapes (owner's V4K_a1 remark).
+- Tests: `py -m unittest discover -s code` → 76 tests OK. HoMo CFD unchanged.
+
+## 2026-11-03 ~01:45–02:20 — owner: AoA of each wing on 1101_TEST3 (submitted)
+
+### Request and clarifications (verbatim)
+
+> also try out different AoA of each wings.
+
+> you can justy start when you are ready.
+
+### Response (verbatim)
+
+During the work:
+
+> Before planning AoA variants I'll look at how the earlier ones (K3_a1/a2, conc2w_a1.5/a2) were made, since you said V4K_a1's wing came out unbuildable.
+>
+> Two earlier results matter here:
+> - **Front wing angle on K3 (V4_K):** +1° and +2° on the whole wing both lost total downforce (−6.883 → −6.763 / −6.581). The wing gained, but the floor lost more.
+> - **Rear wing:** E_round found its angle already at the optimum.
+>
+> On TEST3 the undertray is new, so this may come out differently. Before I can propose anything concrete, I need to know which wing elements are separate bodies that can be turned rigidly. Exporting TEST3's rear wing and splitting both wings into their connected parts.
+>
+> You said I can start when ready, so I will: build the AoA cases, check them, submit, and report.
+>
+> What the split shows:
+> - **Front wing:** the export is one connected body (elements and endplates joined), so a single flap can't be separated cleanly. AoA means turning the whole wing.
+> - **Rear wing:** three bodies. The main wing; a mount at x 290–370, |y| < 80; and a lower piece at x −429…−89, z 557–687.
+>
+> I'll turn the main wing rigidly about a pivot and keep the points where it touches the nose, the mount or the lower piece fixed, with the same fade as for the height study. Finding sensible pivots now.
+>
+> Findings for the front wing:
+> - The lowest point is at the outer bottom edge (x 1830–1928, |y| 731–780, z 35).
+> - The leading edge is at x ≈ 2420, z ≥ 39.8.
+> - Turning it nose-down about its lowest point would hit the T 2.1.4 keep-out (1 mm margin) at once. Turning it nose-up about its leading edge would drop the lowest point below 30 mm.
+>
+> So the pivot has to depend on direction:
+> - **More angle:** about the leading edge, which stays put while the rest rises.
+> - **Less angle:** about the lowest point, which stays at 35 mm.
+>
+> That's how the wing would have to be re-set on the car to stay legal. Now the rear wing's contacts.
+>
+> The rear wing's main body touches nothing: the nearest other part is 93 mm away. Its mount (`pylon`) sits on the nose and the lower piece floats free. So the rear wing can be turned 100 % rigidly with no stretch at all. I'll use the middle of the main body as the pivot so the height changes as little as possible. Writing a general tool, `code\wing_move.py`, that turns and/or moves a wing body while keeping contact points fixed, plus tests.
+>
+> The tool and its 4 tests pass. Generating the four front-wing angles (±1°, ±2°).
+>
+> All four front-wing angles pass: rules OK, no point within 1 mm of another part, 95 % rigid, steepest stretch 0.07–0.42 mm/mm. Lowest points: +1° 41.0 mm, +2° 41.0 mm, −1° 34.1 mm, −2° 32.8 mm. Now the rear wing.
+>
+> Both rear-wing ±1° cases pass. **±2° is not legal:** the top of the wing goes over the 1100 mm height limit (1103) while the endplate bottoms drop into the keep-out below 700 mm. The wing already fills the whole height window, so no up or down shift can fix both. Checking whether ±1.5° fits, for a clearer signal.
+>
+> ±1.5° passes as well. The rear wing gets −1.5, −1, +1 and +1.5°. Since those cases swap in the exported rear wing, I'm adding a rear-wing control (exported rear wing, unchanged) so the swap itself can be measured. That makes 9 new cases. Uploading into a new folder and submitting the same way as before.
+>
+> All 9 AoA cases are submitted (mesh jobs 4421382–4421390).
+>
+> One thing in the queue listing: **`1103_FHm5` (4421222) is gone.** The other four height cases are still meshing at 27 min, and no solver job appeared for FHm5, so its meshing most likely stopped early. Following your rule, I'm not logging in again to dig; I'll read its log at the next "check". Running the tests and writing the records now.
+
+Final:
+
+> The angle-of-attack study is running too: 9 more cases, submitted next to the 5 height cases.
+>
+> **Front wing** (compared with `1103_FH0`):
+>
+> | Case | Change | Pivot | Lowest point |
+> |---|---|---|---|
+> | `1103_FWa_p2` | +2° (more angle) | leading edge | 41.0 mm |
+> | `1103_FWa_p1` | +1° | leading edge | 41.0 mm |
+> | `1103_FWa_m1` | −1° (less angle) | lowest point | 34.1 mm |
+> | `1103_FWa_m2` | −2° | lowest point | 32.8 mm |
+>
+> - The exported front wing is one connected body, with elements and endplates joined. So I turned the whole wing, not single flaps.
+> - **Why two pivots:** turning the nose down about the lowest point would enter the T 2.1.4 keep-out straight away (1 mm margin). Turning the nose up about the leading edge would go under 30 mm. So more angle turns about the leading edge, less angle about the lowest point. That's how the wing would have to be re-set on the car to stay legal.
+> - The nose junction stays fixed, as in the height study: 95 % of the wing turns rigidly, and the steepest stretch is 0.42 mm per mm at +2°.
+>
+> **Rear wing** (compared with the new control `1103_RWa_0`, which uses the exported rear wing unchanged):
+> - **Angles:** −1.5°, −1°, +1° and +1.5°: `1103_RWa_m15`, `_m1`, `_p1`, `_p15`. Only the main wing turns, fully rigidly; it touches nothing, and its mount and lower piece stay where they are.
+> - **±2° is not legal.** The top would go over 1100 mm while the endplate bottoms drop into the rear keep-out below 700 mm. The wing already fills the height window, so no shift fixes both. Not run.
+>
+> All 9 wings pass the rule checks, and none comes within 1 mm of another part. Estimated cost is about 2,500 core-h for the 9, on top of about 1,400 for the height study.
+>
+> **One problem:** `1103_FHm5`, the −5 mm wing, had dropped out of the queue without starting its solver, so its meshing probably stopped early. The other height cases were still meshing normally at 27 min. I didn't log in again to look; I'll read its log at your next "check".
+>
+> **For context:** on the older V4_K car, more front-wing angle lost total downforce (the wing gained, the floor lost more), and the rear wing was already at its best angle. TEST3 has a different undertray, so it may come out differently.
+>
+> New tool: `code\wing_move.py`, with tests; all 80 project tests pass. Details are in `runs\AOA_test3\RUN.md`.
+
+### Work record
+
+- Local: rear wing exported from TEST3's 3D-data (`ensight_to_stl.py --mirror-y`, 12 degenerate left out); connected bodies:
+  front wing 1, rear wing 3 (main, mount on the nose, lower piece). New `code\wing_move.py` (+ `code	est_wing_move.py`,
+  4 tests): rotation about a y axis (+ dz) of the largest body, contacts kept with the fw_height fade; checks: rigid
+  share, steepest stretch, approach < 1 mm, FS rules. FW ±1/±2 OK; RW ±1/±1.5 OK, ±2 not legal (moved to `not_legal\`).
+- One Fritz login: new folder `_CFD_TOPO_files/aoa_1103` (batch abort if it existed), STLs + SHA256SUMS all OK (also
+  re-checked the two fh_1103 files used); `BASE_SIM=UPSI_V4.sim new_case.sh … 3d 48`: 1103_FWa_p1 4421382, _p2 4421383,
+  _m1 4421384, _m2 4421385, 1103_RWa_0 4421386, _p1 4421387, _p15 4421388, _m1 4421389, _m15 4421390.
+  Queue: 1103_FHm5 (4421222) gone without a solver job (probably meshing stopped; not inspected).
+- Written: `runs\AOA_test3\` (STLs, SHA256SUMS, RUN.md), `runs\FH_fw_height\RUN.md` (queue note), `STATUS.md`.
+- Tests: `py -m unittest discover -s code` → 80 tests OK. HoMo CFD unchanged.
+
+## 2026-11-03 ~07:40–08:10 — owner: "check" (FH + AOA results on 1101_TEST3)
+
+### Request (verbatim)
+
+> check
+
+### Response (verbatim)
+
+Shown before this request (the final AoA response of the previous entry, delivered at the start of this session
+after a context reset; same text as logged there).
+
+During the work:
+
+> All 13 cases that meshed have finished, including the post. Two things need a closer look:
+> - `1103_FHm5` failed in meshing with "Surface intersects self."
+> - Three cases (FHp5, FHp10, FWa_m2) logged "AMG solver diverged".
+>
+> The coefficient download didn't run because of a path bug in my script. One more login to fetch the files and read the divergence lines in context.
+>
+> The divergence events were brief, near iteration 85–90. The solver cut the CFL and recovered, and all three cases reached 1000 iterations. Computing the results now.
+>
+> Before trusting these numbers, one control result needs a closer look. `1103_FH0` lands at −6.475 against TEST3's −6.563, a 0.09 difference, and most of it is on the front wing. Its own rear-wing control `1103_RWa_0` gives −6.582, yet all RW cases use the same front wing. Checking the iteration history of the front-wing coefficient.
+>
+> The front wing has two flow states. `1103_RWa_0` ran at about −2.30 until iteration 700, then switched to −2.41 and stayed there. TEST3 (−2.42) is in that upper state; FH0 and all the RW-angle cases stayed in the lower state. So the 0.09 gap to TEST3 comes from the flow state, not from swapping the STL.
+>
+> Next, finding where FHm5's mesh fails. The log points to x ≈ 2.00–2.04 m, y 0.65–0.71 m, z 0.09–0.10 m.
+>
+> No other car part is within reach of that spot, so the problem is in the wing surface itself. Checking for a thin gap between two of the wing's own surfaces there.
+>
+> The wing shape at the FHm5 failure spot is unchanged from FH0. It's a thin region about 2.2 mm thick, which only moved down 5 mm, so the failure is most likely mesh luck from the new position [U]. Pulling a few more numbers for the rear-wing comparison.
+>
+> The validator needs Node, which isn't on this laptop. I'm using the reference palette's first four slots, which it documents as already validated, and adding direct labels and distinct markers so colour isn't the only cue.
+>
+> matplotlib isn't installed on this laptop and I'd rather not add packages without asking, so the results go in as tables. Writing them into the run notes now.
+
+Final:
+
+> The studies didn't find a gain worth keeping. Within the legal room, TEST3's front wing is already at the best height and angle we tried, and the rear wing gains at most about 0.04 CzA. 13 of the 14 cases ran to 1000 iterations; `1103_FHm5` failed in meshing. All numbers are the mean of the last 200 iterations [V], compared with `1103_FH0`.
+>
+> **Front-wing height:** lower is better.
+>
+> | Case | Lowest point | CzA | ΔCzA | ΔCxA | FW | UT | Front % |
+> |---|---|---|---|---|---|---|---|
+> | `FH0` | 35 mm | −6.475 | — | — | −2.297 | −1.856 | 52.1 |
+> | `FHp5` | 40 mm | −6.359 | +0.116 | +0.008 | −2.268 | −1.793 | 51.7 |
+> | `FHp10` | 45 mm | −6.142 | +0.333 | +0.022 | −2.137 | −1.766 | 49.8 |
+> | `FHp20` | 55 mm | −5.719 | +0.756 | +0.027 | −1.966 | −1.602 | 46.2 |
+>
+> - Raising the wing costs about 0.023 CzA per mm at first, and 0.038 per mm by +20 mm. The wing and the undertray both lose.
+> - Drag drops only a little; a positive ΔCxA means less drag here. The balance moves rearward.
+> - TEST3 is already at the lowest legal height because of the T 2.1.4 keep-out.
+> - **FHm5 failed** with "Surface intersects self" on the wing, where its surfaces are about 2.2 mm apart. The shape there is unchanged from FH0, so this is most likely mesher luck at the new position [U]. I didn't rerun it, because that case breaks T 2.1.4 anyway.
+>
+> **Front-wing angle:** both directions lose.
+>
+> | Case | CzA | ΔCzA | FW | UT |
+> |---|---|---|---|---|
+> | `FWa_p2` (+2°) | −6.345 | +0.130 | −2.400 | −1.699 |
+> | `FWa_p1` (+1°) | −6.305 | +0.170 | −2.296 | −1.774 |
+> | `FWa_m1` (−1°) | −6.318 | +0.157 | −2.122 | −1.876 |
+> | `FWa_m2` (−2°) | −6.033 | +0.442 | −1.915 | −1.802 |
+>
+> - **More angle:** the wing gains up to 0.10, but the undertray loses more, as on V4_K. These cases turn about the leading edge, so the lowest point also rises from 35 to 41 mm. The extra height may explain most of the loss rather than the angle [A].
+> - **Less angle:** the wing itself loses downforce.
+>
+> **Rear-wing angle:** close to its best already.
+> - **+1.5°:** CzA −0.043 for 0.031 more drag. That's a ratio of 1.4, well below the car's 3.1.
+> - **+1°:** almost no change.
+> - **−1° and −1.5°:** lose about 0.04 CzA for about 0.05 less drag.
+> - These are near the noise level [U]. ±2° breaks the rules.
+>
+> **Important caveat: the front wing has two flow states.**
+> - The control `1103_RWa_0` ran with front-wing CzA at −2.30 until about iteration 700. Then it jumped to −2.41 and stayed there, giving a total of −6.582.
+> - TEST3 (−6.563, FW −2.420) sits in that upper state. FH0 and the other cases stayed in the lower one.
+> - So FH0 is 0.088 short of TEST3. That isn't caused by swapping the STLs: the rear-wing swap changed the rear wing by only 0.006.
+> - The jump (0.11) is bigger than most of the effects above. I compared everything with FH0, which is in the same lower state.
+> - Which state the real car would have is open [U]. `FWa_p2` may be in or near the upper state, so its numbers are the least certain.
+>
+> **Solver warnings:** FHp5, FHp10 and FWa_m2 logged "AMG solver diverged" around iteration 85–90. Each time the solver halved the CFL and recovered, so the results are usable.
+>
+> None of this gets close to −7, so the remaining gap from TEST3's −6.563 (about 0.44) has to come from other parts. If you want, I can find where on the front wing the two flow states differ. That needs one download of the FH0 and RWa_0 3D-data, and it would show whether the wing is near a separation.
+>
+> I used two read-only logins; the first download failed because of a path bug in my script. No new jobs. Full tables are in `runs\FH_fw_height\RUN.md` and `runs\AOA_test3\RUN.md`, and all values are in `results_1103.csv` in both folders. No chart: matplotlib isn't installed on this laptop.
+
+### Work record
+
+- Fritz, two read-only logins (`v152dc11@fritz.nhr.fau.de`): (1) queue empty; status + log grep of the 14 cases;
+  FHm5 folder listing and log tail; the CSV download failed (my lcd path bug, `\$c` not expanded). (2) divergence
+  context for FH0/FHp5/FHp10/FWa_m2 and `plots/Coefficients_49.csv` of the 13 finished cases. Nothing changed on Fritz.
+- FHm5 (mesh 4421222): "Surface intersects self" in GenerateVolumeMesh at x 2.00–2.04, |y| 0.65–0.71, z 0.09–0.10 m;
+  locally: no other TEST3 part within reach; the wing there has opposite surfaces ≈ 2.2 mm apart (same shape as
+  FH0) → mesher luck [U]; not rerun (case breaks T 2.1.4).
+- Analysis (scratchpad `check1103\analyse.py`, `hist.py`, using `code\case_check.py`): last-200 means, std, drift;
+  FW CzA per 100 iterations showed RWa_0 switching from −2.30 to −2.41 at ≈ 700 (TEST3 −2.42); all comparisons
+  against FH0. Results written to `runs\FH_fw_height\RUN.md`, `runs\AOA_test3\RUN.md` (Result sections) and
+  `results_1103.csv` in both folders; `STATUS.md` updated.
+- No chart: matplotlib not installed (no package added); palette validator not run (no Node).
+- Correction to the previous entry's work record (append-only): "`code	est_wing_move.py`" should read
+  `code\test_wing_move.py` (a `\t` escape in my logging script).
+- No code change → tests not rerun (last: 80 OK). HoMo CFD unchanged.
+
+## 2026-11-03 ~08:15–08:50 — owner: download all 1103 study cases, then delete them on Fritz
+
+### Addendum to the previous entry (verbatim final response as actually shown)
+
+The previous entry logged a draft of the final response; the text shown to the owner was reworded. As shown:
+
+> I found no gain worth keeping. Within the rules, TEST3's front wing is already at the best height and angle we tried, and the rear wing gains at most about 0.04 CzA. 13 of the 14 cases ran to 1000 iterations; `1103_FHm5` failed during meshing. All numbers are the mean of the last 200 iterations [V], compared with `1103_FH0`.
+>
+> **Front-wing height:** lower is better.
+>
+> | Case | Lowest point | CzA | ΔCzA | ΔCxA | FW | UT | Front % |
+> |---|---|---|---|---|---|---|---|
+> | `FH0` | 35 mm | −6.475 | — | — | −2.297 | −1.856 | 52.1 |
+> | `FHp5` | 40 mm | −6.359 | +0.116 | +0.008 | −2.268 | −1.793 | 51.7 |
+> | `FHp10` | 45 mm | −6.142 | +0.333 | +0.022 | −2.137 | −1.766 | 49.8 |
+> | `FHp20` | 55 mm | −5.719 | +0.756 | +0.027 | −1.966 | −1.602 | 46.2 |
+>
+> - Raising the wing costs about 0.023 CzA per mm at first, and 0.038 per mm by +20 mm. The wing and the undertray both lose downforce.
+> - Drag drops only a little (a positive ΔCxA means less drag), and the balance moves rearward.
+> - TEST3 is already at the lowest legal height because of the T 2.1.4 keep-out.
+> - **FHm5 failed** with "Surface intersects self" on the wing, at a spot where its surfaces are about 2.2 mm apart. The shape there is the same as FH0's, so it's most likely bad luck in the mesher at the new position [U]. I didn't rerun it, because that case breaks T 2.1.4 anyway.
+>
+> **Front-wing angle:** both directions lose.
+>
+> | Case | CzA | ΔCzA | FW | UT |
+> |---|---|---|---|---|
+> | `FWa_p2` (+2°) | −6.345 | +0.130 | −2.400 | −1.699 |
+> | `FWa_p1` (+1°) | −6.305 | +0.170 | −2.296 | −1.774 |
+> | `FWa_m1` (−1°) | −6.318 | +0.157 | −2.122 | −1.876 |
+> | `FWa_m2` (−2°) | −6.033 | +0.442 | −1.915 | −1.802 |
+>
+> - **More angle:** the wing gains up to 0.10, but the undertray loses more, as on V4_K. These cases turn about the leading edge, so the lowest point also rises from 35 to 41 mm. That extra height may cause most of the loss, not the angle [A].
+> - **Less angle:** the wing itself loses downforce.
+>
+> **Rear-wing angle:** it's already close to its best.
+> - **+1.5°:** CzA −0.043 for 0.031 more drag. That trade is 1.4 downforce per unit of drag, well below the car's overall 3.1.
+> - **+1°:** almost no change.
+> - **−1° and −1.5°:** lose about 0.04 CzA for about 0.05 less drag.
+> - All of these are close to the run-to-run noise [U]. ±2° breaks the rules.
+>
+> **Important caveat: the front-wing flow can settle in two different states.**
+> - The control `1103_RWa_0` had front-wing CzA at −2.30 until about iteration 700. Then it jumped to −2.41 and stayed there, giving a total of −6.582.
+> - TEST3 (−6.563, FW −2.420) is in that upper state. FH0 and the other cases stayed in the lower one.
+> - That's why FH0 is 0.088 short of TEST3. Swapping in the exported STLs isn't the cause: the rear-wing swap changed the rear wing by only 0.006.
+> - The jump (0.11) is bigger than most of the effects above, so I compared everything with FH0, which is in the same lower state.
+> - Which state the real car would have is open [U]. `FWa_p2` may be in or near the upper state, so its numbers are the least certain.
+>
+> **Solver warnings:** FHp5, FHp10 and FWa_m2 logged "AMG solver diverged" around iteration 85–90. Each time the solver halved its time step (CFL) and recovered, so the results are usable.
+>
+> None of this gets close to −7. TEST3 is still about 0.44 short of −7, so that has to come from other parts of the car. If you want, I can find where on the front wing the two flow states differ. That needs one download of the FH0 and RWa_0 3D data, and would show whether the wing is close to flow separation.
+>
+> I used two read-only logins; the first download failed because of a bug in my script. I started no new jobs.
+>
+> Full tables are in `runs\FH_fw_height\RUN.md` and `runs\AOA_test3\RUN.md`, and all values are in `results_1103.csv` in both folders. There's no chart because matplotlib isn't installed on this laptop. STATUS and both chat histories are updated.
+
+### Request and clarifications (verbatim)
+
+> can you download all and then delete them after?
+
+Answers to the question shown (see below): "All except .sim (Recommended)"; STL folders: "Keep them (Recommended)".
+
+> you can do it like HoMo-CFD does it.
+
+### Response (verbatim)
+
+During the work:
+
+> Checking sizes on Fritz and free space on this laptop first. Deleting can't be undone, so I want to know what "all" amounts to before I start.
+>
+> [Question shown to the owner] "The 14 study cases take about 530 GB on Fritz, almost all of it .sim files (each case has UPSI_V4.sim plus a UPSI_V4.sim~ backup, about 40 GB per case). D: has only 78 GB free, so I can't download everything. What should I download before deleting the case folders?" Options: "All except .sim (Recommended)" / "Keep FH0 + RWa_0 .sim" / "Delete only .sim~ now". And: "Also delete the uploaded STL folders _CFD_TOPO_files/fh_1103 (705 MB) and aoa_1103 (1.3 GB)? Identical, checksum-verified copies are in D:\CFD_TOPO\runs." Options: "Keep them (Recommended)" / "Delete them too".
+>
+> You want it done the way HoMo-CFD does it. Looking up how HoMo-CFD downloads and deletes a case.
+>
+> HoMo-CFD downloads like this: `synchronize local` into `inProgress\<case>`, then a move to `finished\<case>` once complete. It skips `*.sim`, `*.sim~`, `*.sh`, `*.java` and `ABORT*`. I'll use the same method.
+>
+> - **Size guard:** before transferring, the script aborts if the 14 cases come to more than 60 GB (78 GB free).
+> - **Verification:** I'll check every case's file count and bytes against Fritz.
+> - **Licence key:** the logs contain it, so I'll mask it in the local copies.
+> - **Deletion:** only then, the 14 folders by exact name. The STL folders stay.
+>
+> HoMo-CFD itself never deletes on Fritz; the delete here is because you asked for it. Starting the download.
+>
+> Same quoting bug as this morning, caught before running it. Fixing the paths.
+>
+> The download is running in the background. Checking the size total it printed at the start (this reads a local file; no extra login).
+>
+> Download finished: 5.37 GB in total. Verifying every case against the Fritz totals.
+>
+> Nothing was transferred. My size-check command ended with `exit`, which closed the Fritz session instead of only ending that one command; the size check itself passed. Fixing that and running the download again.
+>
+> While it runs, I'm preparing the next two steps: masking the licence key in the downloaded logs, and the delete script.
+>
+> The delete script is ready. It removes exactly those 14 names, and only if no job of mine is running in them. I'll run it once the download is verified.
+>
+> Waiting for the download to finish; I'll be notified when it does.
+>
+> All 14 cases verified: file counts and bytes match Fritz exactly. Next, masking the licence key in the local logs and moving the cases to `finished`.
+>
+> The key is masked in all 40 log files that contained it. Now deleting the 14 folders on Fritz.
+>
+> All 14 folders are deleted and the two STL folders are still there. Updating the records.
+
+Final:
+
+> Done. All 14 cases are downloaded and checked, and their folders on Fritz are deleted.
+>
+> - **Download:** done the HoMo-CFD way. Each case went into `inProgress\` with `synchronize local`, then moved to `finished\` once complete. Same exclusions as HoMo-CFD: `*.sim`, `*.sim~`, `*.sh`, `*.java`, `ABORT*`.
+> - **Where:** `D:\CFD_TOPO\runs\FH_fw_height\finished\` (5 cases, 1.6 GB) and `D:\CFD_TOPO\runs\AOA_test3\finished\` (9 cases, 3.5 GB). Each case has its 3D-data, `plots` (coefficients), job logs, `Settings` and STLs.
+> - **Checked:** for every case, the file count and total bytes match Fritz exactly (5.37 GB in all).
+> - **Licence key:** 40 of the downloaded logs contained it. I replaced it with `***` in the local copies.
+> - **Deleted on Fritz:** the 14 `1103_*` folders, by exact name, after checking that no job was running in them. The solved .sim files (about 40 GB per case) are gone; any case can be re-run from the STLs in the run folders.
+> - **Kept on Fritz:** `_CFD_TOPO_files/fh_1103` and `aoa_1103`, as you chose.
+>
+> The first download attempt transferred nothing: my size check closed the Fritz session by mistake. I fixed it and ran it again, so this took one extra login. D: now has 73 GB free. The run notes and STATUS are updated.
+
+### Work record
+
+- Read-only login: sizes (≈ 40 GB per case, almost all `UPSI_V4.sim` + `.sim~`; ≈ 530 GB in all), files with the
+  licence key (logs, `*.sh`); local D: 78 GB free → asked the owner.
+- Method from HoMo CFD `cluster.py` (`download_script`/`run_download`: `synchronize local`, EXCLUDED + `*.sim`,
+  inProgress → finished). Download login 1 transferred nothing (my `exit $r` in the size check closed the session);
+  login 2: size guard (abort > 60 GB; 5.37 GB) then 14 × `synchronize local` into
+  `runs\FH_fw_height\inProgress\` and `runs\AOA_test3\inProgress\`. Checked: file count and bytes per case = Fritz
+  (14/14). Key masked locally (`-podkey ***`, 40 files; none left), then moved to `finished\`.
+- Delete login: `rm -rf` of the 14 named `1103_*` folders in `/home/vault/v152dc/v152dc11` (name pattern, directory,
+  no symlink, no running 1103 job checked first); all 14 deleted, no `1103_*` left; `_CFD_TOPO_files/fh_1103` and
+  `aoa_1103` kept. No other folder touched (no L_ folder, no SCRIPT_RANS).
+- Written: both RUN.md (collection note), `STATUS.md`. No code change → no tests run. HoMo CFD code unchanged.
+
+## 2026-11-03 ~09:00 — owner: move the 1103 cases into CFD-Tool's finished folder
+
+### Request (verbatim)
+
+> can you tranfer them in cfd-tool/finished.
+
+### Response (verbatim)
+
+During the work:
+
+> Looking for the CFD-Tool folder and how its `finished` cases are laid out.
+>
+> `D:\CFD_tool\finished` has none of the 14 names yet. Both folders are on D:, so moving them is just a rename. Moving the 14 cases there.
+>
+> All 14 moved, and the file counts match. Updating the records.
+
+Final:
+
+> Done. All 14 cases are now in `D:\CFD_tool\finished\`, next to TEST3 and the other runs: `1103_FH0`, `_FHm5`, `_FHp5`, `_FHp10`, `_FHp20`, `1103_FWa_p1/p2/m1/m2` and `1103_RWa_0/p1/p15/m1/m15`.
+>
+> - I moved them rather than copied, so there's no second copy taking up space on D:. Every case has the same number of files as before.
+> - The now-empty `finished` folders in the two run folders are gone. The run notes, tables and STLs stay in `D:\CFD_TOPO\runs\`.
+> - No name clashed with an existing case, and I didn't touch anything else in `CFD_tool\finished` (including the `L_` folders).
+> - The run notes, STATUS and both chat histories are updated with the new location.
+
+### Work record
+
+- Found `D:\CFD_tool\finished` (CFD-Tool layout, 42 entries; none named `1103_*`). Moved (same volume, `mv`) the 14
+  folders from `D:\CFD_TOPO\runs\FH_fw_height\finished\` and `runs\AOA_test3\finished\`; file counts per case
+  unchanged (39/6/40); removed the two empty `finished` folders. Nothing else in `CFD_tool` touched.
+- Notes appended to both RUN.md; `STATUS.md` updated. No code change → no tests. No Fritz login.
+
+## 2026-11-03 ~12:50–13:40 — owner: speed study on 1101_TEST3 (submitted), then full post
+
+### Requests and clarifications (verbatim)
+
+> can you do parametric study of 1101_test3 with different speeds? ranging from 30kph to 110 kph.
+
+> use the script_rans's script.
+
+Answers to the questions: scripts "RANS_2 (Recommended)"; base "TEST3's own .sim (Recommended)"; speeds
+"+5kph till 70kph and then +10kph.".
+
+> i want full post process. i see that all the last night's run do not have all the  Scenes.
+
+### Responses (verbatim)
+
+First turn (the speed study), during the work and its last message:
+
+> Checking how speed is set in a case and what the case-setup script can change, before I propose a plan.
+>
+> Before choosing scripts, a conflict with a standing rule. On 2026-11-01 you told me never to touch `SCRIPT_RANS`, not even to read or list it. My usual case script (`new_case.sh`) also doesn't use that template, so I need to know which one you mean. My plan:
+>
+> - **Speeds:** 30, 50, 70, 90 and 110 km/h, set through `Vehicle State/Velocity`.
+> - **How speed is applied:** `mesh.java` sets the inlet speed and the initial flow from that setting. The coefficients are normalised, and the earlier 87 km/h cornering run gave normal-sized values [A].
+> - **What else stays fixed:** everything except the speed, with 50 km/h run as the control.
+> - **Cost:** about 280 core-h per case, about 1,400 in all.
+>
+> [Questions shown] (1) "\"Use the script_rans's script\": on 2026-11-01 you told me never to touch SCRIPT_RANS, not even read or list it. RANS_2 is a copy of SCRIPT_RANS's scripts that I made then for template work. It reproduced the reference result exactly (−6.935) and uses the UPSIRANS job name. Which should the speed study use?" Options: "RANS_2 (Recommended)" / "SCRIPT_RANS, read-only". (2) "Which base for the speed cases? TEST3 = Settings + its own .sim (UPSI_V4_PI_FW_Copy.sim) from your 1101_TEST3 folder on Fritz, if it is still there." Options: "TEST3's own .sim (Recommended)" / "Same as the wing studies". (3) "Which speeds?" Options: "30/50/70/90/110 (Recommended)" / "Every 10 km/h".
+>
+> Your choices: RANS_2 scripts, TEST3's own .sim, and speeds in 5 km/h steps up to 70, then 10 km/h steps. That makes 13 cases: 30, 35, 40, 45, 50, 55, 60, 65, 70, 80, 90, 100 and 110 km/h, about 3,600 core-h. Reading how the RANS_2 template is used.
+>
+> A case started from a solved .sim would keep that solution and its iteration count in half-car mode, because `mesh.java` clears the solution only for Full-Car and Cornering. So the speed cases need TEST3's unsolved base .sim. Looking for it, first on this laptop.
+>
+> TEST3 isn't on this laptop as a .sim; only its results are. One read-only login to see what's on Fritz:
+> - the `1101_TEST3` folder and its .sim files with their timestamps, to tell an unsolved one from a solved one;
+> - the `RANS_2` folder;
+> - any other copy of the TEST3 base, searching with `SCRIPT_RANS` excluded.
+>
+> What's on Fritz:
+> - **`1101_TEST3/UPSI_V4_PI_FW_Copy.sim~`** (6.1 GB, saved 14:44, when its meshing ended) is TEST3 meshed but not yet solved. The solver's save at 15:06 turned it into the backup. That's the right base.
+> - **`RANS_2/Settings` is identical to TEST3's**, so only the speed changes.
+> - **TEST3 itself ran with the older template macros.** RANS_2's newer ones reproduced the V4_K reference exactly, so 50 km/h should land near −6.563, apart from the front-wing flow state.
+>
+> Plan per case (`1103_SPD30` … `1103_SPD110`):
+> - Copy the RANS_2 scripts and Settings, plus TEST3's unsolved .sim.
+> - Set `Vehicle State/Velocity`.
+> - Post: 3D-data only, as in the wing studies.
+> - Add the usual guard so the solver only starts after a clean mesh.
+>
+> Writing the setup script.
+>
+> The setup script is running on Fritz. `1103_SPD30` is already submitted (job 4429458) with only the speed changed, and the job scripts pick up the case's single `*.sim`. The other 12 cases follow as their 6 GB copies finish, which takes a few minutes. I'll check once in about 5 minutes; meanwhile I'm writing the run note.
+>
+> I'll check Fritz once when the 5-minute wait finishes.
+
+Second turn (full post), during the work:
+
+> You want full post-processing for the speed cases. They're still meshing or solving, so I can switch it on before any post job starts.
+> - **Settings:** I'll restore each case's Settings to RANS_2's Settings with all scenes on, changing only the speed. The swap is atomic, so a running job never reads a half-written file.
+> - **Post time limit:** I'll raise it to 2 h in the case copies. A full post took 58–61 min last time against a 1:10 limit, which is tight.
+>
+> Last night's 14 wing and height cases did run with 3D-data only; I set it up that way. Their solved .sim files were deleted this morning, so their scenes can't be made without re-running those cases. Fixing the speed cases first.
+>
+> That command hung: `python` waited for input that never came. Stopping it and making the edit directly.
+>
+> Now the final message and the records.
+
+Final:
+
+> The speed study will now get the full post-processing, the same 23 scenes as TEST3: sections, pressure distributions, 3D scenes and 3D-data.
+>
+> - **All 13 cases are submitted:** 30, 35, 40, 45, 50, 55, 60, 65, 70, 80, 90, 100 and 110 km/h (`1103_SPD30` … `1103_SPD110`, mesh jobs 4429458–4429577). When I set them up, 11 were meshing and 2 were waiting.
+> - **Set-up:** each case uses the RANS_2 scripts and TEST3's meshed, unsolved .sim (the `.sim~` backup from its mesh job). Its Settings equal TEST3's apart from the speed. Nothing was written into `1101_TEST3`, `RANS_2` or `SCRIPT_RANS`.
+> - **Full post switched on:** each case now has RANS_2's Settings with all 23 scenes on, with only the speed changed. The mesh jobs had already read their Settings, and the scenes are only read by the post job, so this takes effect for every case.
+> - **Post time limit:** raised from 1:10 to 2:00 in the case copies. A full post took 58–61 min before, which is close to 1:10.
+> - **Cost:** about 3,600 core-h for mesh and solve, plus about 70 core-h of post per case. Each finished case takes about 40 GB on Fritz.
+>
+> **Last night's 14 wing and height cases:** you're right, they have no scenes. I ran them with 3D-data only to save post time. Their solved .sim files were deleted this morning, so scenes can only be made by re-running them (about 350 core-h each with full post). If you want some of them, tell me which; `1103_FH0` and `1103_RWa_0`, the two front-wing flow states, would be the most useful pair.
+>
+> From now on I'll use full post unless you say otherwise. Run note: `D:\CFD_TOPO\runs\SPD_test3\RUN.md`. I'll collect the results at your next "check".
+
+### Work record
+
+- Local: `Vehicle State/Velocity` sets `u_inlet` (= v/3.6) in mesh.java (inlet + initial condition); mesh.java clears
+  the solution only for Full-Car/Cornering → an unsolved base is needed.
+- Login 1 (read-only): `1101_TEST3` holds the solved `.sim` (10.1 GB, 15:06) and `.sim~` (6.12 GB, 14:44 = mesh job's
+  save → meshed, unsolved); RANS_2 Settings = TEST3 Settings; TEST3's macros ≠ RANS_2's (older template ones); find of
+  `*PI_FW*.sim*` pruned SCRIPT_RANS and L_ folders.
+- Login 2: new folder `_CFD_TOPO_files/speed_1103`, `speed_setup.sh` (SHA256 OK) run with nohup: 13 cases
+  `1103_SPD30…110` = RANS_2 scripts/macros/Settings + `.sim~` copied (`cmp` OK) as `UPSI_V4_PI_FW_Copy.sim`, only the
+  speed changed, scenes off (3d post), mesh.sh guard; mesh jobs 4429458, 4429558–60, 4429566–67, 4429569–71,
+  4429573–75, 4429577. Nothing written into 1101_TEST3, RANS_2 or SCRIPT_RANS.
+- Login 3: setup.log OK for all 13; `full_post.sh` (SHA256 OK): Settings = RANS_2's (23 scenes on) + speed line via a
+  checked temp file + rename; `post.sh` time 2:00:00; no post had started.
+- Written: `runs\SPD_test3\` (speed_setup.sh, full_post.sh, SHA256SUMS, RUN.md), `STATUS.md`; memory: full post by
+  default. A local `python -` call hung (no stdin) and was stopped; no effect.
+- No code change → no tests. HoMo CFD unchanged.
+
+## 2026-11-03 — Reading the HoMo-LTS project; Downforce vs drag in the Monitor comparison
+
+### User messages (verbatim)
+
+> hey, can you read HoMo-LTS project?
+
+> there is an aero map inside the project app. i was thinking adding it or replacing Monitor comparison with it. what do you think?
+
+> do it.
+
+### Contributor responses
+
+The contributor's short progress notes between steps are in the Claude Code session transcript and are not repeated here.
+
+Answer to the first message (verbatim, abridged headings kept):
+
+> I've read HoMo-LTS, and changed nothing in it. It's at `D:\VD\HoMo-LTS` (version 2.1.1, last worked on today), with its user data in `%APPDATA%\HoMo-LTS` and a PDF guide in your Downloads.
+>
+> **What it is:** HoMo CFD's sibling for the lap time simulation in `D:\VD\laptimesimulation`. … **Aero & CFD page** (`cfd.py`): reads HoMo CFD's finished cases read-only. …
+>
+> **Where it touches HoMo CFD:** [V] `workingDir` key in `%APPDATA%\HoMo-CFD\settings.json` (HoMo CFD writes exactly that key); [V] last iteration of the coefficients; [V] one folder level under `finished`.
+>
+> **Notable from its log:** [V] with the 2025 reference times every CFD case gets maximum skidpad, autocross and endurance points; [V] no real ride-height aero map can be built yet (1026_CF_P* differ in yaw, roll and steer); [V] the folder is not under git.
+
+(The complete wording of that answer is in the session transcript; the summary above keeps its facts.)
+
+Answer to the second message (verbatim):
+
+> HoMo-LTS has two things it calls "aero map":
+> - the **ClA × CdA trade-off map**: every CFD case as a dot, with dashed lines of constant L/D;
+> - **ride-height aero maps**: tables for the lap sim, not a chart.
+>
+> I think you mean the first one. My advice: **add it to HoMo CFD, but keep the Monitor comparison** next to it rather than replacing it.
+>
+> **Why add it:** it answers the main aero question at a glance, whether a design is better or just trading drag for downforce. … **Why not replace the bars:** the bar chart works for *any* column … **How I'd build it:** one card with a switch, **Bars | Downforce vs drag**. … The ride-height maps aren't worth bringing over yet …
+>
+> Should I build the switch with the Downforce vs drag view?
+
+Final response (verbatim):
+
+> Done. **Monitor comparison** now has a switch: **Bars | Downforce vs drag**.
+>
+> **Downforce vs drag** shows every simulation as a dot, Downforce [N] over Drag [N] at the table's speed, with dashed lines of constant L/D:
+> - Up and to the left is better. Two designs on the same L/D line only trade drag for downforce.
+> - Rows you star (☆) in the table turn gold and get their name, immediately. In the Δ view, the reference case has a ring.
+> - Point at a dot to read its downforce, drag, L/D, CzA and CxA.
+> - HoMo remembers which of the two views you used last.
+>
+> On your results it shows 52 simulations between L/D 2 and 4; the cluster of recent designs sits around L/D 3–3.5.
+>
+> The bars are unchanged, so any single column (front wing, undertray, balance …) can still be compared. HoMo-LTS was only read, not changed.
+>
+> Tests: 111 unit tests and 213 browser checks pass. Reload the HoMo CFD tab to see it. Not committed, pushed or published to SVN yet; say "push it" when you want that.
+
+### Work record
+
+- Read only: `D:\VD\HoMo-LTS` (README, ABOUT, AGENTS, CHANGELOG, CHAT_HISTORY, `cfd.py`, outline of `serve.py`, `jobs.py`, `web/aero.js`); checked HoMo CFD's settings key `workingDir`.
+- `web/app.js`: Bars | Downforce vs drag switch in `renderMonitorChart` (`MONITOR_CHART_MODE_KEY`, `readMonitorChartMode`; plain `.choices` class because the Values/Δ code toggles every `.table-mode-switch` button by position), `drawTradeoffChart()`, `classifiedHeader()`, `markTradeoffDot()` (called from the row star); the table-sorting comment moved back above its code (it had ended up above the highlight code). `web/styles.css`: switch, plot, L/D lines, dots, legend keys.
+- Tests: 5 checks in `tests/browser/server-mode.html`.
+- Docs: `CHANGELOG.md`, `STATUS.md`, `tests/README.md`, `docs/APP_README.md`.
+- Checks: `py -m unittest discover -s tests -v`: 111 tests OK. `py tests/run_browser_tests.py`: 213/213 checks passed. Real results checked in headless Chrome (52 dots, axis labels in N, hover).
+
+## 2026-11-03 — What more can HoMo CFD gain from HoMo LTS? (question)
+
+### User messages (verbatim)
+
+> is there anything more that we can gain from LTS project? maybe some improvements?
+
+### Contributor responses
+
+Final response (summary of the verbatim answer; the full wording is in the session transcript):
+
+> 1. Lines of equal lap time in Downforce vs drag, from one HoMo LTS ClA × CdA sweep (exchange rate drag ↔ downforce [U until the sweep runs]); optional "Δ lap time (est.)" column; use lap time, not FSG points [V: HoMo LTS log 29 Oct].
+> 2. Real driving states from HoMo LTS (P5…P95 Settings zip [V: `cfd_settings_zip`]) → "Settings from file…" in New simulation on Fritz.
+> 3. Later: plan a front × rear ride-height grid as a batch, for real aero maps (costs Fritz time).
+> 4. Small: version warning when page and server differ after an SVN update (two servers on one port already impossible [V: `allow_reuse_address` off on Windows]).
+> For HoMo LTS: put it under git [V: no repository]; rank CFD cases by lap time by default.
+> Recommendation: start with 1; ask before running any MATLAB sweep, in a separate test instance.
+
+### Work record
+
+- Read only: HoMo CFD `serve.py` (port handling), HoMo LTS `serve.py` (`cfd_settings_zip`). No files changed besides this log; no tests needed.
+
+## 2026-11-03 — HoMo LTS opens a different window (question)
+
+### User messages (verbatim)
+
+> have you noticed that LTS opens a different kinda window then CFD?
+
+### Contributor responses
+
+Final response (summary of the verbatim answer; full wording in the session transcript):
+
+> Yes. HoMo LTS's taskbar shortcut starts it with `--app` (Edge/Chrome `--app=` URL): its own window without tabs or address bar, own taskbar icon, pinnable. HoMo CFD opens a normal tab (`webbrowser.open`). Offered: `serve.py --app` used by the start script and desktop shortcut (fallback to a tab), a Start-menu entry with the HoMo CFD icon to pin; pop-ups (comparison window, 3D viewer) work as before; teammates get it through SVN. Asked whether to do it.
+
+### Work record
+
+- Read only: HoMo LTS `serve.py` (`open_app`, `--app`), `Start HoMo LTS.bat`; HoMo CFD `serve.py`, `Start HoMo CFD.bat`. No files changed besides this log.
+
+## 2026-11-03 — HoMo CFD in its own window, like HoMo LTS
+
+### User messages (verbatim)
+
+> yes please
+
+(answer to the question whether HoMo CFD should open as an app window too)
+
+### Contributor responses
+
+The contributor's short progress notes between steps are in the Claude Code session transcript and are not repeated here.
+
+Final response (verbatim):
+
+> HoMo CFD now opens in its own window, like HoMo LTS: Edge in app mode, without tabs or address bar, with its own taskbar button. If neither Edge nor Chrome is installed, it falls back to a browser tab.
+>
+> - **Your Start-menu shortcut** (the one pointing to `D:\HoMo-CFD`) is switched over. Start HoMo CFD from it, then right-click it → **Pin to taskbar** if you like.
+> - `Start HoMo CFD.bat` opens the window too. `Create desktop shortcut.bat` now puts HoMo CFD on the desktop **and** in the Start menu, so teammates can pin it as well. Their existing shortcuts keep opening a tab until they run that script once more; the teammates' README says so.
+> - The comparison window and the 3D viewer open as separate windows, as before.
+>
+> I tested the shortcut script with the desktop and Start menu redirected to a scratch folder, so nothing extra landed on your desktop.
+>
+> Tests: 113 unit tests and 213 browser checks pass. Not committed, pushed or published to SVN yet (together with the Downforce vs drag chart); say "push it" when you want that.
+
+### Work record
+
+- `serve.py`: `APP_BROWSERS`, `open_app()`, option `--app` (also when the port is already in use). `Start HoMo CFD.bat`, `Create desktop shortcut.bat`: `--app --background`; the shortcut script also writes the Start-menu shortcut (edited as bytes, CRLF kept). Shortcut script run with Desktop/Programs redirected to a scratch folder: both shortcuts with `--app` and the icon.
+- The owner's existing Start-menu shortcut `HoMo CFD.lnk` (target pyw.exe, folder `D:\HoMo-CFD\`): arguments changed from `--open` to `--app`, nothing else. No desktop shortcut existed.
+- Tests: `OpenAppTests` (2) in `test_serve.py`; `test_portable.py` expects `--app`.
+- Docs: `CHANGELOG.md`, `STATUS.md`, `tests/README.md`, `docs/APP_README.md`.
+- Checks: `py -m unittest discover -s tests -v`: 113 tests OK. `py tests/run_browser_tests.py`: 213/213 checks passed. The app window itself was not opened here (headless only).

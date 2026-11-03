@@ -16,6 +16,7 @@ import tempfile
 import threading
 import time
 import unittest
+from unittest import mock
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -232,6 +233,31 @@ class ApiTests(ServeTestCase):
         self.assertEqual(status, 200)
         self.assertIn(b"server-fs.js", data)
 
+
+class OpenAppTests(unittest.TestCase):
+    """--app: an Edge/Chrome app window (no tabs or address bar); a browser tab without either."""
+
+    def setUp(self):
+        self.started, self.tabs = [], []
+        patches = [
+            mock.patch.object(serve.subprocess, "Popen", side_effect=lambda command: self.started.append(command)),
+            mock.patch.object(serve.webbrowser, "open", side_effect=lambda url: self.tabs.append(url)),
+        ]
+        for patch in patches:
+            patch.start()
+            self.addCleanup(patch.stop)
+
+    def test_app_window_in_the_first_browser_found(self):
+        chrome = os.path.expandvars(serve.APP_BROWSERS[2])
+        with mock.patch.object(serve.os.path, "isfile", side_effect=lambda path: path == chrome):
+            serve.open_app("http://127.0.0.1:5173", window=True)
+        self.assertEqual((self.started, self.tabs), ([[chrome, "--app=http://127.0.0.1:5173"]], []))
+
+    def test_tab_without_edge_or_chrome_or_without_app(self):
+        with mock.patch.object(serve.os.path, "isfile", return_value=False):
+            serve.open_app("http://127.0.0.1:5173", window=True)
+        serve.open_app("http://127.0.0.1:5173")
+        self.assertEqual((self.started, self.tabs), ([], ["http://127.0.0.1:5173"] * 2))
 
 
 class BackgroundTests(ApiTests):

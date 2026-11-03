@@ -3,6 +3,12 @@
 User-visible changes, newest first. Detailed reasoning lives in
 `CHAT_HISTORY.md`; decisions in `DECISIONS.md`.
 
+## 2026-11-03
+
+### Added
+- **HoMo CFD opens in its own window**, like HoMo LTS: Edge or Chrome app mode, without tabs or address bar (a browser tab if neither is installed). `serve.py --app`; the start script and the shortcuts use it. `Create desktop shortcut.bat` now also puts **HoMo CFD** in the Start menu, to pin it to the taskbar. Older shortcuts still open a tab until the script is run again.
+- **Monitor comparison: Downforce vs drag.** Next to **Bars**, a chart with one dot per simulation (Downforce [N] over Drag [N] at the table's speed) and dashed lines of constant L/D: up and to the left is better, designs on one line only trade drag for downforce. Rows starred in the table are gold and named (also live), the Δ view's reference has a ring, and hovering a dot shows its forces, L/D, CzA and CxA. The choice is remembered. Idea taken from HoMo LTS's ClA × CdA map; HoMo LTS itself is unchanged.
+
 ## 2026-11-02
 
 ### Added

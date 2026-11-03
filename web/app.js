@@ -1284,7 +1284,17 @@ function renderCsvTables(coefficientRows) {
   el.panels.replaceChildren(collective);
 }
 
-function renderMonitorChart(coefficientRows, referenceRow) {
+const MONITOR_CHART_MODE_KEY = "homo-cfd-monitor-chart-mode-v1";
+
+function readMonitorChartMode() {
+  try {
+    return localStorage.getItem(MONITOR_CHART_MODE_KEY) === "tradeoff" ? "tradeoff" : "bars";
+  } catch {
+    return "bars";
+  }
+}
+
+function renderMonitorChart(coefficientRows, referenceRow, keepOpen = false) {
   const columns = browserState.columnHeaders.filter((header) => !/^iteration$/i.test(header));
   const chart = document.createElement("details");
   chart.className = "monitor-chart-card";
@@ -1292,6 +1302,30 @@ function renderMonitorChart(coefficientRows, referenceRow) {
   const title = document.createElement("summary");
   title.textContent = "Monitor comparison";
   chart.appendChild(title);
+
+  // Bars of one monitor, or every simulation as a dot over drag × downforce (remembered).
+  const modes = document.createElement("div");
+  modes.className = "choices small monitor-chart-modes";
+  const tradeoffPossible = columns.includes("Downforce [N]") && columns.includes("Drag [N]");
+  const mode = tradeoffPossible && readMonitorChartMode() === "tradeoff" ? "tradeoff" : "bars";
+  [["bars", "Bars"], ["tradeoff", "Downforce vs drag"]].forEach(([value, text]) => {
+    const button = Object.assign(document.createElement("button"), { type: "button", textContent: text, className: value === mode ? "active" : "" });
+    button.dataset.mode = value;
+    button.disabled = value === "tradeoff" && !tradeoffPossible;
+    button.addEventListener("click", () => {
+      try {
+        localStorage.setItem(MONITOR_CHART_MODE_KEY, value);
+      } catch {}
+      chart.replaceWith(renderMonitorChart(coefficientRows, referenceRow, true));
+    });
+    modes.appendChild(button);
+  });
+  chart.appendChild(modes);
+  if (keepOpen) chart.open = true;
+  if (mode === "tradeoff") {
+    chart.appendChild(drawTradeoffChart(coefficientRows, browserState.coefficientView === "delta" ? referenceRow : null));
+    return chart;
+  }
 
   const controls = document.createElement("label");
   controls.className = "monitor-chart-controls";
@@ -1387,9 +1421,125 @@ function drawMonitorChart(coefficientRows, header, referenceRow) {
   return svg;
 }
 
-// Sorting the table by a column: click a header for ascending, again for descending, a third time for the
-// original order. Numbers sort by value (in Δ view by the difference from the reference), the Simulation column
-// by name; empty cells always go last. The choice is remembered.
+// Downforce vs drag: every simulation as a dot (Downforce [N] over Drag [N] at the table's speed), with dashed
+// lines of constant L/D through the origin: up and to the left is better; designs on one line only trade drag
+// for downforce. Highlighted rows (★) are gold and named; in the Δ view the reference has a ring. Hover a dot
+// for its numbers.
+function drawTradeoffChart(coefficientRows, referenceRow) {
+  const namespace = "http://www.w3.org/2000/svg";
+  const width = 960, height = 440, left = 70, right = 24, top = 16, bottom = 46;
+  const plotWidth = width - left - right, plotHeight = height - top - bottom;
+  const highlights = readHighlights();
+  const points = coefficientRows.map((data) => ({
+    data, name: simulationNameFromCsvPath(data.path),
+    downforce: coefficientValue(data, "Downforce [N]"), drag: coefficientValue(data, "Drag [N]"),
+  })).filter((point) => Number.isFinite(point.downforce) && Number.isFinite(point.drag));
+  const wrap = document.createElement("div");
+  wrap.className = "tradeoff-wrap";
+  if (!points.length) {
+    wrap.appendChild(Object.assign(document.createElement("p"), { className: "hint", textContent: "No simulation has both Downforce [N] and Drag [N]." }));
+    return wrap;
+  }
+  const span = (values) => {
+    const low = Math.min(...values), high = Math.max(...values), pad = Math.max((high - low) * 0.12, Math.abs(high) * 0.02, 1);
+    const ticks = createTicks(low - pad, high + pad, 8);
+    return { low: Math.min(low - pad, ticks[0]), high: Math.max(high + pad, ticks[ticks.length - 1]), ticks };
+  };
+  const force = (value) => String(Number(value.toFixed(1)));  // forces in N, never as 1.2e+3
+  const xs = span(points.map((point) => point.drag)), ys = span(points.map((point) => point.downforce));
+  const x = (value) => left + (value - xs.low) / (xs.high - xs.low) * plotWidth;
+  const y = (value) => top + (ys.high - value) / (ys.high - ys.low) * plotHeight;
+  const element = (tag, attributes, text) => {
+    const node = document.createElementNS(namespace, tag);
+    Object.entries(attributes).forEach(([key, value]) => node.setAttribute(key, String(value)));
+    if (text !== undefined) node.textContent = text;
+    return node;
+  };
+  const svg = element("svg", { class: "monitor-chart tradeoff-chart", viewBox: `0 0 ${width} ${height}`, role: "img",
+    "aria-label": `Downforce over drag at ${browserState.forceSettings.speedKmh} km/h for ${points.length} simulations, with lines of constant L/D` });
+  xs.ticks.forEach((tick) => {
+    svg.appendChild(element("line", { class: "monitor-grid-line", x1: x(tick), x2: x(tick), y1: top, y2: top + plotHeight }));
+    svg.appendChild(element("text", { class: "monitor-tick-label", x: x(tick), y: top + plotHeight + 16, "text-anchor": "middle" }, force(tick)));
+  });
+  ys.ticks.forEach((tick) => {
+    svg.appendChild(element("line", { class: "monitor-grid-line", x1: left, x2: left + plotWidth, y1: y(tick), y2: y(tick) }));
+    svg.appendChild(element("text", { class: "monitor-tick-label", x: left - 8, y: y(tick) + 4, "text-anchor": "end" }, force(tick)));
+  });
+  svg.appendChild(element("text", { class: "monitor-tick-label", x: left + plotWidth / 2, y: height - 6, "text-anchor": "middle" },
+    `Drag [N] at ${browserState.forceSettings.speedKmh} km/h`));
+  svg.appendChild(element("text", { class: "monitor-tick-label", x: 14, y: top + plotHeight / 2, "text-anchor": "middle",
+    transform: `rotate(-90 14 ${top + plotHeight / 2})` }, "Downforce [N]"));
+
+  // Constant L/D: downforce = L/D × drag, drawn where it crosses the plot; labelled at its upper end.
+  const ratios = points.map((point) => point.downforce / point.drag);
+  createTicks(Math.min(...ratios) * 0.9, Math.max(...ratios) * 1.1, 6).filter((ratio) => ratio > 0).forEach((ratio) => {
+    const start = Math.max(xs.low, ys.low / ratio), end = Math.min(xs.high, ys.high / ratio);
+    if (!(end > start)) return;
+    svg.appendChild(element("line", { class: "tradeoff-ld-line", x1: x(start), y1: y(ratio * start), x2: x(end), y2: y(ratio * end) }));
+    const atTop = ratio * end >= ys.high - 1e-9;
+    svg.appendChild(element("text", { class: "tradeoff-ld-label", x: x(end) + (atTop ? 4 : -4), y: y(ratio * end) + (atTop ? 12 : -5),
+      "text-anchor": atTop ? "start" : "end" }, `L/D ${formatTick(ratio)}`));
+  });
+
+  const dots = points.map((point) => {
+    const highlighted = highlights.has(point.data.path), reference = referenceRow && point.data.path === referenceRow.path;
+    const group = element("g", { class: `tradeoff-dot${highlighted ? " highlighted" : ""}${reference ? " reference" : ""}` });
+    group.dataset.path = point.data.path;
+    if (reference) group.appendChild(element("circle", { class: "tradeoff-reference-ring", cx: x(point.drag), cy: y(point.downforce), r: 9 }));
+    group.appendChild(element("circle", { cx: x(point.drag), cy: y(point.downforce), r: highlighted ? 6 : 5 }));
+    if (highlighted || reference) {
+      group.appendChild(element("text", { class: "tradeoff-name", x: x(point.drag) + 10, y: y(point.downforce) - 8 }, point.name));
+    }
+    svg.appendChild(group);
+    return { point, cx: x(point.drag), cy: y(point.downforce) };
+  });
+
+  const legend = document.createElement("ul");
+  legend.className = "residual-legend tradeoff-legend";
+  const legendItem = (className, text) => {
+    const item = document.createElement("li");
+    item.append(Object.assign(document.createElement("span"), { className }), text);
+    legend.appendChild(item);
+  };
+  legendItem("tradeoff-key", "Simulation");
+  legendItem("tradeoff-key highlighted", "Highlighted (★ in the table)");
+  if (referenceRow) legendItem("tradeoff-key reference", "Reference");
+  legendItem("tradeoff-key ld", "Constant L/D: up and to the left is better");
+
+  const tooltip = Object.assign(document.createElement("div"), { className: "residual-tooltip" });
+  tooltip.hidden = true;
+  const hover = (event) => {
+    const box = svg.getBoundingClientRect();
+    const px = (event.clientX - box.left) * width / box.width, py = (event.clientY - box.top) * height / box.height;
+    let best = null, nearest = 18 * 18;
+    dots.forEach((dot) => {
+      const distance = (dot.cx - px) ** 2 + (dot.cy - py) ** 2;
+      if (distance < nearest) { nearest = distance; best = dot; }
+    });
+    if (!best) { tooltip.hidden = true; return; }
+    const { point } = best, cz = coefficientValue(point.data, classifiedHeader(point.data, "CzA")), cx = coefficientValue(point.data, classifiedHeader(point.data, "CxA"));
+    tooltip.replaceChildren(cell("strong", point.name), cell("div", `Downforce ${point.downforce.toFixed(1)} N · Drag ${point.drag.toFixed(1)} N`),
+      cell("div", `L/D ${(point.downforce / point.drag).toFixed(2)}${cz !== null && cx !== null ? ` · CzA ${cz.toFixed(3)} · CxA ${cx.toFixed(3)}` : ""}`));
+    const scale = box.width / width, flip = best.cx > width * 0.66;
+    tooltip.style.left = `${best.cx * scale + (flip ? -14 : 14)}px`;
+    tooltip.style.transform = flip ? "translateX(-100%)" : "";
+    tooltip.style.top = `${best.cy * scale - 10}px`;
+    tooltip.hidden = false;
+  };
+  svg.addEventListener("pointermove", hover);
+  svg.addEventListener("pointerleave", () => { tooltip.hidden = true; });
+  const plot = document.createElement("div");
+  plot.className = "tradeoff-plot";
+  plot.append(svg, tooltip);
+  wrap.append(legend, plot);
+  return wrap;
+}
+
+// The data's first column header that classifyHeader names `kind` (e.g. the total "CzA"), or "".
+function classifiedHeader(data, kind) {
+  return data.headers.find((header) => classifyHeader(header) === kind) ?? "";
+}
+
 // Rows the user highlighted (star before the name), by coefficient file path; remembered per browser.
 const HIGHLIGHT_KEY = "homo-cfd-highlighted-simulations-v1";
 
@@ -1423,10 +1573,32 @@ function highlightToggle(path, row) {
       localStorage.setItem(HIGHLIGHT_KEY, JSON.stringify([...highlights]));
     } catch {}
     show(on);
+    document.querySelectorAll(".tradeoff-dot").forEach((dot) => { if (dot.dataset.path === path) markTradeoffDot(dot, on); });
   });
   return button;
 }
 
+// A dot of the Downforce vs drag chart follows its row's star: gold and named while highlighted.
+function markTradeoffDot(dot, on) {
+  dot.classList.toggle("highlighted", on);
+  const circle = dot.querySelector("circle:not(.tradeoff-reference-ring)");
+  circle.setAttribute("r", on ? "6" : "5");
+  const name = dot.querySelector(".tradeoff-name");
+  if (on && !name) {
+    const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    label.setAttribute("class", "tradeoff-name");
+    label.setAttribute("x", String(Number(circle.getAttribute("cx")) + 10));
+    label.setAttribute("y", String(Number(circle.getAttribute("cy")) - 8));
+    label.textContent = simulationNameFromCsvPath(dot.dataset.path);
+    dot.appendChild(label);
+  } else if (!on && name && !dot.classList.contains("reference")) {
+    name.remove();
+  }
+}
+
+// Sorting the table by a column: click a header for ascending, again for descending, a third time for the
+// original order. Numbers sort by value (in Δ view by the difference from the reference), the Simulation column
+// by name; empty cells always go last. The choice is remembered.
 const TABLE_SORT_KEY = "homo-cfd-coefficient-table-sort-v1";
 const SIMULATION_SORT_KEY = "\u0000simulation";
 

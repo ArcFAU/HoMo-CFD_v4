@@ -3,6 +3,7 @@
 Usage:
     py serve.py                                # use the saved working directory
     py serve.py --open                         # ...and open the app in the browser
+    py serve.py --app                          # ...in its own window (Edge/Chrome app mode)
     py serve.py --working-dir "D:\\CFD_tool"   # use this working directory for this run
 
 Like CFD-Tool, HoMo CFD keeps one per-user setting, the *working directory*
@@ -991,12 +992,37 @@ class Handler(SimpleHTTPRequestHandler):
             shutil.copyfileobj(source, self.wfile)
 
 
+# Chromium browsers that can show a page as its own app window (no tabs or address bar), as HoMo LTS does.
+APP_BROWSERS = (
+    r"%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe",
+    r"%ProgramFiles%\Microsoft\Edge\Application\msedge.exe",
+    r"%ProgramFiles%\Google\Chrome\Application\chrome.exe",
+    r"%LocalAppData%\Google\Chrome\Application\chrome.exe",
+)
+
+
+def open_app(url, window=False):
+    """Show HoMo CFD: window=True as its own app window (Edge or Chrome), otherwise (or if neither
+    is installed) in a tab of the default browser."""
+    if window:
+        for path in map(os.path.expandvars, APP_BROWSERS):
+            if os.path.isfile(path):
+                try:
+                    subprocess.Popen([path, f"--app={url}"])
+                    return
+                except OSError:
+                    pass
+    webbrowser.open(url)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Serve HoMo CFD on http://127.0.0.1")
     parser.add_argument("--working-dir", help="working directory for this run (folder with finished/, or a results folder)")
     parser.add_argument("--results", dest="working_dir", help=argparse.SUPPRESS)  # older name
     parser.add_argument("--port", type=int, default=5173)
     parser.add_argument("--open", action="store_true", help="open the app in the default browser")
+    parser.add_argument("--app", action="store_true",
+                        help="open the app in its own window (Edge or Chrome app mode; a browser tab if neither is installed)")
     parser.add_argument("--background", action="store_true",
                         help=f"no console window: log to {user_config_dir() / 'homo-cfd.log'} and stop "
                              f"{IDLE_MINUTES} min after the last HoMo CFD window closed")
@@ -1017,8 +1043,8 @@ def main() -> None:
     except OSError:
         # Most likely HoMo CFD is already running: just show it.
         print(f"Port {args.port} is in use; HoMo CFD is probably already running at {url}")
-        if args.open:
-            webbrowser.open(url)
+        if args.open or args.app:
+            open_app(url, args.app)
         return
     print(f"HoMo CFD  {url}")
     if path:
@@ -1037,8 +1063,8 @@ def main() -> None:
                     server.shutdown()
                     return
         threading.Thread(target=watch, daemon=True).start()
-    if args.open:
-        webbrowser.open(url)
+    if args.open or args.app:
+        open_app(url, args.app)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

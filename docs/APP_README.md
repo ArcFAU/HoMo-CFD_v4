@@ -11,9 +11,13 @@ Questions, bugs, requests: Archit Paneliya, archit.paneliya@voltages.de.
 ## Start
 
 - **First time:** double-click `Create desktop shortcut.bat` in this folder. It puts
-  a **HoMo CFD** shortcut on your desktop.
+  a **HoMo CFD** shortcut on your desktop and in the Start menu. To pin it to the
+  taskbar: Start menu → right-click **HoMo CFD** → *Pin to taskbar*.
 - **Every time:** double-click the **HoMo CFD** shortcut (or `Start HoMo CFD.bat`).
-  HoMo CFD opens in your browser and runs in the background without a window.
+  HoMo CFD opens in its own window (Edge or Chrome, without tabs or address bar; a
+  browser tab if neither is installed). Its server runs in the background.
+  Shortcuts made before November 2026 open a browser tab: run
+  `Create desktop shortcut.bat` once more.
 - **Stop:** the ⏻ button at the bottom of the sidebar. It also stops by itself
   30 minutes after its last window was closed.
 
@@ -45,7 +49,8 @@ this folder, in `%APPDATA%\HoMo-CFD`, so updates keep them.
   Drag [N] at the speed you set above the table. Click a column header to sort;
   ☆ before a name highlights its row; **Δ vs reference** shows differences to one
   simulation; **Customize columns** renames, hides and reorders columns (drag them
-  by the grip).
+  by the grip). **Monitor comparison** below shows one column as bars, or all
+  simulations as **Downforce vs drag** with lines of constant L/D.
 - **Results tree** (left): section images (comparison window for up to 4 cases),
   pressure plots, 3D scene pictures, **Residuals** (residuals, CzA and CxA from
   the solver log; compare up to 4 simulations) and **3D-data · 3D viewer** for

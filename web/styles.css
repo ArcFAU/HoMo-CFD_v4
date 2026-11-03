@@ -454,6 +454,81 @@ select {
   stroke-width: 1;
 }
 
+/* Bars | Downforce vs drag (app.js renderMonitorChart). */
+.monitor-chart-modes {
+  margin: 10px 12px 0 0;
+}
+
+/* Downforce vs drag (app.js drawTradeoffChart): one dot per simulation, dashed lines of constant L/D. */
+.tradeoff-plot {
+  position: relative;
+  border: 1px solid var(--border);
+  background: #0c1219;
+}
+
+.tradeoff-legend {
+  margin-top: 10px;
+}
+
+.tradeoff-ld-line {
+  stroke: #56657a;
+  stroke-width: 1;
+  stroke-dasharray: 5 4;
+}
+
+.tradeoff-ld-label {
+  fill: var(--muted);
+  font-family: "Segoe UI", system-ui, sans-serif;
+  font-size: 9.5px;
+}
+
+.tradeoff-dot circle {
+  fill: #3987e5;
+  stroke: #0c1219;
+  stroke-width: 2;
+}
+
+.tradeoff-dot.highlighted circle {
+  fill: #e5b64b;
+}
+
+.tradeoff-dot circle.tradeoff-reference-ring {
+  fill: none;
+  stroke: var(--text);
+  stroke-width: 1.5;
+}
+
+.tradeoff-name {
+  fill: var(--text);
+  font-family: "Segoe UI", system-ui, sans-serif;
+  font-size: 10.5px;
+}
+
+.tradeoff-key {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #3987e5;
+}
+
+.tradeoff-key.highlighted {
+  background: #e5b64b;
+}
+
+.tradeoff-key.reference {
+  background: none;
+  border: 1.5px solid var(--text);
+}
+
+.tradeoff-key.ld {
+  width: 20px;
+  height: 0;
+  border-radius: 0;
+  background: none;
+  border-top: 1px dashed #56657a;
+}
+
 /* Residuals (app.js residualChart): log-scale lines, recessive grid. */
 .residual-legend {
   display: flex;

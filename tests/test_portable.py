@@ -63,7 +63,7 @@ class PortableBuildTests(unittest.TestCase):
             self.assertEqual(built.read("HoMo-CFD/python/python314._pth").decode().splitlines()[:3], ["python314.zip", ".", ".."])
             bat = built.read("HoMo-CFD/Start HoMo CFD.bat")
         self.assertNotIn(b"\n", bat.replace(b"\r\n", b""), "CRLF line endings only")
-        self.assertIn(b'start "" "python\\pythonw.exe" serve.py --open --background', bat,
+        self.assertIn(b'start "" "python\\pythonw.exe" serve.py --app --background', bat,
                       "the start script prefers the bundled Python, without a console window")
 
     def test_publish_into_a_shared_folder(self):
